@@ -1,0 +1,343 @@
+/* gradebook.css — Gradebook page styles */
+
+/* ── Hide sidebar toggle (not used on gradebook page) ── */
+.tb-btn[title="Toggle Sidebar"] { display:none; }
+
+/* ── Oversized course selector (replaces sidebar on gradebook) ── */
+.gb-course-select {
+  font-family:var(--font-base);
+  font-size:var(--text-base); font-weight:600; color:var(--text);
+  border:1px solid var(--border); border-radius:8px;
+  padding:6px 28px 6px 10px; cursor:pointer; background:var(--surface);
+  transition:border 0.12s; -webkit-appearance:none; appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23999'/%3E%3C/svg%3E");
+  background-repeat:no-repeat; background-position:right 8px center;
+}
+.gb-course-select:hover { border-color:var(--text-3); }
+
+/* ══════════════════════════════════════════════════════════════
+   TOOLBAR — Two-layer Apple-style design
+   Layer 1: View mode + search + actions (always visible)
+   Layer 2: Contextual filter strip (progressive disclosure)
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Layer 1: Primary bar ──────────────────────────────────── */
+.gb-toolbar {
+  display:flex; align-items:center; gap:12px; padding:10px 20px;
+  background:var(--surface); border-bottom:0.5px solid rgba(0,0,0,0.09);
+}
+.gb-toolbar-label {
+  font-family:'SF Mono', ui-monospace, 'Menlo', monospace; font-size:var(--text-xs); text-transform:uppercase;
+  letter-spacing:var(--tracking-wide); color:var(--text-3); font-weight:500; white-space:nowrap;
+}
+
+/* iOS-style segmented control — frosted track + floating pill */
+.gb-seg-control {
+  display:flex; gap:2px; background:var(--divider-subtle); border-radius:8px; padding:2px;
+}
+.gb-seg-btn {
+  padding:5px 14px; font-family:var(--font-base); font-size:var(--text-base);
+  font-weight:500; border:none; border-radius:var(--radius-sm);
+  background:transparent; color:var(--text-2); cursor:pointer;
+  transition:all 0.18s cubic-bezier(0.4,0,0.2,1); white-space:nowrap; line-height:1.2;
+}
+.gb-seg-btn:hover { color:var(--text); }
+.gb-seg-btn.active {
+  background:var(--surface); color:var(--text); font-weight:600;
+  box-shadow:0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+}
+
+/* Filter trigger button — opens/closes filter strip */
+.gb-filter-trigger {
+  display:flex; align-items:center; gap:5px;
+  padding:5px 12px; font-family:var(--font-base); font-size:var(--text-sm);
+  font-weight:500; border:1px solid var(--border); border-radius:8px;
+  background:var(--surface); color:var(--text-2); cursor:pointer; transition:all 0.15s;
+  white-space:nowrap; position:relative;
+}
+.gb-filter-trigger:hover { border-color:var(--text-3); color:var(--text); }
+.gb-filter-trigger.has-filters { border-color:var(--active); color:var(--active); }
+.gb-filter-trigger .filter-icon { font-size:var(--text-base); opacity:0.6; }
+.gb-filter-trigger .filter-count {
+  display:inline-flex; align-items:center; justify-content:center;
+  min-width:16px; height:16px; padding:0 4px;
+  background:var(--active); color:#fff; border-radius:8px;
+  font-family:'SF Mono', ui-monospace, 'Menlo', monospace; font-size:var(--text-2xs); font-weight:700;
+}
+
+/* Search — clean pill */
+.gb-search-wrap { position:relative; display:flex; align-items:center; }
+.gb-search-icon { position:absolute; left:9px; font-size:var(--text-xs); color:var(--text-3); pointer-events:none; }
+.gb-search-input {
+  font-family:var(--font-base); font-size:var(--text-base); padding:5px 12px 5px 28px;
+  border:1px solid transparent; border-radius:8px;
+  background:var(--overlay-hover); color:var(--text); outline:none;
+  width:130px; transition:all 0.2s;
+}
+.gb-search-input:focus {
+  background:var(--surface); border-color:var(--active); width:180px;
+  box-shadow:0 0 0 3px rgba(0,122,255,0.12);
+}
+.gb-search-input::placeholder { color:var(--text-3); }
+
+/* + New Assessment link */
+.gb-add-btn {
+  padding:7px 18px; font-family:var(--font-base); font-size:var(--text-base);
+  font-weight:600; border-radius:8px; white-space:nowrap;
+  background:var(--active); color:#fff; border:none;
+  cursor:pointer; transition:all 0.15s; text-decoration:none; display:inline-flex; align-items:center;
+}
+.gb-add-btn:hover { background:rgba(0,100,210,1); box-shadow:0 2px 8px rgba(0,122,255,0.2); }
+
+/* ── Layer 2: Filter strip — slides open below primary bar ── */
+.gb-filter-strip {
+  display:none; align-items:center; gap:10px; padding:8px 16px;
+  background:rgba(0,0,0,0.015); border-bottom:0.5px solid rgba(0,0,0,0.09);
+  animation:filterSlideIn 0.2s ease-out;
+}
+.gb-filter-strip.open { display:flex; }
+@keyframes filterSlideIn {
+  from { opacity:0; transform:translateY(-4px); }
+  to { opacity:1; transform:translateY(0); }
+}
+.gb-filter-strip-label {
+  font-family:'SF Mono', ui-monospace, 'Menlo', monospace; font-size:var(--text-2xs); text-transform:uppercase;
+  letter-spacing:var(--tracking-wide); color:var(--text-3); font-weight:500; flex-shrink:0;
+}
+.gb-filter-strip-group { display:flex; gap:4px; align-items:center; flex-wrap:wrap; }
+.gb-filter-strip-divider { width:1px; height:18px; background:var(--border); margin:0 4px; flex-shrink:0; }
+
+/* Filter chips — color-accented pills */
+.gb-filter-chip {
+  display:inline-flex; align-items:center; gap:4px;
+  padding:3px 10px; font-family:var(--font-base); font-size:var(--text-sm);
+  font-weight:500; border:1px solid var(--border); border-radius:var(--radius-xl);
+  background:var(--surface); color:var(--text-2); cursor:pointer; transition:all 0.12s; white-space:nowrap;
+}
+.gb-filter-chip:hover { border-color:var(--text-3); }
+.gb-filter-chip.active { background:var(--text); color:#fff; border-color:var(--text); }
+.gb-filter-chip .chip-dot {
+  width:7px; height:7px; border-radius:50%; flex-shrink:0;
+}
+.gb-filter-chip.active .chip-dot { box-shadow:0 0 0 1px rgba(255,255,255,0.4); }
+
+/* Type chips — uppercase mono */
+.gb-type-chip {
+  padding:3px 10px; font-family:'SF Mono', ui-monospace, 'Menlo', monospace; font-size:var(--text-xs);
+  font-weight:600; border:1px solid var(--border); border-radius:var(--radius-xl);
+  background:var(--surface); color:var(--text-2); cursor:pointer; transition:all 0.12s;
+  text-transform:uppercase; letter-spacing:var(--tracking-wide);
+}
+.gb-type-chip:hover { border-color:var(--text-3); }
+.gb-type-chip.active { background:var(--text); color:#fff; border-color:var(--text); }
+
+/* Clear all link */
+.gb-filter-clear {
+  font-family:var(--font-base); font-size:var(--text-sm); color:var(--text-3);
+  cursor:pointer; border:none; background:none; padding:2px 6px;
+  text-decoration:underline; text-decoration-color:transparent;
+  transition:all 0.12s; white-space:nowrap; margin-left:auto;
+}
+.gb-filter-clear:hover { color:var(--priority); text-decoration-color:var(--priority); }
+
+/* ── Table ─────────────────────────────────────────────────── */
+.gb-scroll {
+  overflow:auto; max-height:calc(100vh - var(--dock-h) - 84px);
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: auto;
+  position:relative;
+  padding:0 20px;
+}
+
+/* Scroll shadow hints — fade in/out via JS classes */
+.gb-scroll-wrap { position:relative; }
+.gb-scroll-wrap::before,
+.gb-scroll-wrap::after {
+  content:''; position:absolute; top:0; bottom:0; width:28px; z-index:10;
+  pointer-events:none; opacity:0; transition:opacity 0.2s;
+}
+.gb-scroll-wrap::before {
+  left:0; background:linear-gradient(to right, var(--divider-subtle), transparent);
+}
+.gb-scroll-wrap::after {
+  right:0; background:linear-gradient(to left, var(--divider-subtle), transparent);
+}
+.gb-scroll-wrap.shadow-left::before { opacity:1; }
+.gb-scroll-wrap.shadow-right::after { opacity:1; }
+
+/* Assessment header: professional card-like design */
+.gb-assess-head {
+  text-align:center; padding:0; background:var(--surface); border-bottom:0.5px solid rgba(0,0,0,0.09);
+  position:relative;
+}
+.gb-assess-head-inner {
+  padding:12px 10px 8px; display:flex; flex-direction:column; align-items:center; gap:3px;
+}
+.gb-assess-title {
+  font-family:var(--font-base); font-size:var(--text-base); font-weight:600;
+  color:var(--text); line-height:1.2; text-decoration:none; display:block;
+  max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.gb-assess-title:hover { color:var(--active); }
+.gb-assess-meta {
+  display:flex; align-items:center; gap:5px; justify-content:center;
+}
+.gb-assess-date {
+  font-family:'SF Mono', ui-monospace, 'Menlo', monospace; font-size:var(--text-2xs); color:var(--text-3);
+  letter-spacing:var(--tracking-wide);
+}
+.gb-assess-type-pill {
+  font-family:'SF Mono', ui-monospace, 'Menlo', monospace; font-size:var(--text-2xs); font-weight:700;
+  text-transform:uppercase; letter-spacing:var(--tracking-wide); padding:1px 6px;
+  border-radius:var(--radius); line-height:1.4;
+}
+.gb-assess-type-pill.sum { background:var(--active); color:#fff; }
+.gb-assess-type-pill.form { background:var(--surface-2); color:var(--text-2); }
+.gb-assess-badge {
+  font-family:'SF Mono', ui-monospace, 'Menlo', monospace; font-size:var(--text-2xs); font-weight:600;
+  padding:1px 5px; border-radius:8px; background:rgba(99,102,241,0.1); color:var(--active);
+  letter-spacing:var(--tracking-wide);
+}
+
+/* Section color stripe under assessment header */
+.gb-assess-stripe {
+  height:3px; position:absolute; bottom:0; left:0; right:0;
+}
+
+/* Tag sub-header row */
+.gb-tag-header {
+  text-align:center; padding:4px 6px;
+  font-family:'SF Mono', ui-monospace, 'Menlo', monospace; font-size:var(--text-xs); font-weight:600;
+  color:var(--text-3); text-transform:uppercase; letter-spacing:var(--tracking-wide);
+  border-bottom:1px solid var(--divider-strong); background:var(--bg); min-width:54px;
+  position:relative;
+}
+.gb-tag-tip { display:none; }
+
+/* Score cell */
+.gb-score {
+  text-align:center; padding:4px 2px; border-bottom:0.5px solid rgba(0,0,0,0.09);
+  cursor:pointer; user-select:none; transition:background 0.1s; min-width:54px;
+}
+.gb-score:hover { background:rgba(0,122,255,0.06); }
+.gb-score-val {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:34px; height:28px; border-radius:var(--radius-xs);
+  font-family:'SF Mono', ui-monospace, 'Menlo', monospace; font-size:var(--text-base); font-weight:700; color:#fff;
+}
+.gb-score-val.s0 { background:transparent; color:var(--text-3); }
+.gb-score-val.s1 { background:var(--score-1); }
+.gb-score-val.s2 { background:var(--score-2); }
+.gb-score-val.s3 { background:var(--score-3); }
+.gb-score-val.s4 { background:var(--score-4); }
+.gb-score.gb-focus { outline:2px solid var(--active); outline-offset:-1px; z-index:1; position:relative; }
+.gb-unscored { color:var(--text-3) !important; font-size:var(--text-xs); opacity:0.5; }
+
+/* ── Assessment group discrimination ── */
+.gb-group-start { border-left: 3px solid var(--border-2); padding-left: 6px; }
+.gb-group-alt { background-color: rgba(0,0,0,0.025); }
+th.gb-group-alt { background-color: rgba(0,0,0,0.03); }
+.gb-assess-head.gb-type-summative { background: rgba(0,122,255,0.06); }
+.gb-assess-head.gb-type-formative { background: rgba(52,199,89,0.06); }
+.gb-stats-row td.gb-group-alt { background: var(--bg) !important; }
+
+/* Name column */
+.gb-name {
+  position:sticky; left:0; z-index:6; background:#f5f5f7;
+  padding:8px 12px 8px 16px; font-size:var(--text-md); font-weight:500;
+  border-bottom:0.5px solid rgba(0,0,0,0.09); white-space:nowrap;
+  width:160px; min-width:160px; max-width:160px;
+}
+.gb-name a { color:var(--text); text-decoration:none; }
+.gb-name a:hover { color:var(--active); }
+.gb-corner {
+  position:sticky; left:0; z-index:7; background:#f5f5f7;
+  padding:8px 12px 8px 16px; font-family:'SF Mono', ui-monospace, 'Menlo', monospace; font-size:var(--text-sm);
+  font-weight:600; text-transform:uppercase; letter-spacing:var(--tracking-wide); color:var(--text-2);
+  width:160px; min-width:160px; max-width:160px;
+}
+
+/* Overall column — always visible, paired with name */
+.gb-overall-col {
+  position:sticky; left:160px; z-index:6; background:#f5f5f7;
+  text-align:center; padding:8px 8px; border-bottom:0.5px solid rgba(0,0,0,0.09);
+  border-right:1px solid var(--divider-strong);
+  width:90px; min-width:90px; max-width:90px;
+}
+.gb-overall-col-header {
+  position:sticky; left:160px; z-index:7; background:#f5f5f7;
+  text-align:center; padding:8px 8px;
+  font-family:'SF Mono', ui-monospace, 'Menlo', monospace; font-size:var(--text-sm); font-weight:700;
+  text-transform:uppercase; letter-spacing:var(--tracking-wide); color:var(--text-2);
+  border-bottom:none; border-right:1px solid var(--divider-strong);
+  width:90px; min-width:90px; max-width:90px;
+}
+.gb-overall-num {
+  font-family:var(--font-base); font-size:var(--text-xl); font-weight:700; line-height:1;
+}
+.gb-overall-label {
+  font-family:var(--font-base); font-size:var(--text-2xs); font-weight:600;
+  text-transform:uppercase; letter-spacing:var(--tracking-wide); margin-top:1px; line-height:1;
+}
+.gb-table tbody tr:nth-child(even) td.gb-overall-col { background-color:var(--bg); }
+.gb-table tbody tr:hover td.gb-overall-col { background-color:var(--active-light) !important; }
+.gb-stats-row .gb-overall-col { font-weight:700; background:var(--bg) !important; }
+
+/* Summary columns — used by Summary view tab */
+.gb-summary {
+  text-align:center; padding:6px 5px; border-bottom:0.5px solid rgba(0,0,0,0.09);
+  background:var(--surface); width:88px; min-width:88px; max-width:88px;
+}
+.gb-summary-header {
+  text-align:center; padding:6px 5px; background:var(--surface);
+  font-family:'SF Mono', ui-monospace, 'Menlo', monospace; font-size:var(--text-xs); font-weight:700;
+  text-transform:uppercase; letter-spacing:var(--tracking-wide); border-bottom:1px solid var(--divider-strong);
+  width:88px; min-width:88px; max-width:88px;
+  white-space:normal; word-wrap:break-word; line-height:1.3;
+}
+.gb-summary-val { font-family:'SF Mono', ui-monospace, 'Menlo', monospace; font-size:var(--text-md); font-weight:700; white-space:nowrap; }
+
+/* Sortable */
+.gb-sortable { cursor:pointer; user-select:none; }
+.gb-sortable:hover { background:rgba(0,122,255,0.06) !important; }
+.gb-sort-arrow { font-size:var(--text-2xs); margin-left:2px; color:var(--active); }
+
+/* Average cell */
+.gb-avg-cell { text-align:center; padding:8px 5px; border-bottom:0.5px solid rgba(0,0,0,0.09); }
+.gb-avg-val { display:inline-block; font-family:'SF Mono', ui-monospace, 'Menlo', monospace; font-size:var(--text-md); font-weight:700; min-width:28px; text-align:center; line-height:1; }
+.gb-avg-label { display:block; font-family:var(--font-base); font-size:var(--text-xs); text-transform:uppercase; letter-spacing:var(--tracking-wide); margin-top:2px; line-height:1; font-weight:500; }
+
+/* Student popover — fixed-position tooltip appended to body */
+.gb-name-wrap { position:relative; }
+#gb-tooltip {
+  display:none; position:fixed; z-index:9999;
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+  box-shadow:0 6px 24px rgba(0,0,0,0.15); padding:10px 14px;
+  white-space:nowrap; min-width:200px; pointer-events:none;
+}
+#gb-tooltip.dark {
+  background:var(--text); color:#fff; border:none; padding:6px 10px;
+  font-size:var(--text-sm); white-space:normal; max-width:260px; line-height:1.4;
+  min-width:0; box-shadow:0 4px 12px rgba(0,0,0,0.2);
+}
+.gb-tip-row { display:flex; justify-content:space-between; gap:12px; padding:2px 0; font-size:var(--text-base); }
+.gb-tip-label { color:var(--text-3); }
+.gb-tip-val { font-weight:600; }
+
+/* Class stats row */
+.gb-stats-row td { background:var(--bg) !important; border-top:1px solid var(--divider-strong); }
+.gb-stats-row .gb-name { font-weight:700; font-size:var(--text-sm); color:var(--text-2); }
+
+/* Row banding — border-separate required for sticky z-index to work in Chrome */
+.gb-table { border-collapse:separate; border-spacing:0; width:max-content; }
+.gb-table th, .gb-table td { padding:0; }
+.gb-table tbody tr { height:48px; }
+.gb-table tbody tr:nth-child(even) td { background-color:rgba(0,0,0,0.015); }
+.gb-table tbody tr:nth-child(even) td.gb-group-alt { background-color:var(--overlay-hover); }
+.gb-table tbody tr:nth-child(even) td.gb-name, .gb-table tbody tr:nth-child(even) th.gb-name { background-color:#f5f5f7; }
+.gb-table tbody tr:nth-child(even) td.gb-overall-col { background-color:#f5f5f7; }
+.gb-table tbody tr:hover td { background-color:var(--active-light) !important; }
+.gb-table tbody tr:hover td.gb-group-alt { background-color:var(--active-light) !important; }
+.gb-table tbody tr:hover td.gb-name, .gb-table tbody tr:hover th.gb-name { background-color:#e5eef8 !important; }
+.gb-table tbody tr:hover td.gb-overall-col { background-color:#e5eef8 !important; }

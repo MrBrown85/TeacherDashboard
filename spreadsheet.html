@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gradebook — Spreadsheet</title>
+<link rel="stylesheet" href="gb-styles.css?v=3">
+<link rel="stylesheet" href="gradebook.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to main content</a>
+<div id="gb-tooltip"></div>
+<div id="dock-mount"></div>
+<div class="page-layout sidebar-hidden" id="page-layout">
+  <div id="sidebar-mount" style="display:none"></div>
+  <main class="page-main" id="main"></main>
+</div>
+
+<script src="vendor/supabase.min.js"></script>
+<script src="gb-supabase.js"></script>
+<script src="gb-constants.js"></script>
+<script src="gb-data.js"></script>
+<script src="gb-calc.js"></script>
+<script src="gb-ui.js"></script>
+<script src="gb-seed-data.js"></script>
+<script>
+requireAuth();
+/* ── State ──────────────────────────────────────────────────── */
+var activeCourse = getActiveCourse();
+let viewMode = 'average';
+let filterSections = [];
+let filterModules = [];
+let filterType = 'all';
+let searchQuery = '';
+let sortCol = null;
+let _filterStripOpen = false;  // filter panel visibility
+
+/* ── Filter strip toggle ──────────────────────────────────── */
+function toggleFilterStrip() {
+  _filterStripOpen = !_filterStripOpen;
+  const strip = document.getElementById('gb-filter-strip');
+  if (strip) strip.classList.toggle('open', _filterStripOpen);
+}
+function clearAllFilters() {
+  filterType = 'all'; filterSections = []; filterModules = [];
+  render();
+}
+
+/* ── Boot ───────────────────────────────────────────────────── */
+(async function() {
+  seedIfNeeded();
+  await initAllCourses();
+  activeCourse = getActiveCourse();
+  await initData(activeCourse);
+  migrateAllStudents();
+
+  document.getElementById('dock-mount').innerHTML = renderDock('spreadsheet');
+  render();
+})();
+
+
+/* ── Course switch ─────────────────────────────────────────── */
+function toggleModuleFilter(moduleId) {
+  const idx = filterModules.indexOf(moduleId);
+  if (idx >= 0) filterModules.splice(idx, 1);
+  else filterModules.push(moduleId);
+  render();
+}
+async function switchCourse(cid) {
+  activeCourse = cid; setActiveCourse(cid);
+  await initData(cid);
+  filterSections = []; filterModules = []; filterType = 'all';
+  render();
+}
+
+/* ── View & filter controls ────────────────────────────────── */
+function setView(mode) { viewMode = mode; render(); }
+function toggleSectionFilter(secId) {
+  const idx = filterSections.indexOf(secId);
+  if (idx >= 0) filterSections.splice(idx, 1);
+  else filterSections.push(secId);
+  render();
+}
+function setTypeFilter(type) { filterType = filterType === type ? 'all' : type; render(); }
+function onSearch(val) { searchQuery = (val || '').toLowerCase().trim(); render(); }
+function toggleSort(key) {
+  if (sortCol && sortCol.key === key) sortCol.dir = sortCol.dir === 'asc' ? 'desc' : 'asc';
+  else sortCol = { key, dir: 'asc' };
+  render();
+}
+function sortArrow(key) {
+  if (!sortCol || sortCol.key !== key) return '';
+  return `<span class="gb-sort-arrow">${sortCol.dir === 'asc' ? '▲' : '▼'}</span>`;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   MAIN RENDER
+   ══════════════════════════════════════════════════════════════ */
+function render() {
+  const cid = activeCourse;
+  let students = sortStudents(getStudents(cid), 'lastName');
+  const allAssessments = getAssessments(cid).slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  const sections = getSections(cid);
+  const course = COURSES[cid];
+  const isLetter = course.gradingSystem === 'letter';
+  const scores = getScores(cid);
+
+  if (searchQuery) {
+    students = students.filter(s => {
+      return displayName(s).toLowerCase().includes(searchQuery) ||
+        (s.firstName||'').toLowerCase().includes(searchQuery) ||
+        (s.lastName||'').toLowerCase().includes(searchQuery) ||
+        (s.studentNumber||'').toLowerCase().includes(searchQuery);
+    });
+  }
+
+  let assessments = allAssessments;
+  if (filterType !== 'all') assessments = assessments.filter(a => a.type === filterType);
+  if (filterSections.length > 0) {
+    assessments = assessments.filter(a => (a.tagIds || []).some(tid => {
+      const sec = getSectionForTag(cid, tid);
+      return sec && filterSections.includes(sec.id);
+    }));
+  }
+  if (filterModules.length > 0) {
+    assessments = assessments.filter(a => a.moduleId && filterModules.includes(a.moduleId));
+  }
+
+  let html = '';
+
+  // ── Toolbar: Layer 1 — Primary bar ──
+  const modules = getModules(cid);
+  const activeFilterCount = (filterType !== 'all' ? 1 : 0) + filterSections.length + filterModules.length;
+
+  html += `<div class="gb-toolbar">`;
+
+  // Course selector
+  const courseOpts = Object.values(COURSES).map(c =>
+    `<option value="${c.id}"${c.id===activeCourse?' selected':''}>${c.name}</option>`
+  ).join('');
+  html += `<select class="gb-course-select" onchange="switchCourse(this.value)" aria-label="Select course">${courseOpts}</select>`;
+
+  // View mode — iOS segmented control
+  html += `<div class="gb-seg-control" role="tablist" aria-label="View mode">
+    <button class="gb-seg-btn${viewMode==='detailed'?' active':''}" data-action="setView" data-mode="detailed" role="tab" aria-selected="${viewMode==='detailed'}">Detailed</button>
+    <button class="gb-seg-btn${viewMode==='average'?' active':''}" data-action="setView" data-mode="average" role="tab" aria-selected="${viewMode==='average'}">Averages</button>
+    <button class="gb-seg-btn${viewMode==='summary'?' active':''}" data-action="setView" data-mode="summary" role="tab" aria-selected="${viewMode==='summary'}">Summary</button>
+  </div>`;
+
+  // Filter trigger button
+  html += `<button class="gb-filter-trigger${activeFilterCount > 0 ? ' has-filters' : ''}" data-action="toggleFilterStrip" aria-expanded="${_filterStripOpen}" aria-label="Toggle filters${activeFilterCount > 0 ? ', '+activeFilterCount+' active' : ''}">
+    <span class="filter-icon" aria-hidden="true">☰</span> Filters${activeFilterCount > 0 ? ' <span class="filter-count">' + activeFilterCount + '</span>' : ''}
+  </button>`;
+
+
+  // Search
+  html += `<div class="gb-search-wrap">
+    <span class="gb-search-icon">🔍</span>
+    <input class="gb-search-input" type="text" placeholder="Search…" value="${esc(searchQuery)}" oninput="onSearch(this.value)" aria-label="Search students">
+  </div>`;
+
+  // Right side: stats + new assessment
+  html += `<div style="margin-left:auto;display:flex;align-items:center;gap:12px">
+    <span class="gb-toolbar-label">${assessments.length !== allAssessments.length ? assessments.length+' of '+allAssessments.length : allAssessments.length} assignments · ${students.length} students</span>
+    <a class="tb-action-btn" href="settings.html?course=${activeCourse}&new=1">+ New Assessment</a>
+  </div>`;
+  html += `</div>`;
+
+  // ── Toolbar: Layer 2 — Filter strip (expandable) ──
+  html += `<div class="gb-filter-strip${_filterStripOpen ? ' open' : ''}" id="gb-filter-strip">`;
+
+  // Type
+  html += `<span class="gb-filter-strip-label">Type</span>
+    <div class="gb-filter-strip-group">
+      <button class="gb-type-chip${filterType==='summative'?' active':''}" data-action="setTypeFilter" data-type="summative">Summative</button>
+      <button class="gb-type-chip${filterType==='formative'?' active':''}" data-action="setTypeFilter" data-type="formative">Formative</button>
+    </div>`;
+
+  // Sections
+  html += `<div class="gb-filter-strip-divider"></div>
+    <span class="gb-filter-strip-label">Outcomes</span>
+    <div class="gb-filter-strip-group">`;
+  sections.forEach(sec => {
+    const isActive = filterSections.includes(sec.id);
+    html += `<button class="gb-filter-chip${isActive?' active':''}" data-action="toggleSectionFilter" data-secid="${sec.id}"><span class="chip-dot" style="background:${sec.color}"></span>${esc(sec.shortName || sec.name)}</button>`;
+  });
+  html += `</div>`;
+
+  // Modules
+  if (modules.length > 0) {
+    html += `<div class="gb-filter-strip-divider"></div>
+      <span class="gb-filter-strip-label">Modules</span>
+      <div class="gb-filter-strip-group">`;
+    modules.forEach(u => {
+      const isActive = filterModules.includes(u.id);
+      html += `<button class="gb-filter-chip${isActive?' active':''}" data-action="toggleModuleFilter" data-moduleid="${u.id}"><span class="chip-dot" style="background:${u.color}"></span>${esc(u.name)}</button>`;
+    });
+    html += `</div>`;
+  }
+
+  // Clear all (only if filters active)
+  if (activeFilterCount > 0) {
+    html += `<button class="gb-filter-clear" data-action="clearAllFilters">Clear all</button>`;
+  }
+  html += `</div>`;
+
+  // ── Table ──
+  if (viewMode === 'summary') {
+    html += renderSummaryTable(cid, students, sections, isLetter, scores);
+  } else if (assessments.length === 0) {
+    const typeLabel = filterType !== 'all' ? filterType : '';
+    const secLabel = filterSections.length > 0 ? ' in the selected sections' : '';
+    html += `<div style="text-align:center;padding:60px 20px;color:var(--text-3)">
+      <div style="font-size:1.5rem;margin-bottom:8px;opacity:0.4">📋</div>
+      <div style="font-family:var(--font-base);font-size:0.95rem;margin-bottom:4px">No ${typeLabel} assignments found${secLabel}.</div>
+      <div style="font-family:var(--font-base);font-size:0.82rem">Try adjusting your filters or <a href="settings.html?course=${cid}" style="color:var(--active)">create a new assessment</a>.</div>
+    </div>`;
+  } else if (viewMode === 'average') {
+    html += renderAverageTable(cid, students, assessments, sections, isLetter, scores);
+  } else {
+    html += renderDetailedTable(cid, students, assessments, sections, isLetter, scores);
+  }
+
+  document.getElementById('main').innerHTML = html;
+
+  // Apply sticky left positions to overall column (after name column)
+  applyStickyLeft();
+
+  // Wire up scroll shadow indicators
+  initScrollShadows();
+}
+
+/* ── Compute and apply sticky left positions (after name column) ── */
+function applyStickyLeft() {
+  const table = document.querySelector('.gb-table');
+  if (!table) return;
+
+  // Measure name column width
+  const firstRow = table.querySelector('tbody tr') || table.querySelector('thead tr');
+  if (!firstRow) return;
+  const nameCell = firstRow.querySelector('.gb-name, .gb-corner');
+  const nameWidth = nameCell ? nameCell.offsetWidth : 150;
+
+  // Position overall column (always present, right after name)
+  const overallLeft = nameWidth;
+  table.querySelectorAll('th.gb-overall-col-header, td.gb-overall-col').forEach(cell => {
+    cell.style.left = overallLeft + 'px';
+  });
+}
+
+/* ── Scroll shadow indicators ──────────────────────────────── */
+let _scrollShadowCleanup = null;
+function initScrollShadows() {
+  // Remove previous scroll listener before adding a new one
+  if (_scrollShadowCleanup) { _scrollShadowCleanup(); _scrollShadowCleanup = null; }
+  const wrap = document.querySelector('.gb-scroll-wrap');
+  const scroller = document.querySelector('.gb-scroll');
+  if (!wrap || !scroller) return;
+  function update() {
+    const sl = scroller.scrollLeft;
+    const maxSl = scroller.scrollWidth - scroller.clientWidth;
+    wrap.classList.toggle('shadow-left', sl > 4);
+    wrap.classList.toggle('shadow-right', sl < maxSl - 4);
+  }
+  scroller.addEventListener('scroll', update, { passive: true });
+  _scrollShadowCleanup = () => { scroller.removeEventListener('scroll', update); };
+  // Run once after layout settles
+  requestAnimationFrame(update);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   DETAILED VIEW
+   ══════════════════════════════════════════════════════════════ */
+function renderDetailedTable(cid, students, assessments, sections, isLetter, scores) {
+  const cols = [];
+  const groups = [];
+  let groupIdx = 0;
+  assessments.forEach(a => {
+    let tagIds = a.tagIds || [];
+    if (filterSections.length > 0) {
+      tagIds = tagIds.filter(tid => { const sec = getSectionForTag(cid, tid); return sec && filterSections.includes(sec.id); });
+    }
+    if (tagIds.length === 0) return;
+    const start = cols.length;
+    if (a.scoreMode === 'points') {
+      const sec = getSectionForTag(cid, tagIds[0]);
+      cols.push({ assessmentId: a.id, tagId: '__pts__', isPointsCol: true, tagCode: '/' + (a.maxPoints || 100), sectionColor: sec ? sec.color : '#999', tagText: a.title });
+    } else {
+      tagIds.forEach(tagId => {
+        const tag = getTagById(cid, tagId);
+        const sec = getSectionForTag(cid, tagId);
+        cols.push({ assessmentId: a.id, tagId, tagCode: tag ? tag.id : tagId, sectionColor: sec ? sec.color : '#999', tagText: tag ? tag.text : '' });
+      });
+    }
+    groups.push({ assessment: a, startIdx: start, count: cols.length - start, groupIdx: groupIdx++ });
+  });
+  // Precompute column → group mapping for fast lookup in row rendering
+  const colGroupMap = cols.map((_, i) => groups.find(g => i >= g.startIdx && i < g.startIdx + g.count));
+
+  const sortedStudents = applySorting(cid, students, sections, isLetter);
+
+  let html = `<div class="gb-scroll-wrap"><div class="gb-scroll">`;
+  html += `<table class="gb-table">`;
+
+  // ── Header row 1: name + overall + assessment cards ──
+  html += `<thead><tr>`;
+  html += `<th class="gb-corner gb-sortable" rowspan="2" data-action="toggleSort" data-sortkey="name" scope="col">Student${sortArrow('name')}</th>`;
+  html += renderOverallHeader(2);
+  groups.forEach(g => {
+    const a = g.assessment;
+    const isPrimary = a.type === 'summative';
+    const typeClass = isPrimary ? ' gb-type-summative' : ' gb-type-formative';
+    const startClass = g.groupIdx > 0 ? ' gb-group-start' : '';
+    const tagSecs = (a.tagIds||[]).map(tid => getSectionForTag(cid, tid)).filter(Boolean);
+    const stripeColor = tagSecs.length > 0 ? tagSecs[0].color : 'var(--border)';
+    const badges = [];
+    if (a.scoreMode === 'points') badges.push(`<span class="gb-assess-badge">/ ${a.maxPoints||100}</span>`);
+    if (a.weight && a.weight !== 1) badges.push(`<span class="gb-assess-badge">${a.weight}x</span>`);
+    html += `<th class="gb-assess-head${typeClass}${startClass}" colspan="${g.count}">
+      <div class="gb-assess-head-inner">
+        <a class="gb-assess-title" href="settings.html?course=${cid}&open=${a.id}" title="Open in Assignments">${esc(a.title)}</a>
+        <div class="gb-assess-meta">
+          <span class="gb-assess-type-pill ${isPrimary?'sum':'form'}">${isPrimary?'Summative':'Formative'}</span>
+          <span class="gb-assess-date">${formatDate(a.date)}</span>
+          ${badges.join('')}
+        </div>
+      </div>
+      <div class="gb-assess-stripe" style="background:${stripeColor}"></div>
+    </th>`;
+  });
+  html += `</tr>`;
+
+  // ── Header row 2: tag codes ──
+  html += `<tr>`;
+  cols.forEach((col, i) => {
+    const g = colGroupMap[i];
+    const startClass = (g && g.groupIdx > 0 && g.startIdx === i) ? ' gb-group-start' : '';
+    const altClass = (g && g.groupIdx % 2 === 1) ? ' gb-group-alt' : '';
+    html += `<th class="gb-tag-header${startClass}${altClass}" style="border-bottom-color:${col.sectionColor};color:${col.sectionColor}">${esc(col.tagCode)}${col.tagText ? `<div class="gb-tag-tip">${esc(col.tagText)}</div>` : ''}</th>`;
+  });
+  html += `</tr></thead>`;
+
+  // ── Body ──
+  html += `<tbody>`;
+  sortedStudents.forEach(s => {
+    html += `<tr data-sid="${s.id}">`;
+    html += `<th class="gb-name" scope="row">${renderNameCell(cid, s, sections, isLetter)}</th>`;
+    html += renderOverallCell(cid, s.id);
+    cols.forEach((col, i) => {
+      const g = colGroupMap[i];
+      const startClass = (g && g.groupIdx > 0 && g.startIdx === i) ? ' gb-group-start' : '';
+      const altClass = (g && g.groupIdx % 2 === 1) ? ' gb-group-alt' : '';
+      const assess = assessments.find(a => a.id === col.assessmentId);
+      if (col.isPointsCol) {
+        const max = assess.maxPoints || 100;
+        const score = getPointsScore(cid, s.id, col.assessmentId);
+        const pct = score > 0 ? Math.round(score / max * 100) : 0;
+        const title = score > 0 ? `${score}/${max} (${pct}%)` : '';
+        const cellContent = score > 0
+          ? `<div class="gb-pts-display"><span class="gb-pts-score">${score}<span class="gb-pts-max">/${max}</span></span><span class="gb-pts-pct">${pct}%</span></div>`
+          : `<span class="gb-pts-empty">·</span>`;
+        html += `<td class="gb-score gb-score-pts${startClass}${altClass}" data-aid="${col.assessmentId}" data-pts="1" data-sid="${s.id}" data-max="${max}" data-action="cycleScore" title="${title}" role="button" tabindex="0" aria-label="Score for ${esc(fullName(s))}: ${title || 'not scored'}">${cellContent}</td>`;
+      } else {
+        const studentScores = scores[s.id] || [];
+        const entry = studentScores.find(e => e.assessmentId === col.assessmentId && e.tagId === col.tagId);
+        const score = entry ? entry.score : 0;
+        const assigned = assess && (assess.tagIds||[]).includes(col.tagId);
+        const content = score > 0 ? score : (assigned ? '<span class="gb-unscored">·</span>' : '—');
+        html += `<td class="gb-score${startClass}${altClass}" data-aid="${col.assessmentId}" data-tid="${col.tagId}" data-sid="${s.id}" data-action="cycleScore" role="button" tabindex="0" aria-label="${esc(fullName(s))} ${esc(col.tagCode)}: ${score > 0 ? PROF_LABELS[score] || score : 'not scored'}"><span class="gb-score-val s${score}">${content}</span></td>`;
+      }
+    });
+    html += `</tr>`;
+  });
+
+  // Class stats
+  html += renderClassStatsRow(cid, sortedStudents, cols, groups, sections, scores);
+  html += `</tbody></table></div></div>`;
+  return html;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   AVERAGE VIEW
+   ══════════════════════════════════════════════════════════════ */
+function renderAverageTable(cid, students, assessments, sections, isLetter, scores) {
+  const filteredAssessments = assessments.map(a => {
+    let tagIds = a.tagIds || [];
+    if (filterSections.length > 0) tagIds = tagIds.filter(tid => { const sec = getSectionForTag(cid, tid); return sec && filterSections.includes(sec.id); });
+    return { ...a, _tagIds: tagIds };
+  }).filter(a => a._tagIds.length > 0);
+
+  const sortedStudents = applySorting(cid, students, sections, isLetter);
+
+  let html = `<div class="gb-scroll-wrap"><div class="gb-scroll">`;
+  html += `<table class="gb-table">`;
+
+  // Header
+  html += `<thead><tr>`;
+  html += `<th class="gb-corner gb-sortable" data-action="toggleSort" data-sortkey="name">Student${sortArrow('name')}</th>`;
+  html += renderOverallHeader();
+  filteredAssessments.forEach((a, ai) => {
+    const isPrimary = a.type === 'summative';
+    const typeClass = isPrimary ? ' gb-type-summative' : ' gb-type-formative';
+    const startClass = ai > 0 ? ' gb-group-start' : '';
+    const tagSecs = (a.tagIds||[]).map(tid => getSectionForTag(cid, tid)).filter(Boolean);
+    const stripeColor = tagSecs.length > 0 ? tagSecs[0].color : 'var(--border)';
+    html += `<th class="gb-assess-head gb-sortable${typeClass}${startClass}" style="min-width:80px" data-action="toggleSort" data-sortkey="avg-${a.id}">
+      <div class="gb-assess-head-inner">
+        <a class="gb-assess-title" href="settings.html?course=${cid}&open=${a.id}" title="Open in Assignments" data-action="stopPropOnly" data-stop-prop="true">${esc(a.title)}</a>
+        <div class="gb-assess-meta">
+          <span class="gb-assess-type-pill ${isPrimary?'sum':'form'}">${isPrimary?'S':'F'}</span>
+          <span class="gb-assess-date">${formatDate(a.date)}</span>
+          ${sortArrow('avg-'+a.id)}
+        </div>
+      </div>
+      <div class="gb-assess-stripe" style="background:${stripeColor}"></div>
+    </th>`;
+  });
+  html += `</tr></thead>`;
+
+  // Body
+  html += `<tbody>`;
+  sortedStudents.forEach(s => {
+    html += `<tr data-sid="${s.id}"><th class="gb-name" scope="row">${renderNameCell(cid, s, sections, isLetter)}</th>`;
+    html += renderOverallCell(cid, s.id);
+    filteredAssessments.forEach((a, ai) => {
+      const startClass = ai > 0 ? ' gb-group-start' : '';
+      const altClass = ai % 2 === 1 ? ' gb-group-alt' : '';
+      const studentScores = scores[s.id] || [];
+      const tagScores = a._tagIds.map(tid => { const e = studentScores.find(e => e.assessmentId === a.id && e.tagId === tid); return e ? e.score : 0; }).filter(v => v > 0);
+      if (tagScores.length === 0) {
+        html += `<td class="gb-avg-cell${startClass}${altClass}"><span class="gb-avg-val" style="color:var(--text-3)">—</span></td>`;
+      } else {
+        const avg = tagScores.reduce((x,y)=>x+y,0)/tagScores.length;
+        const r = Math.round(avg);
+        const label = PROF_LABELS[r] || '';
+        html += `<td class="gb-avg-cell${startClass}${altClass}"><span class="gb-avg-val" style="color:${PROF_COLORS[r]||PROF_COLORS[0]}">${avg.toFixed(1)}</span><span class="gb-avg-label" style="color:${PROF_COLORS[r]||PROF_COLORS[0]}">${label}</span></td>`;
+      }
+    });
+    html += `</tr>`;
+  });
+
+  // Stats row
+  html += `<tr class="gb-stats-row"><th class="gb-name" scope="row">Class Average</th>`;
+  html += renderOverallStatsCell(cid, sortedStudents);
+  filteredAssessments.forEach((a, ai) => {
+    const startClass = ai > 0 ? ' gb-group-start' : '';
+    const altClass = ai % 2 === 1 ? ' gb-group-alt' : '';
+    const vals = sortedStudents.map(s => {
+      const ss = scores[s.id]||[];
+      const ts = a._tagIds.map(tid => { const e = ss.find(e => e.assessmentId===a.id && e.tagId===tid); return e?e.score:0; }).filter(v=>v>0);
+      return ts.length > 0 ? ts.reduce((x,y)=>x+y,0)/ts.length : null;
+    }).filter(v => v !== null);
+    if (vals.length === 0) html += `<td class="gb-avg-cell${startClass}${altClass}"><span class="gb-avg-val" style="color:var(--text-3)">—</span></td>`;
+    else { const avg = vals.reduce((a,b)=>a+b,0)/vals.length; const r = Math.round(avg); html += `<td class="gb-avg-cell${startClass}${altClass}"><span class="gb-avg-val" style="color:${PROF_COLORS[r]};font-weight:700">${avg.toFixed(1)}</span><span class="gb-avg-label" style="color:${PROF_COLORS[r]}">${PROF_LABELS[r]||''}</span></td>`; }
+  });
+  html += `</tr>`;
+
+  html += `</tbody></table></div></div>`;
+  return html;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SUMMARY VIEW
+   ══════════════════════════════════════════════════════════════ */
+function renderSummaryTable(cid, students, sections, isLetter, scores) {
+  const sortedStudents = applySorting(cid, students, sections, isLetter);
+
+  let html = `<div class="gb-scroll-wrap"><div class="gb-scroll">`;
+  html += `<table class="gb-table">`;
+  html += `<thead><tr><th class="gb-corner gb-sortable" data-action="toggleSort" data-sortkey="name">Student${sortArrow('name')}</th>`;
+  html += renderOverallHeader();
+  if (isLetter) html += `<th class="gb-summary-header gb-sortable" data-action="toggleSort" data-sortkey="grade">Grade${sortArrow('grade')}</th>`;
+  sections.forEach(sec => {
+    html += `<th class="gb-summary-header gb-sortable" style="border-bottom:3px solid ${sec.color}" data-action="toggleSort" data-sortkey="sec-${sec.id}">${esc(sec.shortName || sec.name)}${sortArrow('sec-'+sec.id)}</th>`;
+  });
+  html += `<th class="gb-summary-header gb-sortable" data-action="toggleSort" data-sortkey="coverage">Coverage${sortArrow('coverage')}</th>`;
+  html += `<th class="gb-summary-header">Trend</th>`;
+  html += `</tr></thead><tbody>`;
+
+  sortedStudents.forEach(s => {
+    html += `<tr data-sid="${s.id}"><th class="gb-name" scope="row">${renderNameCell(cid, s, sections, isLetter)}</th>`;
+    html += renderOverallCell(cid, s.id);
+    if (isLetter) html += renderSummaryCell(cid, s.id, { type:'grade' });
+    sections.forEach(sec => { html += renderSummaryCell(cid, s.id, { type:'section', section:sec }); });
+    const pct = getCompletionPct(cid, s.id);
+    html += `<td class="gb-summary" style="text-align:center"><span class="gb-summary-val" style="color:${pct>=75?'var(--score-3)':pct>=50?'var(--score-2)':'var(--score-1)'}">${pct}%</span></td>`;
+    const allSc = (scores[s.id]||[]).filter(sc => sc.type==='summative' && sc.score>0);
+    let trendIcon = '<span style="color:var(--text-3)">—</span>';
+    if (allSc.length >= 4) {
+      allSc.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+      const mid = Math.floor(allSc.length/2);
+      const earlyAvg = allSc.slice(0,mid).reduce((a,b)=>a+b.score,0)/mid;
+      const lateAvg = allSc.slice(mid).reduce((a,b)=>a+b.score,0)/(allSc.length-mid);
+      if (lateAvg > earlyAvg + 0.2) trendIcon = '<span style="color:var(--score-3);font-size:1rem">↑</span>';
+      else if (lateAvg < earlyAvg - 0.2) trendIcon = '<span style="color:var(--score-1);font-size:1rem">↓</span>';
+      else trendIcon = '<span style="color:var(--text-3);font-size:1rem">→</span>';
+    }
+    html += `<td class="gb-summary" style="text-align:center">${trendIcon}</td></tr>`;
+  });
+
+  // Stats row — Overall first, then sections, then coverage/trend
+  html += `<tr class="gb-stats-row"><th class="gb-name" scope="row">Class Average</th>`;
+  html += renderOverallStatsCell(cid, sortedStudents);
+  if (isLetter) html += `<td class="gb-summary"></td>`;
+  sections.forEach(sec => {
+    const vals = sortedStudents.map(s => getSectionProficiency(cid, s.id, sec.id)).filter(v => v > 0);
+    if (!vals.length) html += `<td class="gb-summary"><span class="gb-summary-val" style="color:var(--text-3)">—</span></td>`;
+    else { const avg = vals.reduce((a,b)=>a+b,0)/vals.length; const ar = Math.round(avg); html += `<td class="gb-summary" style="background:linear-gradient(${PROF_TINT[ar]},${PROF_TINT[ar]}),#fff"><span class="gb-summary-val" style="color:${PROF_COLORS[ar]}">${avg.toFixed(1)}</span></td>`; }
+  });
+  const cvgVals = sortedStudents.map(s => getCompletionPct(cid, s.id));
+  const cvgAvg = cvgVals.length > 0 ? Math.round(cvgVals.reduce((a,b)=>a+b,0)/cvgVals.length) : 0;
+  html += `<td class="gb-summary" style="text-align:center"><span class="gb-summary-val" style="color:${cvgAvg>=75?'var(--score-3)':cvgAvg>=50?'var(--score-2)':'var(--score-1)'}">${cvgAvg}%</span></td>`;
+  html += `<td class="gb-summary"></td></tr>`;
+
+  html += `</tbody></table></div></div>`;
+  return html;
+}
+
+/* ── Always-visible Overall column ─────────────────────────── */
+function renderOverallHeader(rowspan) {
+  const rs = rowspan ? ` rowspan="${rowspan}"` : '';
+  return `<th class="gb-overall-col-header gb-sortable"${rs} data-action="toggleSort" data-sortkey="overall">Overall${sortArrow('overall')}</th>`;
+}
+function renderOverallCell(cid, sid) {
+  const val = getOverallProficiency(cid, sid);
+  const r = Math.round(val);
+  const color = PROF_COLORS[r] || PROF_COLORS[0];
+  const label = val > 0 ? PROF_LABELS[r] : '';
+  const num = val > 0 ? val.toFixed(1) : '—';
+  const tint = PROF_TINT[r] || '';
+  const bg = tint ? `background:linear-gradient(${tint},${tint}),#f5f5f7` : '';
+  return `<td class="gb-overall-col"${bg ? ` style="${bg}"` : ''}><span class="gb-overall-num" style="color:${color}">${num}</span>${label ? `<div class="gb-overall-label" style="color:${color}">${label}</div>` : ''}</td>`;
+}
+function renderOverallStatsCell(cid, students) {
+  const vals = students.map(s => getOverallProficiency(cid, s.id)).filter(v => v > 0);
+  if (!vals.length) return `<td class="gb-overall-col"><span class="gb-overall-num" style="color:var(--text-3)">—</span></td>`;
+  const avg = vals.reduce((a,b)=>a+b,0)/vals.length;
+  const r = Math.round(avg);
+  const tint = PROF_TINT[r] || '';
+  const bg = tint ? `background:linear-gradient(${tint},${tint}),#f5f5f7` : '';
+  return `<td class="gb-overall-col"${bg ? ` style="${bg}"` : ''}><span class="gb-overall-num" style="color:${PROF_COLORS[r]}">${avg.toFixed(1)}</span><div class="gb-overall-label" style="color:${PROF_COLORS[r]}">${PROF_LABELS[r]||''}</div></td>`;
+}
+
+function renderNameCell(cid, student, sections, isLetter) {
+  const overall = getOverallProficiency(cid, student.id);
+  const or = Math.round(overall);
+  const oLabel = overall > 0 ? PROF_LABELS[or] : 'No Evidence';
+  const oColor = PROF_COLORS[or] || PROF_COLORS[0];
+  const pct = getCompletionPct(cid, student.id);
+  let tip = `<div class="gb-tip-row"><span class="gb-tip-label">Overall</span><span class="gb-tip-val" style="color:${oColor}">${oLabel}${overall>0?' ('+overall.toFixed(1)+')':''}</span></div>`;
+  sections.forEach(sec => {
+    const sp = getSectionProficiency(cid, student.id, sec.id);
+    const sr = Math.round(sp); const sc = PROF_COLORS[sr]||PROF_COLORS[0];
+    tip += `<div class="gb-tip-row"><span class="gb-tip-label">${esc(sec.shortName||sec.name)}</span><span class="gb-tip-val" style="color:${sc}">${sp>0?sp.toFixed(1):'—'}</span></div>`;
+  });
+  if (isLetter && overall > 0) { const lg = calcLetterGrade(overall); tip += `<div class="gb-tip-row"><span class="gb-tip-label">Grade</span><span class="gb-tip-val">${lg.letter} (${lg.pct}%)</span></div>`; }
+  tip += `<div class="gb-tip-row"><span class="gb-tip-label">Coverage</span><span class="gb-tip-val">${pct}%</span></div>`;
+  // Encode tip HTML as data attribute for fixed-position tooltip
+  return `<div class="gb-name-wrap" data-tip="${esc(tip)}"><a href="student.html?id=${student.id}&course=${cid}">${esc(displayName(student))}</a></div>`;
+}
+
+function renderSummaryCell(cid, sid, sc, isLast) {
+  let display, tint = '';
+  if (sc.type === 'section') {
+    const val = getSectionProficiency(cid, sid, sc.section.id); const r = Math.round(val); const color = PROF_COLORS[r]||PROF_COLORS[0];
+    tint = PROF_TINT[r] || '';
+    display = val > 0 ? `<span class="gb-summary-val" style="color:${color}">${val.toFixed(1)}</span>` : `<span class="gb-summary-val" style="color:var(--text-3)">—</span>`;
+  } else if (sc.type === 'grade') {
+    const val = getOverallProficiency(cid, sid);
+    if (val > 0) { const g = calcLetterGrade(val); display = `<span class="gb-summary-val" style="color:var(--text)">${g.letter} (${g.pct}%)</span>`; }
+    else display = `<span class="gb-summary-val" style="color:var(--text-3)">—</span>`;
+  }
+  const isOverall = sc.type==='grade';
+  const bg = tint ? ` style="background:linear-gradient(${tint},${tint}),#fff"` : '';
+  return `<td class="gb-summary${isOverall?' gb-overall':''}${isLast?' gb-summ-last':''}" data-stype="${sc.type}"${sc.type==='section'?' data-secid="'+sc.section.id+'"':''}${bg}>${display}</td>`;
+}
+
+function renderClassStatsRow(cid, students, cols, groups, sections, scores) {
+  let html = `<tr class="gb-stats-row"><th class="gb-name" scope="row">Class Average</th>`;
+  html += renderOverallStatsCell(cid, students);
+  // Precompute column → group mapping
+  const colGroupMap = cols.map((_, i) => groups.find(g => i >= g.startIdx && i < g.startIdx + g.count));
+  cols.forEach((col, i) => {
+    const g = colGroupMap[i];
+    const startClass = (g && g.groupIdx > 0 && g.startIdx === i) ? ' gb-group-start' : '';
+    const altClass = (g && g.groupIdx % 2 === 1) ? ' gb-group-alt' : '';
+    const vals = students.map(s => { const ss = scores[s.id]||[]; const entry = ss.find(e => e.assessmentId === col.assessmentId && e.tagId === col.tagId); return entry && entry.score > 0 ? entry.score : null; }).filter(v => v !== null);
+    if (!vals.length) html += `<td class="gb-score${startClass}${altClass}" style="cursor:default"><span class="gb-score-val s0" style="background:transparent">—</span></td>`;
+    else { const avg = vals.reduce((a,b)=>a+b,0)/vals.length; const r = Math.round(avg); html += `<td class="gb-score${startClass}${altClass}" style="cursor:default"><span class="gb-avg-val" style="color:${PROF_COLORS[r]};font-weight:700">${avg.toFixed(1)}</span></td>`; }
+  });
+  html += `</tr>`;
+  return html;
+}
+
+/* ── Sorting ───────────────────────────────────────────────── */
+function applySorting(cid, students, sections, isLetter) {
+  if (!sortCol) return students;
+  const key = sortCol.key; const dir = sortCol.dir === 'asc' ? 1 : -1;
+  return students.slice().sort((a, b) => {
+    let va, vb;
+    if (key === 'name') {
+      va = (a.lastName||'').toLowerCase() + ' ' + (a.firstName||'').toLowerCase(); vb = (b.lastName||'').toLowerCase() + ' ' + (b.firstName||'').toLowerCase();
+      return va < vb ? -dir : va > vb ? dir : 0;
+    } else if (key === 'overall') { va = getOverallProficiency(cid, a.id); vb = getOverallProficiency(cid, b.id); }
+    else if (key === 'coverage') { va = getCompletionPct(cid, a.id); vb = getCompletionPct(cid, b.id); }
+    else if (key.startsWith('sec-')) { const secId = key.slice(4); va = getSectionProficiency(cid, a.id, secId); vb = getSectionProficiency(cid, b.id, secId); }
+    else if (key.startsWith('avg-')) {
+      const aid = key.slice(4); const sc = getScores(cid); const assess = getAssessments(cid).find(a => a.id === aid); const tagIds = assess ? (assess.tagIds||[]) : [];
+      const getAvg = sid => { const ss = sc[sid]||[]; const ts = tagIds.map(tid => { const e = ss.find(e => e.assessmentId===aid && e.tagId===tid); return e?e.score:0; }).filter(v=>v>0); return ts.length > 0 ? ts.reduce((x,y)=>x+y,0)/ts.length : 0; };
+      va = getAvg(a.id); vb = getAvg(b.id);
+    } else { va = getOverallProficiency(cid, a.id); vb = getOverallProficiency(cid, b.id); }
+    return (va - vb) * dir;
+  });
+}
+
+/* ── Score cycling ─────────────────────────────────────────── */
+const seq = [3, 4, 0, 1, 2];
+function cycleScore(td) {
+  const cid = activeCourse; const aid = td.dataset.aid; const tid = td.dataset.tid; const sid = td.dataset.sid;
+  // Points-mode: open inline input instead of cycling
+  const assess = getAssessments(cid).find(a => a.id === aid);
+  if (assess && assess.scoreMode === 'points') { showPointsInput(td, assess); return; }
+  const scores = getScores(cid); if (!scores[sid]) scores[sid] = [];
+  const entry = scores[sid].find(e => e.assessmentId === aid && e.tagId === tid);
+  let current = entry ? entry.score : 0;
+  let next = seq[(seq.indexOf(current) + 1) % seq.length];
+  if (entry) entry.score = next;
+  else { scores[sid].push({ id: uid(), assessmentId: aid, tagId: tid, score: next, date: assess ? assess.date : new Date().toISOString().slice(0,10), type: assess ? assess.type : 'summative', note: '', created: new Date().toISOString() }); }
+  saveScores(cid, scores);
+  const span = td.querySelector('.gb-score-val');
+  span.className = 'gb-score-val s' + next;
+  if (next > 0) { span.textContent = next; }
+  else { span.innerHTML = '<span class="gb-unscored">·</span>'; }
+  updateRowSummary(cid, sid, td.closest('tr'));
+  refreshSidebar();
+}
+
+/* ── Points-mode inline input ────────────────────────────── */
+function showPointsInput(td, assess) {
+  if (td.querySelector('.gb-pts-input')) return;
+  const cid = activeCourse; const aid = td.dataset.aid; const sid = td.dataset.sid;
+  const isPtsCol = td.dataset.pts === '1';
+  const max = assess.maxPoints || 100;
+  const current = isPtsCol ? getPointsScore(cid, sid, aid) : (() => {
+    const scores = getScores(cid); const entries = scores[sid] || [];
+    const e = entries.find(e => e.assessmentId === aid && e.tagId === td.dataset.tid);
+    return e ? e.score : 0;
+  })();
+  const existing = td.querySelector('.gb-pts-display') || td.querySelector('.gb-pts-empty');
+  if (existing) existing.style.display = 'none';
+  const wrap = document.createElement('div');
+  wrap.className = 'gb-pts-input-wrap';
+  const inp = document.createElement('input');
+  inp.type = 'number'; inp.min = '0'; inp.max = String(max);
+  inp.inputMode = 'numeric';
+  inp.value = current > 0 ? current : '';
+  inp.className = 'gb-pts-input';
+  const pctLabel = document.createElement('span');
+  pctLabel.className = 'gb-pts-live-pct';
+  pctLabel.textContent = current > 0 ? Math.round(current / max * 100) + '%' : '';
+  wrap.appendChild(inp);
+  wrap.appendChild(pctLabel);
+  td.appendChild(wrap);
+  inp.focus(); inp.select();
+  inp.addEventListener('input', () => {
+    const v = parseInt(inp.value);
+    pctLabel.textContent = (!isNaN(v) && v >= 0) ? Math.round(Math.min(v, max) / max * 100) + '%' : '';
+  });
+  function commit() {
+    const val = parseInt(inp.value);
+    const raw = isNaN(val) ? 0 : Math.max(0, Math.min(max, val));
+    if (isPtsCol) {
+      setPointsScore(cid, sid, aid, raw);
+    } else {
+      const tid = td.dataset.tid;
+      const scores = getScores(cid); if (!scores[sid]) scores[sid] = [];
+      const entry = scores[sid].find(e => e.assessmentId === aid && e.tagId === tid);
+      if (entry) entry.score = raw;
+      else if (raw > 0) { scores[sid].push({ id: uid(), assessmentId: aid, tagId: tid, score: raw, date: assess.date || new Date().toISOString().slice(0,10), type: assess.type || 'summative', note: '', created: new Date().toISOString() }); }
+      saveScores(cid, scores);
+    }
+    wrap.remove();
+    if (existing) existing.remove();
+    if (raw > 0) {
+      const pct = Math.round(raw / max * 100);
+      td.innerHTML = `<div class="gb-pts-display"><span class="gb-pts-score">${raw}<span class="gb-pts-max">/${max}</span></span><span class="gb-pts-pct">${pct}%</span></div>`;
+      td.title = `${raw}/${max} (${pct}%)`;
+    } else {
+      td.innerHTML = `<span class="gb-pts-empty">·</span>`;
+      td.title = '';
+    }
+    updateRowSummary(cid, sid, td.closest('tr'));
+    refreshSidebar();
+  }
+  inp.addEventListener('blur', commit);
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    else if (e.key === 'Escape') { wrap.remove(); if (existing) existing.style.display = ''; }
+    e.stopPropagation();
+  });
+}
+
+/* ── Update row summaries ─────────────────────────────────── */
+function updateRowSummary(cid, sid, row) {
+  // Update the overall column in this row
+  const overallTd = row.querySelector('td.gb-overall-col');
+  if (overallTd) {
+    const val = getOverallProficiency(cid, sid);
+    const r = Math.round(val);
+    const color = PROF_COLORS[r] || PROF_COLORS[0];
+    const label = val > 0 ? PROF_LABELS[r] : '';
+    const num = val > 0 ? val.toFixed(1) : '—';
+    const tint = PROF_TINT[r] || '';
+    const bg = tint ? `background:linear-gradient(${tint},${tint}),#f5f5f7` : '';
+    overallTd.style.cssText = bg;
+    overallTd.innerHTML = `<span class="gb-overall-num" style="color:${color}">${num}</span>${label ? `<div class="gb-overall-label" style="color:${color}">${label}</div>` : ''}`;
+  }
+}
+
+/* ── Keyboard Navigation ─────────────────────────────────── */
+
+// Click-to-focus: clicking a score cell sets keyboard focus
+document.addEventListener('click', function(e) {
+  const td = e.target.closest('td.gb-score');
+  const table = document.querySelector('.gb-table');
+  if (td && table) {
+    table.querySelectorAll('.gb-focus').forEach(el => el.classList.remove('gb-focus'));
+    td.classList.add('gb-focus');
+    return;
+  }
+  // Click outside score cells: unfocus
+  if (table && !e.target.closest('td.gb-score')) {
+    table.querySelectorAll('.gb-focus').forEach(el => el.classList.remove('gb-focus'));
+  }
+});
+
+// Helper to advance focus down one row (same column)
+function kbAdvanceDown(table, focused) {
+  const rows = table.querySelectorAll('tbody tr:not(.gb-stats-row)');
+  const colsPerRow = rows[0] ? rows[0].querySelectorAll('td.gb-score').length : 0;
+  if (colsPerRow === 0) return;
+  let curRow = -1, curCol = -1;
+  rows.forEach((r, ri) => { r.querySelectorAll('td.gb-score').forEach((c, ci) => { if (c === focused) { curRow = ri; curCol = ci; } }); });
+  if (curRow < 0) return;
+  const newRow = Math.min(curRow + 1, rows.length - 1);
+  if (newRow === curRow) return; // already at bottom
+  focused.classList.remove('gb-focus');
+  const newCell = rows[newRow]?.querySelectorAll('td.gb-score')[curCol];
+  if (newCell) { newCell.classList.add('gb-focus'); newCell.scrollIntoView({block:'nearest',inline:'nearest'}); }
+}
+
+document.addEventListener('keydown', e => {
+  if (viewMode !== 'detailed') return;
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+  const table = document.querySelector('.gb-table'); if (!table) return;
+  const rows = table.querySelectorAll('tbody tr:not(.gb-stats-row)');
+  if (rows.length === 0) return;
+  const colsPerRow = rows[0].querySelectorAll('td.gb-score').length;
+  if (colsPerRow === 0) return;
+  const focused = table.querySelector('.gb-focus');
+  if (!focused && !['ArrowDown','ArrowUp','ArrowLeft','ArrowRight','Enter','Tab'].includes(e.key)) return;
+  if (!focused && ['ArrowDown','ArrowRight','Tab'].includes(e.key)) {
+    e.preventDefault();
+    const first = rows[0]?.querySelector('td.gb-score');
+    if (first) { first.classList.add('gb-focus'); first.scrollIntoView({block:'nearest',inline:'nearest'}); }
+    return;
+  }
+  if (!focused) return;
+  let curRow = -1, curCol = -1;
+  rows.forEach((r, ri) => { r.querySelectorAll('td.gb-score').forEach((c, ci) => { if (c === focused) { curRow = ri; curCol = ci; } }); });
+  if (curRow < 0) return;
+  let newRow = curRow, newCol = curCol;
+  if (e.key === 'ArrowRight' || (e.key === 'Tab' && !e.shiftKey)) { e.preventDefault(); newCol++; if (newCol >= colsPerRow) { newCol = 0; newRow++; } if (newRow >= rows.length) { newRow = rows.length-1; newCol = colsPerRow-1; } }
+  else if (e.key === 'ArrowLeft' || (e.key === 'Tab' && e.shiftKey)) { e.preventDefault(); newCol--; if (newCol < 0) { newCol = colsPerRow-1; newRow--; } if (newRow < 0) { newRow = 0; newCol = 0; } }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); newRow = Math.min(curRow+1, rows.length-1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); newRow = Math.max(curRow-1, 0); }
+  else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); focused.click(); return; }
+  else if (e.key === 'Escape') { focused.classList.remove('gb-focus'); return; }
+  else if (['1','2','3','4','5','6','7','8','9'].includes(e.key)) {
+    // Points-mode: open inline input on any digit
+    const ptsAssess = focused.dataset.aid ? getAssessments(activeCourse).find(a => a.id === focused.dataset.aid) : null;
+    if (ptsAssess && ptsAssess.scoreMode === 'points') { e.preventDefault(); showPointsInput(focused, ptsAssess); const pi = focused.querySelector('.gb-pts-input'); if (pi) { pi.value = e.key; pi.dispatchEvent(new Event('input')); } return; }
+    if (!['1','2','3','4'].includes(e.key)) return; // only 1-4 for proficiency mode
+    e.preventDefault();
+    const val = parseInt(e.key); const aid = focused.dataset.aid; const tid = focused.dataset.tid; const sid = focused.dataset.sid;
+    if (aid && tid && sid) {
+      const scores = getScores(activeCourse); if (!scores[sid]) scores[sid] = [];
+      const entry = scores[sid].find(en => en.assessmentId === aid && en.tagId === tid);
+      if (entry) entry.score = val;
+      else { const assess = getAssessments(activeCourse).find(a => a.id === aid); scores[sid].push({ id: uid(), assessmentId: aid, tagId: tid, score: val, date: assess?assess.date:new Date().toISOString().slice(0,10), type: assess?assess.type:'summative', note:'', created: new Date().toISOString() }); }
+      saveScores(activeCourse, scores);
+      const span = focused.querySelector('.gb-score-val');
+      if (span) { span.className = 'gb-score-val s' + val; if (val > 0) { span.textContent = val; } else { span.innerHTML = '<span class="gb-unscored">·</span>'; } }
+      updateRowSummary(activeCourse, sid, focused.closest('tr'));
+      refreshSidebar();
+    }
+    // Auto-advance down after scoring
+    kbAdvanceDown(table, focused);
+    return;
+  }
+  else if (e.key === '0' || e.key === 'Backspace' || e.key === 'Delete') {
+    e.preventDefault();
+    const aid = focused.dataset.aid; const tid = focused.dataset.tid; const sid = focused.dataset.sid;
+    if (aid && sid) {
+      if (focused.dataset.pts === '1') {
+        setPointsScore(activeCourse, sid, aid, 0);
+      } else if (tid) {
+        const scores = getScores(activeCourse); if (!scores[sid]) scores[sid] = [];
+        const entry = scores[sid].find(en => en.assessmentId === aid && en.tagId === tid);
+        if (entry) entry.score = 0;
+        saveScores(activeCourse, scores);
+      }
+      if (focused.classList.contains('gb-score-pts')) {
+        focused.innerHTML = `<span class="gb-pts-empty">·</span>`;
+        focused.title = '';
+      } else {
+        const span = focused.querySelector('.gb-score-val');
+        if (span) { span.className = 'gb-score-val s0'; span.innerHTML = '<span class="gb-unscored">·</span>'; }
+      }
+      updateRowSummary(activeCourse, sid, focused.closest('tr'));
+      refreshSidebar();
+    }
+    return;
+  } else return;
+  focused.classList.remove('gb-focus');
+  const newCell = rows[newRow]?.querySelectorAll('td.gb-score')[newCol];
+  if (newCell) { newCell.classList.add('gb-focus'); newCell.scrollIntoView({block:'nearest',inline:'nearest'}); }
+});
+
+/* ── Fixed-position tooltip for student names + tag headers ───── */
+const gbTip = document.getElementById('gb-tooltip');
+let _tipSource = null;
+document.addEventListener('mouseover', e => {
+  // Student name tooltips
+  const wrap = e.target.closest('.gb-name-wrap');
+  if (wrap && wrap.dataset.tip) {
+    gbTip.className = ''; gbTip.innerHTML = wrap.dataset.tip;
+    gbTip.style.display = 'block'; _tipSource = wrap;
+    const rect = wrap.getBoundingClientRect();
+    let left = rect.right + 8;
+    let top = rect.top + rect.height / 2 - gbTip.offsetHeight / 2;
+    if (left + gbTip.offsetWidth > window.innerWidth - 12) { left = rect.left; top = rect.bottom + 6; }
+    if (top < 8) top = 8;
+    if (top + gbTip.offsetHeight > window.innerHeight - 8) top = window.innerHeight - gbTip.offsetHeight - 8;
+    gbTip.style.left = left + 'px'; gbTip.style.top = top + 'px';
+    return;
+  }
+  // Tag header tooltips
+  const tagTh = e.target.closest('.gb-tag-header');
+  if (tagTh) {
+    const tip = tagTh.querySelector('.gb-tag-tip');
+    if (tip && tip.textContent.trim()) {
+      gbTip.className = 'dark'; gbTip.textContent = tip.textContent.trim();
+      gbTip.style.display = 'block'; _tipSource = tagTh;
+      const rect = tagTh.getBoundingClientRect();
+      let left = rect.left + rect.width / 2 - gbTip.offsetWidth / 2;
+      let top = rect.top - gbTip.offsetHeight - 6;
+      if (left < 8) left = 8;
+      if (left + gbTip.offsetWidth > window.innerWidth - 8) left = window.innerWidth - gbTip.offsetWidth - 8;
+      if (top < 8) { top = rect.bottom + 6; }
+      gbTip.style.left = left + 'px'; gbTip.style.top = top + 'px';
+    }
+  }
+});
+document.addEventListener('mouseout', e => {
+  if (_tipSource) {
+    const related = e.relatedTarget;
+    if (!related || !_tipSource.contains(related)) {
+      gbTip.style.display = 'none'; gbTip.className = ''; _tipSource = null;
+    }
+  }
+});
+
+/* ── Delegated click handler ──────────────────────────────── */
+document.addEventListener('click', function(e) {
+  var el = e.target.closest('[data-action]');
+  if (!el) return;
+  var action = el.dataset.action;
+  if (el.dataset.stopProp === 'true') e.stopPropagation();
+  var handlers = {
+    'setView':              function() { setView(el.dataset.mode); },
+    'toggleFilterStrip':    function() { toggleFilterStrip(); },
+    'setTypeFilter':        function() { setTypeFilter(el.dataset.type); },
+    'toggleSectionFilter':  function() { toggleSectionFilter(el.dataset.secid); },
+    'toggleModuleFilter':   function() { toggleModuleFilter(el.dataset.moduleid); },
+    'clearAllFilters':      function() { clearAllFilters(); },
+    'toggleSort':           function() { toggleSort(el.dataset.sortkey); },
+    'cycleScore':           function() { cycleScore(el); },
+    'stopPropOnly':         function() { /* just stop propagation, already handled above */ }
+  };
+  if (handlers[action]) {
+    if (action !== 'stopPropOnly' && action !== 'cycleScore') e.preventDefault();
+    handlers[action]();
+  }
+});
+</script>
+</body>
+</html>

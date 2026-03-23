@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign In — TeacherDashboard</title>
+<link rel="stylesheet" href="gb-styles.css?v=3">
+<link rel="stylesheet" href="login.css">
+</head>
+<body>
+
+<main class="auth-card">
+  <h1 class="auth-title">TeacherDashboard</h1>
+  <p class="auth-subtitle">Standards-Based Gradebook</p>
+
+  <!-- Tab toggle -->
+  <div class="auth-tabs" role="tablist" aria-label="Authentication">
+    <button class="auth-tab active" id="tab-signin" onclick="switchTab('signin')" role="tab" aria-selected="true" aria-controls="form-signin">Sign In</button>
+    <button class="auth-tab" id="tab-signup" onclick="switchTab('signup')" role="tab" aria-selected="false" aria-controls="form-signup">Sign Up</button>
+  </div>
+
+  <!-- Error / success messages -->
+  <div class="auth-error" id="auth-error" role="alert" aria-live="assertive"></div>
+  <div class="auth-success" id="auth-success" role="status" aria-live="polite"></div>
+
+  <!-- Sign In form -->
+  <form class="auth-form" id="form-signin" onsubmit="handleSignIn(event)" role="tabpanel" aria-labelledby="tab-signin">
+    <div class="auth-field">
+      <label class="auth-label" for="si-email">Email</label>
+      <input class="auth-input" id="si-email" type="email" placeholder="you@school.ca" required autocomplete="email">
+    </div>
+    <div class="auth-field">
+      <label class="auth-label" for="si-password">Password</label>
+      <input class="auth-input" id="si-password" type="password" placeholder="Password" required autocomplete="current-password">
+    </div>
+    <button class="auth-submit" type="submit" id="si-submit">Sign In</button>
+    <div class="auth-forgot"><a href="#" onclick="handleForgot(event)">Forgot password?</a></div>
+  </form>
+
+  <!-- Sign Up form -->
+  <form class="auth-form" id="form-signup" hidden onsubmit="handleSignUp(event)" role="tabpanel" aria-labelledby="tab-signup">
+    <div class="auth-field">
+      <label class="auth-label" for="su-name">Display Name</label>
+      <input class="auth-input" id="su-name" type="text" placeholder="Ms. Brown" required autocomplete="name">
+    </div>
+    <div class="auth-field">
+      <label class="auth-label" for="su-email">Email</label>
+      <input class="auth-input" id="su-email" type="email" placeholder="you@school.ca" required autocomplete="email">
+    </div>
+    <div class="auth-field">
+      <label class="auth-label" for="su-password">Password</label>
+      <input class="auth-input" id="su-password" type="password" placeholder="At least 6 characters" required minlength="6" autocomplete="new-password">
+    </div>
+    <div class="auth-field">
+      <label class="auth-label" for="su-confirm">Confirm Password</label>
+      <input class="auth-input" id="su-confirm" type="password" placeholder="Confirm password" required minlength="6" autocomplete="new-password">
+    </div>
+    <button class="auth-submit" type="submit" id="su-submit">Create Account</button>
+  </form>
+</main>
+
+<script src="vendor/supabase.min.js"></script>
+<script src="gb-supabase.js"></script>
+<script>
+/* ── Redirect if already logged in ─────────────────────────── */
+(async function() {
+  try {
+    const sb = getSupabase();
+    if (sb) {
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) {
+        window.location.href = 'index.html';
+        return;
+      }
+    }
+  } catch(e) { /* not logged in, stay on page */ }
+})();
+
+/* ── Tab switching ─────────────────────────────────────────── */
+function switchTab(tab) {
+  const isSignIn = tab === 'signin';
+  document.getElementById('tab-signin').classList.toggle('active', isSignIn);
+  document.getElementById('tab-signup').classList.toggle('active', !isSignIn);
+  document.getElementById('tab-signin').setAttribute('aria-selected', isSignIn);
+  document.getElementById('tab-signup').setAttribute('aria-selected', !isSignIn);
+  document.getElementById('form-signin').hidden = !isSignIn;
+  document.getElementById('form-signup').hidden = isSignIn;
+  hideMessages();
+}
+
+function hideMessages() {
+  document.getElementById('auth-error').classList.remove('visible');
+  document.getElementById('auth-success').classList.remove('visible');
+}
+
+function showError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.classList.add('visible');
+  document.getElementById('auth-success').classList.remove('visible');
+}
+
+function showSuccess(msg) {
+  const el = document.getElementById('auth-success');
+  el.textContent = msg;
+  el.classList.add('visible');
+  document.getElementById('auth-error').classList.remove('visible');
+}
+
+/* ── Sign In ───────────────────────────────────────────────── */
+async function handleSignIn(e) {
+  e.preventDefault();
+  hideMessages();
+  const btn = document.getElementById('si-submit');
+  btn.disabled = true;
+  btn.textContent = 'Signing in...';
+  try {
+    const email = document.getElementById('si-email').value.trim();
+    const password = document.getElementById('si-password').value;
+    await signIn(email, password);
+    window.location.href = 'index.html';
+  } catch(err) {
+    showError(err.message || 'Sign in failed. Please try again.');
+    btn.disabled = false;
+    btn.textContent = 'Sign In';
+  }
+}
+
+/* ── Sign Up ───────────────────────────────────────────────── */
+async function handleSignUp(e) {
+  e.preventDefault();
+  hideMessages();
+  const password = document.getElementById('su-password').value;
+  const confirm = document.getElementById('su-confirm').value;
+  if (password !== confirm) {
+    showError('Passwords do not match.');
+    return;
+  }
+  const btn = document.getElementById('su-submit');
+  btn.disabled = true;
+  btn.textContent = 'Creating account...';
+  try {
+    const name = document.getElementById('su-name').value.trim();
+    const email = document.getElementById('su-email').value.trim();
+    await signUp(email, password, name);
+    showSuccess('Check your email for a confirmation link.');
+    btn.textContent = 'Account Created';
+  } catch(err) {
+    showError(err.message || 'Sign up failed. Please try again.');
+    btn.disabled = false;
+    btn.textContent = 'Create Account';
+  }
+}
+
+/* ── Forgot password ───────────────────────────────────────── */
+async function handleForgot(e) {
+  e.preventDefault();
+  hideMessages();
+  const email = document.getElementById('si-email').value.trim();
+  if (!email) {
+    showError('Enter your email address first, then click "Forgot password?"');
+    return;
+  }
+  try {
+    const sb = getSupabase();
+    const { error } = await sb.auth.resetPasswordForEmail(email);
+    if (error) throw error;
+    showSuccess('Password reset email sent. Check your inbox.');
+  } catch(err) {
+    showError(err.message || 'Could not send reset email.');
+  }
+}
+</script>
+
+</body>
+</html>
