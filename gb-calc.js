@@ -80,14 +80,14 @@ function _calcGroup(scores, method, decayWeight, assessmentWeights) {
   valid.sort((a,b) => (a.date||'').localeCompare(b.date||''));
   switch (method) {
     case 'mostRecent': return valid[valid.length - 1].score;
-    case 'highest': return Math.max(...valid.map(s => s.score));
+    case 'highest': return Math.max(...valid.map(s => s.score)); // safe: valid.length > 0 guaranteed by guard on line 79
     case 'mode': {
       const freq = {};
       valid.forEach(s => {
         const w = (assessmentWeights && assessmentWeights[s.assessmentId]) || 1;
         freq[s.score] = (freq[s.score]||0) + w;
       });
-      const maxFreq = Math.max(...Object.values(freq));
+      const maxFreq = Math.max(...Object.values(freq)); // safe: freq is non-empty since valid.length > 0
       const modes = Object.keys(freq).filter(k => freq[k] === maxFreq).map(Number);
       if (modes.length === 1) return modes[0];
       for (let i = valid.length - 1; i >= 0; i--) { if (modes.includes(valid[i].score)) return valid[i].score; }

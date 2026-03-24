@@ -16,6 +16,10 @@
   [headers.values]
     Cache-Control = "no-cache"
 
+[[edge_functions]]
+  path = "/*.html"
+  function = "inject-env"
+
 [[redirects]]
   from = "/"
   to = "/app.html"

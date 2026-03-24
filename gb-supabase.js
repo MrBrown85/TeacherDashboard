@@ -3,8 +3,8 @@
 (function() {
   'use strict';
 
-  const SUPABASE_URL = 'https://novsfeqjhbleyyaztmlh.supabase.co';
-  const SUPABASE_KEY = 'sb_publishable__CxM2aY7iVOxRid2EMtCiw_jT1g_n96';
+  const SUPABASE_URL = (window.__ENV && window.__ENV.SUPABASE_URL) || '';
+  const SUPABASE_KEY = (window.__ENV && window.__ENV.SUPABASE_KEY) || '';
 
   // Wait for Supabase CDN to be available, then initialize
   function _initClient() {
@@ -175,9 +175,17 @@
         toast.className = 'sync-toast error';
         toast.id = 'sync-toast';
         toast.setAttribute('role', 'alert');
-        toast.innerHTML = '<span>Session expired</span><button class="sync-toast-btn" onclick="window.location.href=\'login.html\'">Sign In</button>';
+        toast.innerHTML = '<span>Session expired</span><button class="sync-toast-btn" data-action="go-login">Sign In</button>';
         document.body.appendChild(toast);
       }
+    }
+  });
+
+  // Delegated click handler for session-expired login redirect
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('[data-action="go-login"]');
+    if (btn) {
+      window.location.href = 'login.html';
     }
   });
 

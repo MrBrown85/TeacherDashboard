@@ -471,7 +471,7 @@ function showSyncToast(message, type) {
   toast.setAttribute('role', 'alert');
   toast.setAttribute('aria-live', 'assertive');
   if (type === 'error') {
-    toast.innerHTML = `<span>${esc(message)}</span><button class="sync-toast-btn" onclick="if(typeof retrySyncs==='function')retrySyncs();dismissSyncToast();">Retry Now</button>`;
+    toast.innerHTML = `<span>${esc(message)}</span><button class="sync-toast-btn" data-action="retry-sync">Retry Now</button>`;
   } else {
     toast.innerHTML = `<span>${esc(message)}</span>`;
     _syncToastTimer = setTimeout(dismissSyncToast, 3000);
@@ -596,10 +596,25 @@ if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
     toast.className = 'sync-toast success';
     toast.id = 'sync-toast';
     toast.setAttribute('role', 'alert');
-    toast.innerHTML = '<span>Update available</span><button class="sync-toast-btn" onclick="window.location.reload()">Refresh</button>';
+    toast.innerHTML = '<span>Update available</span><button class="sync-toast-btn" data-action="reload-page">Refresh</button>';
     document.body.appendChild(toast);
   });
 }
+
+// Delegated click handler for sync toast and SW update buttons
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  switch (btn.dataset.action) {
+    case 'retry-sync':
+      if (typeof retrySyncs === 'function') retrySyncs();
+      dismissSyncToast();
+      break;
+    case 'reload-page':
+      window.location.reload();
+      break;
+  }
+});
 
 // Global error monitoring — cache teacher_id synchronously from the data layer
 function _getTeacherId() {
