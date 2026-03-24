@@ -20,8 +20,12 @@ export default async function handler(request, context) {
   html = html.replace('__SUPABASE_URL__', supabaseUrl);
   html = html.replace('__SUPABASE_KEY__', supabaseKey);
 
+  // Build new headers without Content-Length (it changed after replacement)
+  const headers = new Headers(response.headers);
+  headers.delete('content-length');
+
   return new Response(html, {
     status: response.status,
-    headers: response.headers,
+    headers,
   });
 }
