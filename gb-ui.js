@@ -61,6 +61,9 @@ function _populateDockUser() {
     const user = session.user;
     const name = user.user_metadata?.display_name || user.email?.split('@')[0] || 'User';
     el.textContent = name;
+  }).catch(err => {
+    console.warn('Could not load user session for dock:', err);
+    el.textContent = 'User';
   });
 }
 // Run after DOM renders (next tick)

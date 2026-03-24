@@ -92,7 +92,12 @@
   window.signOut = async function() {
     const sb = getSupabase();
     if (!sb) return;
-    await sb.auth.signOut();
+    try {
+      const { error } = await sb.auth.signOut();
+      if (error) console.warn('Sign-out error (proceeding anyway):', error.message);
+    } catch (err) {
+      console.warn('Sign-out exception (proceeding anyway):', err);
+    }
     // Clear all application data from localStorage (FOIPPA: no student data left on shared computers)
     const keysToRemove = [];
     for (let i = 0; i < localStorage.length; i++) {
@@ -111,9 +116,13 @@
   window.onAuthChange = function(callback) {
     const sb = getSupabase();
     if (!sb) return;
-    return sb.auth.onAuthStateChange((_event, session) => {
-      callback(session?.user || null, _event);
-    });
+    try {
+      return sb.auth.onAuthStateChange((_event, session) => {
+        callback(session?.user || null, _event);
+      });
+    } catch (err) {
+      console.error('Failed to subscribe to auth changes:', err);
+    }
   };
 
   /**

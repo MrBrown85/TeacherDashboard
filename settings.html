@@ -2890,7 +2890,16 @@ function resetDemoData() {
       const sb = getSupabase();
       if (sb && typeof _teacherId !== 'undefined' && _teacherId) {
         sb.from('teacher_config').delete().eq('teacher_id', _teacherId)
-          .then(() => { seedIfNeeded(); location.reload(); });
+          .then(({ error }) => {
+            if (error) console.error('Failed to clear teacher config:', error.message);
+            seedIfNeeded();
+            location.reload();
+          })
+          .catch(err => {
+            console.error('Reset failed:', err);
+            seedIfNeeded();
+            location.reload();
+          });
         return;
       }
     }
