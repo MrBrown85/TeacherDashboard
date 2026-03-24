@@ -22,5 +22,5 @@
 
 [[redirects]]
   from = "/"
-  to = "/app.html"
+  to = "/login.html"
   status = 200
