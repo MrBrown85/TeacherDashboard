@@ -163,7 +163,7 @@ function _initCrossTab() {
           toast.id = 'sync-toast';
           toast.setAttribute('role', 'alert');
           toast.setAttribute('aria-live', 'assertive');
-          toast.innerHTML = '<span>Data changed in another tab</span><button class="sync-toast-btn" onclick="_crossTabAlerted=false;window.location.reload()">Reload</button>';
+          toast.innerHTML = '<span>Data changed in another tab</span><button class="sync-toast-btn" data-action="reload-cross-tab">Reload</button>';
           document.body.appendChild(toast);
         }
       }
@@ -183,9 +183,18 @@ function _initCrossTab() {
         toast.id = 'sync-toast';
         toast.setAttribute('role', 'alert');
         toast.setAttribute('aria-live', 'assertive');
-        toast.innerHTML = '<span>Data changed in another tab</span><button class="sync-toast-btn" onclick="_crossTabAlerted=false;window.location.reload()">Reload</button>';
+        toast.innerHTML = '<span>Data changed in another tab</span><button class="sync-toast-btn" data-action="reload-cross-tab">Reload</button>';
         document.body.appendChild(toast);
       }
+    }
+  });
+
+  // Delegated click handler for cross-tab reload buttons
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('[data-action="reload-cross-tab"]');
+    if (btn) {
+      _crossTabAlerted = false;
+      window.location.reload();
     }
   });
 }
