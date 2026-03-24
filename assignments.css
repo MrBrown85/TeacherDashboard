@@ -1,5 +1,8 @@
 /* assignments.css — Assignments page styles */
 
+/* Hide toolbar course picker when sidebar (which has its own picker) is visible */
+.page-layout:not(.sidebar-hidden) .assess-course-select { display: none; }
+
 /* Page-specific styles */
 .assess-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:12px; overflow:visible; }
 .assess-card.active { border-color:var(--active); }
