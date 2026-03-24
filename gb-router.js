@@ -122,7 +122,7 @@ window.Router = (function() {
     if (_booted) return;
     _booted = true;
 
-    requireAuth();
+    await requireAuth();
     await initAllCourses();
     var cid = getActiveCourse();
     await initData(cid);

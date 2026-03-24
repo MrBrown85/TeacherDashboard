@@ -133,10 +133,10 @@
    * Redirects to login.html if the user is not logged in.
    * @returns {void}
    */
-  window.requireAuth = function() {
+  window.requireAuth = async function() {
     // Auth check
     const sb = getSupabase();
-    if (!sb) { window.location.href = 'login.html'; return; }
+    if (!sb) { window.location.href = 'login.html'; return new Promise(function() {}); }
 
     // Fast path: check localStorage for cached session (Supabase stores this automatically)
     const storageKey = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
@@ -156,12 +156,14 @@
     }
 
     // Slow path: no cached session found, check with Supabase
-    sb.auth.getSession().then(({ data: { session } }) => {
-      if (!session) window.location.href = 'login.html';
-    }).catch(function(e) {
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) { window.location.href = 'login.html'; return new Promise(function() {}); }
+    } catch(e) {
       console.warn('Session check failed:', e);
       window.location.href = 'login.html';
-    });
+      return new Promise(function() {}); // Never resolve — page is redirecting
+    }
   };
 
   // Listen for auth state changes — notify on mid-session expiry
