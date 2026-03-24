@@ -22,12 +22,18 @@
 
   /* ── Public API ──────────────────────────────────────────────── */
 
-  /** Returns the initialized Supabase client */
+  /**
+   * Returns the initialized Supabase client.
+   * @returns {object|null} The Supabase client instance, or null if the CDN is unavailable
+   */
   window.getSupabase = function() {
     return window._supabase || _initClient();
   };
 
-  /** Returns the currently logged-in user, or null */
+  /**
+   * Returns the currently logged-in user, or null.
+   * @returns {Promise<object|null>} The Supabase user object, or null if not authenticated
+   */
   window.getCurrentUser = async function() {
     const sb = getSupabase();
     if (!sb) return null;
@@ -35,13 +41,22 @@
     return user;
   };
 
-  /** Returns true if a user is logged in */
+  /**
+   * Returns true if a user is logged in.
+   * @returns {Promise<boolean>} Whether a user is currently authenticated
+   */
   window.isLoggedIn = async function() {
     const user = await getCurrentUser();
     return !!user;
   };
 
-  /** Creates a new account */
+  /**
+   * Creates a new account with Supabase auth.
+   * @param {string} email - The user's email address
+   * @param {string} password - The user's chosen password
+   * @param {string} displayName - The user's display name stored in user metadata
+   * @returns {Promise<object>} The Supabase sign-up data (user and session)
+   */
   window.signUp = async function(email, password, displayName) {
     const sb = getSupabase();
     if (!sb) throw new Error('Supabase not initialized');
@@ -56,7 +71,12 @@
     return data;
   };
 
-  /** Signs in with email + password */
+  /**
+   * Signs in with email and password.
+   * @param {string} email - The user's email address
+   * @param {string} password - The user's password
+   * @returns {Promise<object>} The Supabase sign-in data (user and session)
+   */
   window.signIn = async function(email, password) {
     const sb = getSupabase();
     if (!sb) throw new Error('Supabase not initialized');
@@ -65,15 +85,29 @@
     return data;
   };
 
-  /** Signs out and redirects to login */
+  /**
+   * Signs out the current user, clears application localStorage data, and redirects to login.
+   * @returns {Promise<void>}
+   */
   window.signOut = async function() {
     const sb = getSupabase();
     if (!sb) return;
     await sb.auth.signOut();
+    // Clear all application data from localStorage (FOIPPA: no student data left on shared computers)
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('gb-')) keysToRemove.push(key);
+    }
+    keysToRemove.forEach(k => localStorage.removeItem(k));
     window.location.href = 'login.html';
   };
 
-  /** Listens for auth state changes */
+  /**
+   * Listens for auth state changes and invokes the callback with the current user.
+   * @param {function(object|null, string): void} callback - Called with (user, event) on each auth state change
+   * @returns {object|undefined} The Supabase auth subscription object, or undefined if client unavailable
+   */
   window.onAuthChange = function(callback) {
     const sb = getSupabase();
     if (!sb) return;
@@ -82,8 +116,12 @@
     });
   };
 
-  /** Redirects to login.html if user is not logged in */
+  /**
+   * Redirects to login.html if the user is not logged in.
+   * @returns {void}
+   */
   window.requireAuth = function() {
+    // Auth check
     const sb = getSupabase();
     if (!sb) { window.location.href = 'login.html'; return; }
 
@@ -99,13 +137,51 @@
             return; // Session exists and is not expired — allow page to load
           }
         }
-      } catch(e) {}
+      } catch(e) {
+        console.warn('Session token parse failed:', e);
+      }
     }
 
     // Slow path: no cached session found, check with Supabase
     sb.auth.getSession().then(({ data: { session } }) => {
       if (!session) window.location.href = 'login.html';
+    }).catch(function(e) {
+      console.warn('Session check failed:', e);
+      window.location.href = 'login.html';
     });
   };
 
+  // Listen for auth state changes — notify on mid-session expiry
+  window.onAuthChange(function(user, event) {
+    if (event === 'TOKEN_REFRESHED' && !user) {
+      // Session expired while the app was open
+      if (typeof showSyncToast === 'function') {
+        var el = document.getElementById('sync-toast');
+        if (el) el.remove();
+        var toast = document.createElement('div');
+        toast.className = 'sync-toast error';
+        toast.id = 'sync-toast';
+        toast.setAttribute('role', 'alert');
+        toast.innerHTML = '<span>Session expired</span><button class="sync-toast-btn" onclick="window.location.href=\'login.html\'">Sign In</button>';
+        document.body.appendChild(toast);
+      }
+    }
+  });
+
+})();
+
+// Idle timeout: sign out after 30 minutes of inactivity on shared computers
+(function() {
+  var _idleTimer = null;
+  var IDLE_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+  function resetIdleTimer() {
+    if (_idleTimer) clearTimeout(_idleTimer);
+    _idleTimer = setTimeout(function() {
+      if (typeof signOut === 'function') signOut();
+    }, IDLE_TIMEOUT);
+  }
+  ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach(function(evt) {
+    document.addEventListener(evt, resetIdleTimer, { passive: true });
+  });
+  resetIdleTimer();
 })();

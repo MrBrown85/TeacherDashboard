@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Teacher Dashboard</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#007AFF">
+<link rel="stylesheet" href="gb-styles.css?v=3">
+<link rel="stylesheet" href="dashboard.css">
+<link rel="stylesheet" href="assignments.css">
+<link rel="stylesheet" href="student.css">
+<link rel="stylesheet" href="gradebook.css">
+<link rel="stylesheet" href="observations.css">
+<link rel="stylesheet" href="reports.css">
+<!-- login.css omitted: only needed on login.html, its body{} rules conflict with SPA layout -->
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to main content</a>
+<div id="gb-tooltip" style="display:none"></div>
+<div id="dock-mount"></div>
+<div class="page-layout" id="page-layout">
+  <div id="sidebar-mount"></div>
+  <div style="display:flex;flex-direction:column;flex:1;min-width:0;min-height:0;overflow:hidden">
+    <div id="page-toolbar-mount"></div>
+    <main class="page-main" id="main"></main>
+  </div>
+</div>
+
+<!-- curriculum_data.js (971 KB) is lazy-loaded by loadCurriculumIndex() in gb-data.js -->
+<script src="vendor/supabase.min.js"></script>
+<script>
+if (typeof supabase === 'undefined') {
+  document.write('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"><\/script>');
+}
+</script>
+<script src="gb-supabase.js"></script>
+<script src="gb-constants.js"></script>
+<script src="gb-data.js"></script>
+<script src="gb-calc.js"></script>
+<script src="gb-ui.js"></script>
+<script src="gb-seed-data.js"></script>
+<!-- Submodules (loaded before their parent page modules) -->
+<script src="dash-overview.js"></script>
+<script src="dash-class-manager.js"></script>
+<script src="dash-curriculum-wizard.js"></script>
+<script src="assign-form.js"></script>
+<script src="assign-scoring.js"></script>
+<script src="assign-rubric-editor.js"></script>
+<script src="report-blocks.js"></script>
+<script src="report-builder.js"></script>
+<script src="report-narrative.js"></script>
+<!-- Page modules -->
+<script src="page-dashboard.js"></script>
+<script src="page-assignments.js"></script>
+<script src="page-student.js"></script>
+<script src="page-gradebook.js"></script>
+<script src="page-observations.js"></script>
+<script src="page-reports.js"></script>
+<script src="gb-router.js"></script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(function(){});
+}
+</script>
+</body>
+</html>

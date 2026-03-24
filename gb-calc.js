@@ -1,5 +1,44 @@
 /* gb-calc.js — Proficiency calculation engine for TeacherDashboard */
 
+/**
+ * @typedef {Object} Score
+ * @property {number} score - Proficiency level (0-4)
+ * @property {string} date - ISO date string (YYYY-MM-DD)
+ * @property {string} type - 'summative' or 'formative'
+ * @property {string} tagId - Learning tag ID
+ * @property {string} assessmentId - Assessment ID
+ * @property {number} [rawPoints] - Original points if converted from points mode
+ */
+
+/* ── Memoization caches ─────────────────────────────────────── */
+var _tagScoresCache = {};
+var _tagProfCache = {};
+var _awCache = {};
+
+/** Clear all proficiency caches. Call when scores, assessments, overrides, or statuses change. */
+function clearProfCache() {
+  _tagScoresCache = {};
+  _tagProfCache = {};
+  _awCache = {};
+}
+
+/** Get or build assessment weights map for a course. */
+function _getAW(cid) {
+  if (_awCache[cid]) return _awCache[cid];
+  var assessments = getAssessments(cid);
+  var aw = {};
+  assessments.forEach(function(a) { aw[a.id] = a.weight || 1; });
+  _awCache[cid] = aw;
+  return aw;
+}
+
+/** Convert a raw point score to a proficiency level using percentage boundaries.
+ * @param {number} rawScore - Raw points earned
+ * @param {number} maxPoints - Maximum possible points
+ * @param {Object} [scale] - Grading scale with boundaries array
+ * @param {Array<{min: number, proficiency: number}>} [scale.boundaries] - Percentage boundaries sorted descending
+ * @returns {number} Proficiency level (0-4)
+ */
 function pointsToProf(rawScore, maxPoints, scale) {
   if (!maxPoints || maxPoints <= 0) return 0;
   const pct = (rawScore / maxPoints) * 100;
@@ -9,13 +48,32 @@ function pointsToProf(rawScore, maxPoints, scale) {
   }
   return 1;
 }
+/** Get the summative/formative category weights for a course.
+ * @param {string} cid - Course ID
+ * @returns {{summative: number, formative: number}} Category weight object
+ */
 function getCategoryWeights(cid) {
   const cc = getCourseConfig(cid);
   return cc.categoryWeights || { summative: 1.0, formative: 0.0 };
 }
+/** Get the weight multiplier for an assessment.
+ * @param {Object} assessment - Assessment object
+ * @param {number} [assessment.weight] - Weight value, defaults to 1
+ * @returns {number} Assessment weight
+ */
 function getAssessmentWeight(assessment) { return assessment.weight || 1; }
 
 /* ── Proficiency Calculation ────────────────────────────────── */
+/** Core algorithm: calculate a proficiency level from a group of scores using the specified method.
+ * Filters out zero-scores, sorts by date, then applies the chosen calculation strategy.
+ * For 'mode', ties are broken by the most recent score among tied values.
+ * For 'decayingAvg', scores are weighted so later entries have more influence.
+ * @param {Score[]} scores - Array of score entries to evaluate
+ * @param {string} method - Calculation method: 'mostRecent'|'highest'|'mode'|'decayingAvg'
+ * @param {number} decayWeight - Weight for decaying average (0-1), default 0.65
+ * @param {Object} [assessmentWeights] - Map of assessmentId to weight multiplier
+ * @returns {number} Calculated proficiency level (0-4), or 0 if no valid scores
+ */
 function _calcGroup(scores, method, decayWeight, assessmentWeights) {
   const valid = scores.filter(s => s.score > 0);
   if (valid.length === 0) return 0;
@@ -48,6 +106,15 @@ function _calcGroup(scores, method, decayWeight, assessmentWeights) {
   }
 }
 
+/** Calculate proficiency from an array of scores, splitting by category and applying weights.
+ * @param {Score[]} scores - Array of score entries (mixed summative/formative)
+ * @param {string} method - Calculation method: 'mostRecent'|'highest'|'mode'|'decayingAvg'
+ * @param {number} decayWeight - Weight for decaying average (0-1), default 0.65
+ * @param {Object} [opts] - Additional options
+ * @param {Object} [opts.categoryWeights] - { summative: number, formative: number }
+ * @param {Object} [opts.assessmentWeights] - Map of assessmentId to weight multiplier
+ * @returns {number} Proficiency level (0-4)
+ */
 function calcProficiency(scores, method, decayWeight, opts) {
   const aw = opts && opts.assessmentWeights;
   const cw = opts && opts.categoryWeights;
@@ -67,10 +134,16 @@ function calcProficiency(scores, method, decayWeight, opts) {
   return Math.round(raw);
 }
 
-// Get all score entries for a student for a specific tag
-// Excludes scores from assessments marked "excused" for that student
-// Converts points-mode scores to proficiency at this boundary
+/** Get all score entries for a student on a specific tag, excluding excused and converting points-mode scores.
+ * @param {string} cid - Course ID
+ * @param {string} studentId - Student ID
+ * @param {string} tagId - Learning tag ID
+ * @returns {Score[]} Filtered and converted score entries
+ */
 function getTagScores(cid, studentId, tagId) {
+  var cacheKey = cid + ':' + studentId + ':' + tagId;
+  if (_tagScoresCache[cacheKey]) return _tagScoresCache[cacheKey];
+
   const allScores = getScores(cid);
   const studentScores = allScores[studentId] || [];
   const statuses = getAssignmentStatuses(cid);
@@ -83,31 +156,45 @@ function getTagScores(cid, studentId, tagId) {
   // Convert points-mode scores to proficiency
   const assessments = getAssessments(cid);
   const scale = getGradingScale(cid);
-  return filtered.map(s => {
+  var result = filtered.map(s => {
     const assess = assessments.find(a => a.id === s.assessmentId);
     if (assess && assess.scoreMode === 'points' && assess.maxPoints > 0) {
       return { ...s, rawPoints: s.score, score: pointsToProf(s.score, assess.maxPoints, scale) };
     }
     return s;
   });
+  _tagScoresCache[cacheKey] = result;
+  return result;
 }
 
-// Proficiency for a single tag
+/** Calculate proficiency for a single tag using the course's configured method and weights.
+ * @param {string} cid - Course ID
+ * @param {string} studentId - Student ID
+ * @param {string} tagId - Learning tag ID
+ * @returns {number} Proficiency level (0-4)
+ */
 function getTagProficiency(cid, studentId, tagId) {
+  var cacheKey = cid + ':' + studentId + ':' + tagId;
+  if (_tagProfCache[cacheKey] !== undefined) return _tagProfCache[cacheKey];
+
   const cc = getCourseConfig(cid);
   const course = COURSES[cid];
   const method = cc.calcMethod || course.calcMethod || 'mostRecent';
   const dw = cc.decayWeight != null ? cc.decayWeight : (course.decayWeight || 0.65);
   const scores = getTagScores(cid, studentId, tagId);
   const cw = getCategoryWeights(cid);
-  const assessments = getAssessments(cid);
-  const aw = {};
-  assessments.forEach(a => { aw[a.id] = a.weight || 1; });
-  return calcProficiency(scores, method, dw, { categoryWeights: cw, assessmentWeights: aw });
+  const aw = _getAW(cid);
+  var result = calcProficiency(scores, method, dw, { categoryWeights: cw, assessmentWeights: aw });
+  _tagProfCache[cacheKey] = result;
+  return result;
 }
 
-// Proficiency for a section (avg of its tags that have evidence)
-// If a teacher override exists, it replaces the calculated value.
+/** Calculate section proficiency as the average of its tags, using teacher override if one exists.
+ * @param {string} cid - Course ID
+ * @param {string} studentId - Student ID
+ * @param {string} sectionId - Section ID
+ * @returns {number} Proficiency level (0-4), or 0 if no evidence
+ */
 function getSectionProficiency(cid, studentId, sectionId) {
   const section = getSections(cid).find(s => s.id === sectionId);
   if (!section) return 0;
@@ -121,7 +208,12 @@ function getSectionProficiency(cid, studentId, sectionId) {
   return calculated;
 }
 
-// Get CALCULATED section proficiency (ignoring overrides) — for override UI display
+/** Calculate section proficiency ignoring any teacher overrides, for use in override UI display.
+ * @param {string} cid - Course ID
+ * @param {string} studentId - Student ID
+ * @param {string} sectionId - Section ID
+ * @returns {number} Calculated proficiency level (0-4), or 0 if no evidence
+ */
 function getSectionProficiencyRaw(cid, studentId, sectionId) {
   const section = getSections(cid).find(s => s.id === sectionId);
   if (!section) return 0;
@@ -130,13 +222,25 @@ function getSectionProficiencyRaw(cid, studentId, sectionId) {
   return profs.reduce((a,b) => a+b, 0) / profs.length;
 }
 
-// Check if a section has an active override
+/** Get the teacher override for a section, if one exists.
+ * @param {string} cid - Course ID
+ * @param {string} studentId - Student ID
+ * @param {string} sectionId - Section ID
+ * @returns {?{level: number, reason: string, date: string, calculated: number}} Override object or null
+ */
 function getSectionOverride(cid, studentId, sectionId) {
   const overrides = getOverrides(cid);
   return overrides[studentId]?.[sectionId] || null;
 }
 
-// Set or clear a section override
+/** Set or clear a teacher override for a section's proficiency level.
+ * @param {string} cid - Course ID
+ * @param {string} studentId - Student ID
+ * @param {string} sectionId - Section ID
+ * @param {number} level - Override proficiency level (0 to clear)
+ * @param {string} reason - Justification for the override
+ * @returns {void}
+ */
 function setSectionOverride(cid, studentId, sectionId, level, reason) {
   const overrides = getOverrides(cid);
   if (!overrides[studentId]) overrides[studentId] = {};
@@ -155,7 +259,11 @@ function setSectionOverride(cid, studentId, sectionId, level, reason) {
   saveOverrides(cid, overrides);
 }
 
-// Overall proficiency (avg of all sections that have evidence)
+/** Calculate overall proficiency as the average of all sections with evidence.
+ * @param {string} cid - Course ID
+ * @param {string} studentId - Student ID
+ * @returns {number} Overall proficiency (0-4), or 0 if no evidence
+ */
 function getOverallProficiency(cid, studentId) {
   const sections = getSections(cid);
   const profs = sections.map(s => getSectionProficiency(cid, studentId, s.id)).filter(p => p > 0);
@@ -163,7 +271,10 @@ function getOverallProficiency(cid, studentId) {
   return profs.reduce((a,b) => a+b, 0) / profs.length;
 }
 
-// Letter grade conversion for PHIL12
+/** Convert an average proficiency to a letter grade and percentage for PHIL12.
+ * @param {number} avgProf - Average proficiency (0-4)
+ * @returns {{letter: string, pct: number}} Letter grade and corresponding percentage
+ */
 function calcLetterGrade(avgProf) {
   if (avgProf >= 3.50) return { letter:'A', pct: Math.min(100, Math.round(86 + (avgProf - 3.50) / 0.50 * 14)) };
   if (avgProf >= 3.00) return { letter:'B', pct: Math.round(73 + (avgProf - 3.00) / 0.50 * 12) };
@@ -172,7 +283,12 @@ function calcLetterGrade(avgProf) {
   return { letter:'F', pct: Math.round(avgProf / 1.25 * 50) };
 }
 
-// Trend for a section: compare two most recent summative scores across all tags
+/** Determine the trend direction for a section by comparing the two most recent summative scores.
+ * @param {string} cid - Course ID
+ * @param {string} studentId - Student ID
+ * @param {string} sectionId - Section ID
+ * @returns {'up'|'down'|'flat'} Trend direction
+ */
 function getSectionTrend(cid, studentId, sectionId) {
   const section = getSections(cid).find(s => s.id === sectionId);
   if (!section) return 'flat';
@@ -191,7 +307,12 @@ function getSectionTrend(cid, studentId, sectionId) {
   return 'flat';
 }
 
-// Evidence count for a section (summative scores across all tags)
+/** Count the number of summative score entries across all tags in a section.
+ * @param {string} cid - Course ID
+ * @param {string} studentId - Student ID
+ * @param {string} sectionId - Section ID
+ * @returns {number} Total summative evidence count
+ */
 function getSectionEvidenceCount(cid, studentId, sectionId) {
   const section = getSections(cid).find(s => s.id === sectionId);
   if (!section) return 0;
@@ -202,7 +323,12 @@ function getSectionEvidenceCount(cid, studentId, sectionId) {
   return count;
 }
 
-// Get focus areas: tags with lowest proficiency or no evidence
+/** Get focus areas: tags with no evidence or the lowest proficiency for a student.
+ * @param {string} cid - Course ID
+ * @param {string} studentId - Student ID
+ * @param {number} [maxItems=3] - Maximum number of focus areas to return
+ * @returns {Array<{tag: Object, prof: number, section: Object}>} Sorted array of weakest tags
+ */
 function getFocusAreas(cid, studentId, maxItems) {
   const tags = getAllTags(cid);
   const scored = tags.map(t => ({ tag: t, prof: getTagProficiency(cid, studentId, t.id), section: getSectionForTag(cid, t.id) }));
@@ -216,7 +342,11 @@ function getFocusAreas(cid, studentId, maxItems) {
   return scored.slice(0, maxItems || 3);
 }
 
-// Completion percentage: how many tags have at least one summative score
+/** Calculate the percentage of tags that have at least one summative score.
+ * @param {string} cid - Course ID
+ * @param {string} studentId - Student ID
+ * @returns {number} Completion percentage (0-100)
+ */
 function getCompletionPct(cid, studentId) {
   const tags = getAllTags(cid);
   if (tags.length === 0) return 0;
@@ -227,7 +357,11 @@ function getCompletionPct(cid, studentId) {
   return Math.round(covered / tags.length * 100);
 }
 
-// Render SVG completion ring
+/** Render an SVG completion ring showing a percentage value.
+ * @param {number} pct - Percentage to display (0-100)
+ * @param {string} [color] - CSS color for the ring stroke, defaults to --active
+ * @returns {string} HTML string containing the SVG ring element
+ */
 function completionRing(pct, color) {
   const r = 22, c = 2 * Math.PI * r;
   const offset = c - (pct / 100) * c;
@@ -241,8 +375,12 @@ function completionRing(pct, color) {
 }
 
 /* ── Growth Sparkline Data ────────────────────────────────── */
-// Returns array of { date, prof } for a section, sorted chronologically
-// Groups summative scores by date, calculates running section proficiency at each date
+/** Build chronological growth data for a section by calculating running proficiency at each score date.
+ * @param {string} cid - Course ID
+ * @param {string} studentId - Student ID
+ * @param {string} sectionId - Section ID
+ * @returns {Array<{date: string, prof: number}>} Chronologically sorted proficiency snapshots
+ */
 function getSectionGrowthData(cid, studentId, sectionId) {
   const section = getSections(cid).find(s => s.id === sectionId);
   if (!section) return [];
@@ -265,9 +403,7 @@ function getSectionGrowthData(cid, studentId, sectionId) {
 
   // Build opts for calcProficiency (matching getTagProficiency pattern)
   const cw = getCategoryWeights(cid);
-  const assessments = getAssessments(cid);
-  const aw = {};
-  assessments.forEach(a => { aw[a.id] = a.weight || 1; });
+  const aw = _getAW(cid);
   const opts = { categoryWeights: cw, assessmentWeights: aw };
 
   // For each date, calculate section proficiency using scores up to that date
@@ -290,7 +426,10 @@ function getSectionGrowthData(cid, studentId, sectionId) {
   return points;
 }
 
-// Render a CSS-only sparkline as colored dots connected by lines
+/** Render a CSS-only sparkline as colored dots connected by lines.
+ * @param {Array<{date: string, prof: number}>} points - Growth data from getSectionGrowthData
+ * @returns {string} HTML string for the sparkline element
+ */
 function renderGrowthSparkline(points) {
   if (!points || points.length === 0) return '<span style="font-size:0.65rem;color:var(--text-3)">No data yet</span>';
   return `<div class="growth-sparkline">${points.map((p, i) => {
@@ -298,3 +437,27 @@ function renderGrowthSparkline(points) {
     return `${i > 0 ? '<span class="sparkline-line"></span>' : ''}<span class="sparkline-dot" style="background:${color}" title="${formatDate(p.date)}: ${PROF_LABELS[Math.round(p.prof)] || '—'}"></span>`;
   }).join('')}</div>`;
 }
+
+/* ── Namespace ──────────────────────────────────────────────── */
+window.Calc = {
+  clearProfCache,
+  pointsToProf,
+  getCategoryWeights,
+  getAssessmentWeight,
+  calcProficiency,
+  getTagScores,
+  getTagProficiency,
+  getSectionProficiency,
+  getSectionProficiencyRaw,
+  getSectionOverride,
+  setSectionOverride,
+  getOverallProficiency,
+  calcLetterGrade,
+  getSectionTrend,
+  getSectionEvidenceCount,
+  getFocusAreas,
+  getCompletionPct,
+  completionRing,
+  getSectionGrowthData,
+  renderGrowthSparkline,
+};

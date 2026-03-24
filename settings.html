@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Assignments — Gradebook</title>
-<link rel="stylesheet" href="gb-styles.css?v=3?v=2">
+<link rel="stylesheet" href="gb-styles.css?v=3">
 <link rel="stylesheet" href="assignments.css">
 </head>
 <body>
@@ -97,52 +97,11 @@ function setAssessSearch(val) {
   }, 200);
 }
 
-function render() {
-  const cid = activeCourse;
-  const course = COURSES[cid];
-  const cc = getCourseConfig(cid);
-  const method = cc.calcMethod || course.calcMethod || 'mostRecent';
-  const dw = cc.decayWeight != null ? cc.decayWeight : (course.decayWeight || 0.65);
-  const sections = getSections(cid);
-  const allAssessments = getAssessments(cid).sort((a,b) => (b.date||'').localeCompare(a.date||''));
-  const students = sortStudents(getStudents(cid), 'lastName');
-  const scores = getScores(cid);
-  const modules = getModules(cid);
-
-  // Apply filters
-  let assessments = allAssessments;
-  if (assessFilterType !== 'all') assessments = assessments.filter(a => a.type === assessFilterType);
-  if (assessSearch) {
-    const q = assessSearch.toLowerCase();
-    assessments = assessments.filter(a =>
-      (a.title||'').toLowerCase().includes(q) ||
-      (a.description||'').toLowerCase().includes(q) ||
-      (a.tagIds||[]).some(tid => {
-        const tag = getTagById(cid, tid);
-        return tid.toLowerCase().includes(q) ||
-               (tag && tag.label.toLowerCase().includes(q));
-      }) ||
-      (a.moduleId && (() => {
-        const mod = getModuleById(cid, a.moduleId);
-        return mod && mod.name.toLowerCase().includes(q);
-      })())
-    );
-  }
-  if (showUngraded) {
-    assessments = assessments.filter(a => {
-      return students.some(st => {
-        const sc = scores[st.id] || [];
-        return !(a.tagIds || []).every(tid => sc.some(s => s.assessmentId === a.id && s.tagId === tid && s.score > 0));
-      });
-    });
-  }
-
-  // Course selector options
+function renderAssessToolbar(cid, method, dw, assessments) {
   const courseOptions = Object.values(COURSES).map(c =>
     `<option value="${c.id}"${c.id === cid ? ' selected' : ''}>${esc(c.name)}</option>`
   ).join('');
 
-  // Toolbar: rendered to separate mount (outside scrollable area)
   let toolbarHtml = `<div class="assess-toolbar">
     <select class="assess-course-select" onchange="switchCourse(this.value)" aria-label="Select course">${courseOptions}</select>
     <div class="assess-seg-control" role="tablist" aria-label="Assessment type filter">
@@ -182,9 +141,8 @@ function render() {
       </div>`;
     }
   }
-  document.getElementById('assess-toolbar-mount').innerHTML = toolbarHtml;
 
-  // Populate Rubrics dropdown
+  // Rubrics dropdown content
   const rubrics = getRubrics(cid);
   let rubHtml = `<div class="settings-title">Rubrics</div><ul class="rubric-list">`;
   if (rubrics.length === 0) {
@@ -199,9 +157,8 @@ function render() {
     </li>`;
   });
   rubHtml += `</ul><button class="lo-add-btn" data-action="newRubricUI" style="display:block;width:100%">+ New Rubric</button>`;
-  document.getElementById('tb-rubrics-panel').innerHTML = rubHtml;
 
-  // Populate Advanced dropdown
+  // Advanced dropdown content
   let advHtml = `<div class="settings-title">Calculation</div>
     <div class="settings-row"><label>Method</label><select class="form-input" style="width:auto" onchange="updateCalc(this.value)"><option value="mostRecent"${method==='mostRecent'?' selected':''}>Most Recent</option><option value="highest"${method==='highest'?' selected':''}>Highest</option><option value="mode"${method==='mode'?' selected':''}>Mode</option><option value="decayingAvg"${method==='decayingAvg'?' selected':''}>Decaying Average</option></select></div>
     <div id="decay-row" style="display:${method==='decayingAvg'?'flex':'none'}" class="settings-row"><label>Weight: <span id="decay-val">${(dw*100).toFixed(0)}%</span></label><input type="range" min="0" max="100" value="${(dw*100).toFixed(0)}" oninput="updateDecay(this.value)"></div>
@@ -215,8 +172,11 @@ function render() {
     <div class="settings-row"><label>Clear all</label><button class="btn btn-danger" data-action="clearData">Clear</button></div>
     <div class="settings-title" style="margin-top:16px;padding-top:12px;border-top:0.5px solid rgba(0,0,0,0.06)">Demo</div>
     <div class="settings-row"><label>Reset to demo data</label><button class="btn btn-danger" data-action="resetDemoData">Reset Demo</button></div>`;
-  document.getElementById('tb-advanced-panel').innerHTML = advHtml;
 
+  return { toolbarHtml, rubHtml, advHtml };
+}
+
+function renderAssessmentList(cid, assessments, allAssessments, students, scores, modules) {
   let html = `<div class="settings-grid" style="display:grid;grid-template-columns:1fr;gap:20px;align-items:start;padding:16px 20px">`;
 
   // LEFT: Assessment list with inline scoring
@@ -372,7 +332,57 @@ function render() {
 
   html += '</div>'; // close settings-grid
 
-  document.getElementById('main').innerHTML = html;
+  return html;
+}
+
+function render() {
+  const cid = activeCourse;
+  const course = COURSES[cid];
+  const cc = getCourseConfig(cid);
+  const method = cc.calcMethod || course.calcMethod || 'mostRecent';
+  const dw = cc.decayWeight != null ? cc.decayWeight : (course.decayWeight || 0.65);
+  const sections = getSections(cid);
+  const allAssessments = getAssessments(cid).sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  const students = sortStudents(getStudents(cid), 'lastName');
+  const scores = getScores(cid);
+  const modules = getModules(cid);
+
+  // Apply filters
+  let assessments = allAssessments;
+  if (assessFilterType !== 'all') assessments = assessments.filter(a => a.type === assessFilterType);
+  if (assessSearch) {
+    const q = assessSearch.toLowerCase();
+    assessments = assessments.filter(a =>
+      (a.title||'').toLowerCase().includes(q) ||
+      (a.description||'').toLowerCase().includes(q) ||
+      (a.tagIds||[]).some(tid => {
+        const tag = getTagById(cid, tid);
+        return tid.toLowerCase().includes(q) ||
+               (tag && tag.label.toLowerCase().includes(q));
+      }) ||
+      (a.moduleId && (() => {
+        const mod = getModuleById(cid, a.moduleId);
+        return mod && mod.name.toLowerCase().includes(q);
+      })())
+    );
+  }
+  if (showUngraded) {
+    assessments = assessments.filter(a => {
+      return students.some(st => {
+        const sc = scores[st.id] || [];
+        return !(a.tagIds || []).every(tid => sc.some(s => s.assessmentId === a.id && s.tagId === tid && s.score > 0));
+      });
+    });
+  }
+
+  // Render toolbar
+  const { toolbarHtml, rubHtml, advHtml } = renderAssessToolbar(cid, method, dw, assessments);
+  document.getElementById('assess-toolbar-mount').innerHTML = toolbarHtml;
+  document.getElementById('tb-rubrics-panel').innerHTML = rubHtml;
+  document.getElementById('tb-advanced-panel').innerHTML = advHtml;
+
+  // Render assessment list
+  document.getElementById('main').innerHTML = renderAssessmentList(cid, assessments, allAssessments, students, scores, modules);
 
   // Show/hide persistent descriptor bar based on whether any open assessment has rubric view active
   let hasActiveRubricView = false;
@@ -410,7 +420,7 @@ function renderAssessForm(cid, assess) {
   // Title
   html += `<div class="af-field">
     <label class="af-label">Assignment Title</label>
-    <input class="af-input" id="af-title" type="text" value="${esc(title)}" placeholder="e.g. Persuasive Essay — Rights & Freedoms">
+    <input class="af-input" id="af-title" type="text" value="${esc(title)}" placeholder="e.g. Persuasive Essay — Rights & Freedoms" oninput="this.style.border=''">
   </div>`;
 
   // Description
@@ -499,7 +509,7 @@ function renderAssessForm(cid, assess) {
     <div class="af-field" id="af-maxpoints-wrap" style="flex:0 0 auto;${scoreMode==='points'?'':'display:none'}">
       <label class="af-label">Max Points</label>
       <div style="display:flex;gap:6px;align-items:center">
-        <input class="af-input" id="af-maxpoints" type="number" min="1" max="9999" value="${maxPoints}" style="width:80px;text-align:center">
+        <input class="af-input" id="af-maxpoints" type="number" min="1" max="9999" value="${maxPoints}" style="width:80px;text-align:center" oninput="this.style.border=''">
         <div id="af-maxpoints-wrap" style="display:flex;gap:4px">${[10,25,50,100].map(v => `<button type="button" class="af-chip${maxPoints===v?' active':''}" data-action="setMaxPoints" data-value="${v}" style="padding:4px 8px;font-size:0.72rem;border-radius:6px;border:1px solid var(--border);background:${maxPoints===v?'var(--primary)':'var(--bg-2)'};color:${maxPoints===v?'#fff':'var(--text-2)'};cursor:pointer">${v}</button>`).join('')}</div>
       </div>
     </div>
@@ -873,6 +883,9 @@ function toggleSectionTags(secId, btn) {
 
 function onTagChange(cb, secId) {
   cb.parentElement.classList.toggle('checked', cb.checked);
+  // Clear tag validation error when a tag is selected
+  const tc = document.querySelector('.af-tags-container');
+  if (tc) tc.style.border = '';
   updateSectionBadge(secId);
 }
 
@@ -910,7 +923,11 @@ function saveNewAssess() {
   const date = dateAssigned;
   const description = (document.getElementById('af-desc')?.value||'').trim();
   const tagIds = Array.from(document.querySelectorAll('.af-tag-cb:checked')).map(cb => cb.value);
-  if (tagIds.length === 0) { alert('Select at least one learning outcome.'); return; }
+  if (tagIds.length === 0) {
+    const tagsContainer = document.querySelector('.af-tags-container');
+    if (tagsContainer) { tagsContainer.style.border = '2px solid var(--score-1)'; tagsContainer.scrollIntoView({behavior:'smooth'}); }
+    return;
+  }
   const evidence = document.getElementById('af-evidence')?.value;
   const moduleId = document.getElementById('af-module')?.value || '';
   const coreCompetencyIds = Array.from(document.querySelectorAll('.af-cc-chip.active')).map(el => el.dataset.cc);
@@ -1013,7 +1030,11 @@ function saveEditAssess(aid) {
   const date = dateAssigned;
   const description = (document.getElementById('af-desc')?.value||'').trim();
   const tagIds = Array.from(document.querySelectorAll('.af-tag-cb:checked')).map(cb => cb.value);
-  if (tagIds.length === 0) { alert('Select at least one learning outcome.'); return; }
+  if (tagIds.length === 0) {
+    const tagsContainer = document.querySelector('.af-tags-container');
+    if (tagsContainer) { tagsContainer.style.border = '2px solid var(--score-1)'; tagsContainer.scrollIntoView({behavior:'smooth'}); }
+    return;
+  }
   const evidence = document.getElementById('af-evidence')?.value;
   const assessments = getAssessments(activeCourse);
   const idx = assessments.findIndex(a => a.id === aid);
@@ -2053,7 +2074,7 @@ function renderCriterionBlock(ci, crit, allCriteria, sections) {
       const inThis = selectedTagIds.has(tag.id);
       const inOtherName = otherUsed[tag.id];
       const disabled = !!inOtherName;
-      html += `<div class="rubric-tag-item${inThis?' selected':''}${disabled?' disabled':''}" data-action="${disabled ? \"\" : \"toggleCritTag\"}" data-index="${ci}" data-tagid="${tag.id}">
+      html += `<div class="rubric-tag-item${inThis?' selected':''}${disabled?' disabled':''}" data-action="${disabled ? '' : 'toggleCritTag'}" data-index="${ci}" data-tagid="${tag.id}">
         <input type="checkbox" class="rubric-tag-cb" ${inThis?'checked':''} ${disabled?'disabled':''}><span class="rubric-tag-id" style="color:${openSec.color}">${esc(tag.id)}</span>
         <span class="rubric-tag-label">${esc(tag.label)}</span>
         ${disabled ? `<span class="rubric-tag-used-by">in ${esc(inOtherName)}</span>` : ''}
@@ -2172,7 +2193,7 @@ function _refreshCriterionDOM(ci) {
       const inThis = selectedTagIds.has(tag.id);
       const inOtherName = otherUsed[tag.id];
       const disabled = !!inOtherName;
-      th += `<div class="rubric-tag-item${inThis?' selected':''}${disabled?' disabled':''}" data-action="${disabled ? \"\" : \"toggleCritTag\"}" data-index="${ci}" data-tagid="${tag.id}">
+      th += `<div class="rubric-tag-item${inThis?' selected':''}${disabled?' disabled':''}" data-action="${disabled ? '' : 'toggleCritTag'}" data-index="${ci}" data-tagid="${tag.id}">
         <input type="checkbox" class="rubric-tag-cb" ${inThis?'checked':''} ${disabled?'disabled':''}><span class="rubric-tag-id" style="color:${openSec.color}">${esc(tag.id)}</span>
         <span class="rubric-tag-label">${esc(tag.label)}</span>
         ${disabled ? `<span class="rubric-tag-used-by">in ${esc(inOtherName)}</span>` : ''}
@@ -2198,7 +2219,7 @@ function _refreshCriterionDOM(ci) {
         const inThis = otherSelected.has(tag.id);
         const inOtherName = otherOtherUsed[tag.id];
         const disabled = !!inOtherName;
-        th += `<div class="rubric-tag-item${inThis?' selected':''}${disabled?' disabled':''}" data-action="${disabled ? \"\" : \"toggleCritTag\"}" data-index="${oi}" data-tagid="${tag.id}">
+        th += `<div class="rubric-tag-item${inThis?' selected':''}${disabled?' disabled':''}" data-action="${disabled ? '' : 'toggleCritTag'}" data-index="${oi}" data-tagid="${tag.id}">
           <input type="checkbox" class="rubric-tag-cb" ${inThis?'checked':''} ${disabled?'disabled':''}><span class="rubric-tag-id" style="color:${otherOpenSec.color}">${esc(tag.id)}</span>
           <span class="rubric-tag-label">${esc(tag.label)}</span>
           ${disabled ? `<span class="rubric-tag-used-by">in ${esc(inOtherName)}</span>` : ''}
@@ -2258,7 +2279,17 @@ function saveRubricEdit() {
   if (!_editingRubric) return;
   // Capture name from input
   const nameInput = document.getElementById('re-name');
-  if (nameInput) _editingRubric.name = nameInput.value.trim() || 'Unnamed Rubric';
+  const rubricName = (nameInput?.value || '').trim();
+  if (!rubricName) {
+    if (nameInput) { nameInput.style.border = '2px solid var(--score-1)'; nameInput.placeholder = 'Rubric name is required'; nameInput.oninput = function() { this.style.border = ''; }; nameInput.focus(); }
+    return;
+  }
+  _editingRubric.name = rubricName;
+  // Validate: at least 1 criterion
+  if (!_editingRubric.criteria || _editingRubric.criteria.length === 0) {
+    alert('Add at least one criterion to the rubric.');
+    return;
+  }
   // Validate: each criterion needs at least 1 tag
   for (const crit of _editingRubric.criteria) {
     if (!crit.tagIds || crit.tagIds.length === 0) {
@@ -3142,6 +3173,11 @@ document.addEventListener('click', function(e) {
     handlers[action]();
   }
 });
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
 </script>
 </body>
 </html>

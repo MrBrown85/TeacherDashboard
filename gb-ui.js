@@ -1,5 +1,26 @@
 /* gb-ui.js — Shared UI components for TeacherDashboard */
 
+/* ── HTML sanitizer for contenteditable output ──────────────── */
+function sanitizeHtml(raw) {
+  var allowed = ['B','STRONG','I','EM','U','UL','OL','LI','BR','P','DIV','SPAN'];
+  var tmp = document.createElement('div');
+  tmp.innerHTML = raw;
+  (function walk(node) {
+    for (var i = node.childNodes.length - 1; i >= 0; i--) {
+      var child = node.childNodes[i];
+      if (child.nodeType === 1) {
+        if (allowed.indexOf(child.tagName) === -1) {
+          child.replaceWith(document.createTextNode(child.textContent));
+        } else {
+          [].slice.call(child.attributes).forEach(function(a) { child.removeAttribute(a.name); });
+          walk(child);
+        }
+      }
+    }
+  })(tmp);
+  return tmp.innerHTML;
+}
+
 /* ── Shared HTML: Unified Toolbar ──────────────────────────── */
 function renderDock(activePage, rightHTML) {
   const ap = activePage === 'student' ? 'dashboard' : activePage;
@@ -14,6 +35,9 @@ function renderDock(activePage, rightHTML) {
     </button>
     <div class="tb-user-dropdown">
       <button class="tb-user-signout" data-action="signOut">Sign Out</button>
+      <div style="border-top:1px solid var(--border);margin-top:4px;padding-top:4px">
+        <button class="tb-user-delete" data-action="deleteAccount" style="font-size:var(--text-xs);color:var(--score-1);background:none;border:none;cursor:pointer;padding:4px 8px;width:100%;text-align:left">Delete All Data</button>
+      </div>
     </div>
   </div>`;
 
@@ -42,28 +66,7 @@ function _populateDockUser() {
 // Run after DOM renders (next tick)
 setTimeout(_populateDockUser, 0);
 
-/* ── Prefetch pages and JS for faster navigation ─────────── */
-setTimeout(function() {
-  // Prefetch HTML pages the user might navigate to
-  if (!document.querySelector('link[rel="prefetch"][href="settings.html"]')) {
-    const pages = ['index.html', 'settings.html', 'spreadsheet.html', 'observations.html', 'reports.html', 'student.html'];
-    pages.forEach(p => {
-      if (!window.location.pathname.endsWith(p)) {
-        const link = document.createElement('link');
-        link.rel = 'prefetch';
-        link.href = p;
-        document.head.appendChild(link);
-      }
-    });
-  }
-  // Prefetch key JS files
-  ['gb-constants.js', 'gb-data.js', 'gb-calc.js', 'gb-ui.js', 'gb-supabase.js'].forEach(js => {
-    const link = document.createElement('link');
-    link.rel = 'prefetch';
-    link.href = js;
-    document.head.appendChild(link);
-  });
-}, 0);
+/* ── Prefetch (disabled in SPA — all modules already loaded) ── */
 
 // Close user dropdown on click outside
 document.addEventListener('click', function(e) {
@@ -237,7 +240,7 @@ function renderSidebar(activeCourse, selectedStudentId, onStudentClick) {
 
   let html = `<aside id="gb-sidebar" aria-label="Student roster">
     <div id="gb-sidebar-top">
-      <select id="gb-course-select" onchange="switchCourse(this.value)" aria-label="Select course">
+      <select id="gb-course-select" onchange="if(window._pageSwitchCourse)window._pageSwitchCourse(this.value)" aria-label="Select course">
         ${Object.values(COURSES).map(c => `<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}
       </select>
       <input id="gb-roster-search" type="text" placeholder="Search..." oninput="filterRoster()" aria-label="Search students">
@@ -246,22 +249,18 @@ function renderSidebar(activeCourse, selectedStudentId, onStudentClick) {
 
   const flags = getFlags(cid);
   students.forEach(s => {
-    const overall = getOverallProficiency(cid, s.id);
-    const r = Math.round(overall);
-    const profColor = PROF_COLORS[r] || PROF_COLORS[0];
-    const profTint = PROF_TINT[r] || 'transparent';
-    const href = `student.html?id=${s.id}&course=${cid}`;
+    const href = `#/student?id=${s.id}&course=${cid}`;
     const flagged = flags[s.id];
     const avatarBg = _avatarColor(s.id);
     const clickAttr = onStudentClick
       ? `href="javascript:void(0)" data-action="sidebarStudentClick" data-sid="${s.id}"`
       : `href="${href}"`;
-    html += `<a class="student-row${s.id===selectedStudentId?' selected':''}" ${clickAttr}>
+    html += `<a class="student-row${s.id===selectedStudentId?' selected':''}" ${clickAttr} data-sid="${s.id}">
       <div class="student-avatar" style="background:${avatarBg}">${initials(s)}</div>
       <div class="student-info">
         <div class="student-row-name">${flagged ? '<span style="color:var(--priority);margin-right:3px">\u2691</span>' : ''}${esc(fullName(s))}</div>
       </div>
-      ${overall > 0 ? `<div class="student-row-prof" style="color:${profColor};background:${profTint}">${overall.toFixed(1)}</div>` : ''}
+      <div class="student-row-prof" data-prof-sid="${s.id}"></div>
     </a>`;
   });
 
@@ -274,7 +273,25 @@ function renderSidebar(activeCourse, selectedStudentId, onStudentClick) {
       <span class="sb-count">${students.length} students</span>
     </div>
   </aside>`;
+  // Auto-fill badges after caller mounts this HTML
+  setTimeout(function() { fillSidebarBadges(cid); }, 0);
   return html;
+}
+
+/** Fill sidebar proficiency badges asynchronously after sidebar is mounted. */
+function fillSidebarBadges(cid) {
+  requestAnimationFrame(function() {
+    document.querySelectorAll('[data-prof-sid]').forEach(function(el) {
+      var sid = el.getAttribute('data-prof-sid');
+      var overall = getOverallProficiency(cid, sid);
+      if (overall > 0) {
+        var r = Math.round(overall);
+        el.style.color = PROF_COLORS[r] || PROF_COLORS[0];
+        el.style.background = PROF_TINT[r] || 'transparent';
+        el.textContent = overall.toFixed(1);
+      }
+    });
+  });
 }
 
 function filterRoster() {
@@ -308,12 +325,23 @@ function refreshSidebar() {
   const mount = document.getElementById('sidebar-mount');
   if (!mount) return;
   const cid = typeof activeCourse !== 'undefined' ? activeCourse : getActiveCourse();
-  const clickFn = typeof _sidebarClickFn !== 'undefined' ? _sidebarClickFn : null;
+  const clickFn = _sidebarClickFnName || null;
   // Use focusStudentId if available (assignments page), otherwise parse from selected row href
   let selId = typeof focusStudentId !== 'undefined' ? focusStudentId : null;
   if (!selId) {
     const sel = document.querySelector('.student-row.selected');
-    if (sel && sel.href) try { selId = new URL(sel.href).searchParams.get('id'); } catch {}
+    if (sel) {
+      // Support both hash routes (#/student?id=x) and data-sid attributes
+      const sid = sel.dataset.sid;
+      if (sid) { selId = sid; }
+      else if (sel.href) {
+        try {
+          const hrefStr = sel.getAttribute('href') || '';
+          const qIdx = hrefStr.indexOf('?');
+          if (qIdx >= 0) { selId = new URLSearchParams(hrefStr.substring(qIdx + 1)).get('id'); }
+        } catch {}
+      }
+    }
   }
   mount.innerHTML = renderSidebar(cid, selId, clickFn);
 }
@@ -429,6 +457,31 @@ function dismissUndoToast() {
   if (el) el.remove();
 }
 
+/* ── Sync Toast ──────────────────────────────────────────── */
+let _syncToastTimer = null;
+
+function showSyncToast(message, type) {
+  dismissSyncToast();
+  const toast = document.createElement('div');
+  toast.className = 'sync-toast ' + (type || 'error');
+  toast.id = 'sync-toast';
+  toast.setAttribute('role', 'alert');
+  toast.setAttribute('aria-live', 'assertive');
+  if (type === 'error') {
+    toast.innerHTML = `<span>${esc(message)}</span><button class="sync-toast-btn" onclick="if(typeof retrySyncs==='function')retrySyncs();dismissSyncToast();">Retry Now</button>`;
+  } else {
+    toast.innerHTML = `<span>${esc(message)}</span>`;
+    _syncToastTimer = setTimeout(dismissSyncToast, 3000);
+  }
+  document.body.appendChild(toast);
+}
+
+function dismissSyncToast() {
+  clearTimeout(_syncToastTimer);
+  const el = document.getElementById('sync-toast');
+  if (el) el.remove();
+}
+
 /* ── Confirm Modal ────────────────────────────────────────── */
 function showConfirm(title, message, okLabel, okStyle, onConfirm) {
   const overlay = document.createElement('div');
@@ -477,14 +530,51 @@ document.addEventListener('click', function(e) {
   var handlers = {
     'toggleUserMenu': function() { el.parentElement.classList.toggle('open'); },
     'signOut': function() { signOut(); },
+    'deleteAccount': function() {
+      showConfirm('Delete All Data',
+        'This permanently deletes ALL your data — every class, every student, every score, every observation. Your login account will remain but all data will be erased. This cannot be undone.',
+        'Delete Everything', 'danger', async function() {
+          try {
+            // Delete all course data from Supabase
+            const sb = typeof getSupabase === 'function' ? getSupabase() : null;
+            if (sb) {
+              const user = await getCurrentUser();
+              if (user) {
+                await sb.from('course_data').delete().eq('teacher_id', user.id);
+                await sb.from('teacher_config').delete().eq('teacher_id', user.id);
+                await sb.from('error_logs').delete().eq('teacher_id', user.id);
+                await sb.from('profiles').delete().eq('id', user.id);
+              }
+            }
+            // Clear localStorage and mark as deliberately wiped (prevents re-seeding)
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+              const key = localStorage.key(i);
+              if (key && key.startsWith('gb-')) keysToRemove.push(key);
+            }
+            keysToRemove.forEach(k => localStorage.removeItem(k));
+            localStorage.setItem('gb-data-wiped', '1');
+            // Sign out and redirect to login page (separate page, not SPA)
+            if (sb) await sb.auth.signOut();
+            window.location.href = 'login.html'; // intentional full navigation to login
+          } catch(err) {
+            alert('Account deletion failed: ' + (err.message || 'Unknown error. Contact your administrator.'));
+          }
+        }
+      );
+    },
     'toggleSidebar': function() { toggleSidebar(); },
     'sidebarStudentClick': function() {
-      var fn = _sidebarClickFnName ? window[_sidebarClickFnName] : null;
-      if (fn) fn(el.dataset.sid);
+      if (!_sidebarClickFnName) return;
+      // Support dot-path names like 'PageStudent.switchStudent'
+      var parts = _sidebarClickFnName.split('.');
+      var fn = window;
+      for (var i = 0; i < parts.length; i++) { fn = fn ? fn[parts[i]] : null; }
+      if (typeof fn === 'function') fn(el.dataset.sid);
     },
     'addStudent': function() {
       if (typeof openClassManager === 'function') openClassManager();
-      else window.location.href = 'index.html';
+      else Router.navigate('/dashboard');
     },
     'executeUndo': function() { executeUndo(); }
   };
@@ -494,12 +584,30 @@ document.addEventListener('click', function(e) {
   }
 });
 
-// Global error monitoring
+// Check for Service Worker updates on page load
+if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    var el = document.getElementById('sync-toast');
+    if (el) el.remove();
+    var toast = document.createElement('div');
+    toast.className = 'sync-toast success';
+    toast.id = 'sync-toast';
+    toast.setAttribute('role', 'alert');
+    toast.innerHTML = '<span>Update available</span><button class="sync-toast-btn" onclick="window.location.reload()">Refresh</button>';
+    document.body.appendChild(toast);
+  });
+}
+
+// Global error monitoring — cache teacher_id synchronously from the data layer
+function _getTeacherId() {
+  try { return typeof _teacherId !== 'undefined' ? _teacherId : null; } catch(e) { return null; }
+}
+
 window.addEventListener('error', function(event) {
   const sb = typeof getSupabase === 'function' ? getSupabase() : null;
   if (!sb) return;
   sb.from('error_logs').insert({
-    teacher_id: (typeof getCurrentUser === 'function' && getCurrentUser()) ? getCurrentUser().id : null,
+    teacher_id: _getTeacherId(),
     page: window.location.pathname,
     message: event.message || 'Unknown error',
     stack: event.error ? event.error.stack : '',
@@ -511,10 +619,34 @@ window.addEventListener('unhandledrejection', function(event) {
   const sb = typeof getSupabase === 'function' ? getSupabase() : null;
   if (!sb) return;
   sb.from('error_logs').insert({
-    teacher_id: (typeof getCurrentUser === 'function' && getCurrentUser()) ? getCurrentUser().id : null,
+    teacher_id: _getTeacherId(),
     page: window.location.pathname,
     message: event.reason ? (event.reason.message || String(event.reason)) : 'Unhandled rejection',
     stack: event.reason ? (event.reason.stack || '') : '',
     user_agent: navigator.userAgent
   }).then(() => {}).catch(() => {});
 });
+
+/* ── Namespace ──────────────────────────────────────────────── */
+window.UI = {
+  renderDock,
+  getUpcomingBirthdays,
+  renderStudentHeader,
+  renderSidebar,
+  fillSidebarBadges,
+  filterRoster,
+  profBadge,
+  profBar,
+  profLabelBadge,
+  refreshSidebar,
+  toggleSidebar,
+  applySidebarState,
+  initSidebarToggle,
+  deleteStudent,
+  showUndoToast,
+  executeUndo,
+  dismissUndoToast,
+  showSyncToast,
+  dismissSyncToast,
+  showConfirm,
+};

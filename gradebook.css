@@ -1,7 +1,6 @@
 /* gradebook.css — Gradebook page styles */
 
-/* ── Hide sidebar toggle (not used on gradebook page) ── */
-.tb-btn[title="Toggle Sidebar"] { display:none; }
+/* Sidebar toggle hidden via JS in page-gradebook.js init() */
 
 /* ── Oversized course selector (replaces sidebar on gradebook) ── */
 .gb-course-select {
@@ -24,7 +23,8 @@
 /* ── Layer 1: Primary bar ──────────────────────────────────── */
 .gb-toolbar {
   display:flex; align-items:center; gap:12px; padding:10px 20px;
-  background:var(--surface); border-bottom:0.5px solid rgba(0,0,0,0.09);
+  background:var(--surface); border-bottom:0.5px solid var(--divider-medium);
+  flex-shrink:0;
 }
 .gb-toolbar-label {
   font-family:'SF Mono', ui-monospace, 'Menlo', monospace; font-size:var(--text-xs); text-transform:uppercase;
@@ -44,7 +44,7 @@
 .gb-seg-btn:hover { color:var(--text); }
 .gb-seg-btn.active {
   background:var(--surface); color:var(--text); font-weight:600;
-  box-shadow:0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+  box-shadow:0 1px 3px rgba(0,0,0,0.1), 0 1px 2px var(--divider-subtle);
 }
 
 /* Filter trigger button — opens/closes filter strip */
@@ -92,8 +92,8 @@
 /* ── Layer 2: Filter strip — slides open below primary bar ── */
 .gb-filter-strip {
   display:none; align-items:center; gap:10px; padding:8px 16px;
-  background:rgba(0,0,0,0.015); border-bottom:0.5px solid rgba(0,0,0,0.09);
-  animation:filterSlideIn 0.2s ease-out;
+  background:rgba(0,0,0,0.015); border-bottom:0.5px solid var(--divider-medium);
+  animation:filterSlideIn 0.2s ease-out; flex-shrink:0;
 }
 .gb-filter-strip.open { display:flex; }
 @keyframes filterSlideIn {
@@ -142,7 +142,7 @@
 
 /* ── Table ─────────────────────────────────────────────────── */
 .gb-scroll {
-  overflow:auto; max-height:calc(100vh - var(--dock-h) - 84px);
+  overflow:auto; flex:1; min-height:0;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   scroll-behavior: auto;
@@ -151,7 +151,7 @@
 }
 
 /* Scroll shadow hints — fade in/out via JS classes */
-.gb-scroll-wrap { position:relative; }
+.gb-scroll-wrap { position:relative; flex:1; min-height:0; display:flex; flex-direction:column; }
 .gb-scroll-wrap::before,
 .gb-scroll-wrap::after {
   content:''; position:absolute; top:0; bottom:0; width:28px; z-index:10;
@@ -168,7 +168,7 @@
 
 /* Assessment header: professional card-like design */
 .gb-assess-head {
-  text-align:center; padding:0; background:var(--surface); border-bottom:0.5px solid rgba(0,0,0,0.09);
+  text-align:center; padding:0; background:var(--surface); border-bottom:0.5px solid var(--divider-medium);
   position:relative;
 }
 .gb-assess-head-inner {
@@ -217,7 +217,7 @@
 
 /* Score cell */
 .gb-score {
-  text-align:center; padding:4px 2px; border-bottom:0.5px solid rgba(0,0,0,0.09);
+  text-align:center; padding:4px 2px; border-bottom:0.5px solid var(--divider-medium);
   cursor:pointer; user-select:none; transition:background 0.1s; min-width:54px;
 }
 .gb-score:hover { background:rgba(0,122,255,0.06); }
@@ -244,15 +244,15 @@ th.gb-group-alt { background-color: rgba(0,0,0,0.03); }
 
 /* Name column */
 .gb-name {
-  position:sticky; left:0; z-index:6; background:#f5f5f7;
+  position:sticky; left:0; z-index:6; background:var(--bg);
   padding:8px 12px 8px 16px; font-size:var(--text-md); font-weight:500;
-  border-bottom:0.5px solid rgba(0,0,0,0.09); white-space:nowrap;
+  border-bottom:0.5px solid var(--divider-medium); white-space:nowrap;
   width:160px; min-width:160px; max-width:160px;
 }
 .gb-name a { color:var(--text); text-decoration:none; }
 .gb-name a:hover { color:var(--active); }
 .gb-corner {
-  position:sticky; left:0; z-index:7; background:#f5f5f7;
+  position:sticky; left:0; z-index:7; background:var(--bg);
   padding:8px 12px 8px 16px; font-family:'SF Mono', ui-monospace, 'Menlo', monospace; font-size:var(--text-sm);
   font-weight:600; text-transform:uppercase; letter-spacing:var(--tracking-wide); color:var(--text-2);
   width:160px; min-width:160px; max-width:160px;
@@ -260,13 +260,13 @@ th.gb-group-alt { background-color: rgba(0,0,0,0.03); }
 
 /* Overall column — always visible, paired with name */
 .gb-overall-col {
-  position:sticky; left:160px; z-index:6; background:#f5f5f7;
-  text-align:center; padding:8px 8px; border-bottom:0.5px solid rgba(0,0,0,0.09);
+  position:sticky; left:160px; z-index:6; background:var(--bg);
+  text-align:center; padding:8px 8px; border-bottom:0.5px solid var(--divider-medium);
   border-right:1px solid var(--divider-strong);
   width:90px; min-width:90px; max-width:90px;
 }
 .gb-overall-col-header {
-  position:sticky; left:160px; z-index:7; background:#f5f5f7;
+  position:sticky; left:160px; z-index:7; background:var(--bg);
   text-align:center; padding:8px 8px;
   font-family:'SF Mono', ui-monospace, 'Menlo', monospace; font-size:var(--text-sm); font-weight:700;
   text-transform:uppercase; letter-spacing:var(--tracking-wide); color:var(--text-2);
@@ -286,7 +286,7 @@ th.gb-group-alt { background-color: rgba(0,0,0,0.03); }
 
 /* Summary columns — used by Summary view tab */
 .gb-summary {
-  text-align:center; padding:6px 5px; border-bottom:0.5px solid rgba(0,0,0,0.09);
+  text-align:center; padding:6px 5px; border-bottom:0.5px solid var(--divider-medium);
   background:var(--surface); width:88px; min-width:88px; max-width:88px;
 }
 .gb-summary-header {
@@ -304,7 +304,7 @@ th.gb-group-alt { background-color: rgba(0,0,0,0.03); }
 .gb-sort-arrow { font-size:var(--text-2xs); margin-left:2px; color:var(--active); }
 
 /* Average cell */
-.gb-avg-cell { text-align:center; padding:8px 5px; border-bottom:0.5px solid rgba(0,0,0,0.09); }
+.gb-avg-cell { text-align:center; padding:8px 5px; border-bottom:0.5px solid var(--divider-medium); }
 .gb-avg-val { display:inline-block; font-family:'SF Mono', ui-monospace, 'Menlo', monospace; font-size:var(--text-md); font-weight:700; min-width:28px; text-align:center; line-height:1; }
 .gb-avg-label { display:block; font-family:var(--font-base); font-size:var(--text-xs); text-transform:uppercase; letter-spacing:var(--tracking-wide); margin-top:2px; line-height:1; font-weight:500; }
 
@@ -335,9 +335,9 @@ th.gb-group-alt { background-color: rgba(0,0,0,0.03); }
 .gb-table tbody tr { height:48px; }
 .gb-table tbody tr:nth-child(even) td { background-color:rgba(0,0,0,0.015); }
 .gb-table tbody tr:nth-child(even) td.gb-group-alt { background-color:var(--overlay-hover); }
-.gb-table tbody tr:nth-child(even) td.gb-name, .gb-table tbody tr:nth-child(even) th.gb-name { background-color:#f5f5f7; }
-.gb-table tbody tr:nth-child(even) td.gb-overall-col { background-color:#f5f5f7; }
+.gb-table tbody tr:nth-child(even) td.gb-name, .gb-table tbody tr:nth-child(even) th.gb-name { background-color:var(--bg); }
+.gb-table tbody tr:nth-child(even) td.gb-overall-col { background-color:var(--bg); }
 .gb-table tbody tr:hover td { background-color:var(--active-light) !important; }
 .gb-table tbody tr:hover td.gb-group-alt { background-color:var(--active-light) !important; }
-.gb-table tbody tr:hover td.gb-name, .gb-table tbody tr:hover th.gb-name { background-color:#e5eef8 !important; }
-.gb-table tbody tr:hover td.gb-overall-col { background-color:#e5eef8 !important; }
+.gb-table tbody tr:hover td.gb-name, .gb-table tbody tr:hover th.gb-name { background-color:var(--active-light) !important; }
+.gb-table tbody tr:hover td.gb-overall-col { background-color:var(--active-light) !important; }

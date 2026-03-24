@@ -31,7 +31,7 @@
 .assess-body { display:none; padding:0 16px 16px; border-top:1px solid var(--border); }
 .assess-card.open .assess-body { display:block; }
 /* Focus banner */
-.focus-banner { display:flex; align-items:center; justify-content:space-between; padding:10px 20px; background:#e8f0fe; border-bottom:1px solid #c4d7f2; }
+.focus-banner { display:flex; align-items:center; justify-content:space-between; padding:10px 20px; background:var(--focus-banner-bg); border-bottom:1px solid var(--focus-banner-border); }
 .focus-banner-label { font-size:var(--text-md); color:var(--text-1); }
 .focus-banner-btn { background:none; border:1px solid var(--active); color:var(--active); padding:4px 12px; border-radius:var(--radius); cursor:pointer; font-size:var(--text-base); }
 .focus-banner-btn:hover { background:var(--active); color:#fff; }
@@ -105,10 +105,10 @@
 .score-opt.s3 { background:rgba(46,125,50,0.12); color:rgba(46,125,50,0.35); }
 .score-opt.s4 { background:rgba(21,101,192,0.12); color:rgba(21,101,192,0.35); }
 /* Active / selected states */
-.score-opt.s1.active { background:var(--score-1); color:#fff; border-color:#b71c1c; box-shadow:0 1px 4px rgba(211,47,47,0.3); }
-.score-opt.s2.active { background:var(--score-2); color:#fff; border-color:#a06800; box-shadow:0 1px 4px rgba(192,122,0,0.3); }
-.score-opt.s3.active { background:var(--score-3); color:#fff; border-color:#1b5e20; box-shadow:0 1px 4px rgba(46,125,50,0.3); }
-.score-opt.s4.active { background:var(--score-4); color:#fff; border-color:#0d47a1; box-shadow:0 1px 4px rgba(21,101,192,0.3); }
+.score-opt.s1.active { background:var(--score-1); color:#fff; border-color:var(--score-1-dark); box-shadow:0 1px 4px rgba(211,47,47,0.3); }
+.score-opt.s2.active { background:var(--score-2); color:#fff; border-color:var(--score-2-dark); box-shadow:0 1px 4px rgba(192,122,0,0.3); }
+.score-opt.s3.active { background:var(--score-3); color:#fff; border-color:var(--score-3-dark); box-shadow:0 1px 4px rgba(46,125,50,0.3); }
+.score-opt.s4.active { background:var(--score-4); color:#fff; border-color:var(--score-4-dark); box-shadow:0 1px 4px rgba(21,101,192,0.3); }
 /* Hover on unselected */
 .score-opt.s1:not(.active):hover { background:rgba(211,47,47,0.22); color:rgba(211,47,47,0.7); }
 .score-opt.s2:not(.active):hover { background:rgba(192,122,0,0.22); color:rgba(192,122,0,0.7); }
@@ -207,7 +207,7 @@
 .collab-panel-btn:hover { border-color:var(--active); color:var(--active); background:rgba(0,122,255,0.04); }
 .collab-panel-btn.active { background:var(--active); color:#fff; border-color:var(--active); }
 .collab-panel-btn.primary { background:var(--active); color:#fff; border-color:var(--active); }
-.collab-panel-btn.primary:hover { background:#0062cc; }
+.collab-panel-btn.primary:hover { background:var(--btn-hover-blue); }
 
 /* Individual: student checklist */
 .collab-student-grid {
@@ -288,7 +288,7 @@
   border-bottom:1px solid var(--border); cursor:pointer; transition:background 0.1s;
   user-select:none;
 }
-.af-section-header:hover { background:#f0ede4; }
+.af-section-header:hover { background:var(--section-hover); }
 .af-section-chevron {
   font-size:var(--text-2xs); color:var(--text-3); transition:transform 0.15s;
   width:12px; flex-shrink:0; text-align:center;
@@ -350,7 +350,7 @@
 /* ── Assignment toolbar ─────────────────────────────────────── */
 .assess-toolbar {
   display:flex; align-items:center; gap:10px; padding:10px 20px;
-  background:var(--surface); border-bottom:0.5px solid rgba(0,0,0,0.09);
+  background:var(--surface); border-bottom:0.5px solid var(--divider-medium);
 }
 .assess-toolbar-count {
   font-family:'SF Mono', ui-monospace, 'Menlo', monospace; font-size:var(--text-xs); text-transform:uppercase;
@@ -427,7 +427,7 @@
   min-height:48px;
 }
 .mod-folder.open .mod-folder-header { border-bottom-color:var(--border); }
-.mod-folder-header:hover { background:rgba(0,0,0,0.02); }
+.mod-folder-header:hover { background:var(--overlay-hover); }
 /* Expand header hit area when an assessment is being dragged over a collapsed folder */
 .mod-folder.drag-over:not(.open) .mod-folder-header { padding:20px 16px; }
 .mod-folder-chevron {
@@ -494,7 +494,7 @@
 }
 .assess-card.merge-target {
   animation: merge-pulse 0.35s ease-out forwards;
-  border-color: #6366f1; border-radius: 14px;
+  border-color: var(--mod-badge); border-radius: 14px;
   background: rgba(99,102,241,0.06);
   position: relative; z-index: 2;
   transition: border-radius 0.2s, background 0.2s, border-color 0.2s;
@@ -502,7 +502,7 @@
 .assess-card.merge-target::after {
   content: '\01F4C1  Create Module';
   position: absolute; bottom: -10px; left: 50%; transform: translateX(-50%);
-  background: #6366f1; color: #fff; font-size:var(--text-sm); font-weight: 600;
+  background: var(--mod-badge); color: #fff; font-size:var(--text-sm); font-weight: 600;
   padding: 2px 10px; border-radius:var(--radius); white-space: nowrap;
   z-index: 3; pointer-events: none;
 }
@@ -663,7 +663,7 @@
 .rubric-criterion.collapsed .rubric-criterion-chevron { transform:rotate(-90deg); }
 .rubric-criterion-header {
   display:flex; align-items:center; gap:10px; padding:12px 16px;
-  background:rgba(0,0,0,0.02); border-bottom:1px solid var(--border);
+  background:var(--overlay-hover); border-bottom:1px solid var(--border);
   transition:background 0.1s;
 }
 .rubric-criterion-num {
@@ -889,7 +889,7 @@
 .rsg-criteria { display:flex; flex-direction:column; gap:4px; }
 .rsg-criterion-row {
   display:flex; align-items:stretch; gap:0;
-  border:1px solid rgba(0,0,0,0.08); border-radius:8px; overflow:hidden;
+  border:1px solid var(--overlay-pressed); border-radius:8px; overflow:hidden;
   background:var(--surface); min-height:36px;
   transition:box-shadow 0.15s var(--ease-out);
 }
@@ -914,7 +914,7 @@
 .rsg-level {
   flex:1; padding:8px 4px; text-align:center;
   font-family:inherit; font-size:var(--text-sm); font-weight:500;
-  cursor:pointer; transition:all 0.12s var(--ease-out); color:rgba(0,0,0,0.15);
+  cursor:pointer; transition:all 0.12s var(--ease-out); color:var(--divider-strong);
   border-left:1px solid var(--divider-subtle);
   user-select:none; display:flex; align-items:center; justify-content:center;
 }
@@ -953,7 +953,7 @@
 }
 .student-status-btn:hover { border-color:var(--text-2); color:var(--text-2); background:rgba(0,0,0,0.03); }
 .student-status-btn.active-excused {
-  background:#7b1fa2; color:#fff; border-color:#7b1fa2;
+  background:var(--accent-purple); color:#fff; border-color:var(--accent-purple);
 }
 .student-status-btn.active-ns {
   background:var(--score-1); color:#fff; border-color:var(--score-1);
@@ -976,7 +976,7 @@
   cursor:pointer; transition:all 0.15s; letter-spacing:var(--tracking-tight);
   display:inline-flex; align-items:center; gap:4px;
 }
-.comment-btn:hover { background:#0062d1; }
+.comment-btn:hover { background:var(--btn-hover-blue); }
 .comment-btn .comment-count {
   background:rgba(255,255,255,0.25); padding:0 5px; border-radius:var(--radius);
   font-size:var(--text-2xs); font-weight:700; min-width:14px; text-align:center;
@@ -985,12 +985,12 @@
 /* ── Comment popover ──── */
 .comment-popover-overlay {
   position:fixed; inset:0; z-index:9999;
-  background:rgba(0,0,0,0.15); backdrop-filter:blur(2px);
+  background:var(--divider-strong); backdrop-filter:blur(2px);
   display:flex; align-items:center; justify-content:center;
 }
 .comment-popover {
   background:var(--surface); border-radius:14px; width:420px; max-width:90vw;
-  box-shadow:0 20px 60px rgba(0,0,0,0.2), 0 0 0 0.5px rgba(0,0,0,0.08);
+  box-shadow:0 20px 60px rgba(0,0,0,0.2), 0 0 0 0.5px var(--overlay-pressed);
   display:flex; flex-direction:column; max-height:80vh;
   animation:commentPopIn 0.15s ease-out;
 }
@@ -1037,7 +1037,7 @@
   transition:opacity 0.15s; padding:2px 4px; flex-shrink:0;
 }
 .comment-entry:hover .comment-entry-del { opacity:1; }
-.comment-entry-del:hover { color:#d32f2f; }
+.comment-entry-del:hover { color:var(--priority); }
 .comment-popover-empty {
   text-align:center; padding:20px 0; color:var(--text-3);
   font-size:var(--text-base); font-style:italic;
@@ -1061,15 +1061,15 @@
   font-family:var(--font-base); font-size:var(--text-base); font-weight:600;
   cursor:pointer; transition:background 0.15s;
 }
-.comment-popover-submit:hover { background:#0062d1; }
+.comment-popover-submit:hover { background:var(--btn-hover-blue); }
 
 /* ── Descriptor bar — slim frosted glass toolbar ─────────── */
 .rsg-descriptor-bar {
   position:fixed; bottom:8px; left:50%; transform:translateX(-50%);
   z-index:10000; max-width:1400px; width:calc(100% - 32px);
-  background:rgba(255,255,255,0.82);
+  background:var(--surface-glass);
   backdrop-filter:saturate(180%) blur(20px); -webkit-backdrop-filter:saturate(180%) blur(20px);
-  border:1px solid rgba(0,0,0,0.08);
+  border:1px solid var(--overlay-pressed);
   border-radius:var(--radius); padding:6px 16px;
   display:none; align-items:center; gap:14px;
   box-shadow:0 4px 16px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.05);

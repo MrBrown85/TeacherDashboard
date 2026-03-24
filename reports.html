@@ -17,12 +17,12 @@
     <!-- Unified Toolbar -->
     <div class="report-toolbar no-print">
       <div class="report-seg-control" role="tablist" aria-label="Report type">
-        <button class="report-seg-btn active" onclick="switchTab('questionnaire')" role="tab" aria-selected="true">Term Questionnaire</button>
-        <button class="report-seg-btn" onclick="switchTab('progress')" role="tab" aria-selected="false">Progress Reports</button>
-        <button class="report-seg-btn" onclick="switchTab('summary')" role="tab" aria-selected="false">Class Summary</button>
+        <button class="report-seg-btn active" data-action="switchTab" data-tab="questionnaire" role="tab" aria-selected="true">Term Questionnaire</button>
+        <button class="report-seg-btn" data-action="switchTab" data-tab="progress" role="tab" aria-selected="false">Progress Reports</button>
+        <button class="report-seg-btn" data-action="switchTab" data-tab="summary" role="tab" aria-selected="false">Class Summary</button>
       </div>
       <div class="student-picker" id="student-picker">
-        <button class="student-picker-btn" onclick="toggleStudentPicker(event)" aria-label="Select students" aria-expanded="false" aria-haspopup="listbox">
+        <button class="student-picker-btn" data-action="toggleStudentPicker" aria-label="Select students" aria-expanded="false" aria-haspopup="listbox">
           <span id="picker-label">All Students</span>
           <span class="arrow" aria-hidden="true">▼</span>
         </button>
@@ -30,11 +30,11 @@
       </div>
       <!-- Questionnaire student nav (hidden by default) -->
       <div class="tq-student-nav" id="tq-student-nav" style="display:none">
-        <button class="tq-toolbar-arrow" onclick="tqPrevStudent()" title="Previous student" aria-label="Previous student">
+        <button class="tq-toolbar-arrow" data-action="tqPrevStudent" title="Previous student" aria-label="Previous student">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M7.5 2.5L4 6l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <span class="tq-student-name" id="tq-student-name"></span>
-        <button class="tq-toolbar-arrow" onclick="tqNextStudent()" title="Next student" aria-label="Next student">
+        <button class="tq-toolbar-arrow" data-action="tqNextStudent" title="Next student" aria-label="Next student">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4.5 2.5L8 6l-3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <div class="tq-progress-ring" id="tq-progress-ring">
@@ -45,7 +45,7 @@
           <span class="tq-progress-label" id="tq-progress-label"></span>
         </div>
       </div>
-      <select id="report-period" class="report-term-select" onchange="renderReports()" aria-label="Reporting period">
+      <select id="report-period" class="report-term-select" aria-label="Reporting period">
         <option value="Report 1">Report 1</option>
         <option value="Report 2">Report 2</option>
         <option value="Report 3">Report 3</option>
@@ -54,11 +54,11 @@
         <option value="Report 6">Report 6</option>
       </select>
       <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
-        <button class="tb-toggle-btn" id="tb-anon-btn" style="display:none" onclick="classSummaryAnon=!classSummaryAnon;this.classList.toggle('active',classSummaryAnon);renderReports()">
+        <button class="tb-toggle-btn" id="tb-anon-btn" style="display:none" data-action="toggleAnon">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           Anonymize
         </button>
-        <button class="tb-action-btn" id="tb-print-btn" onclick="window.print()">Print Reports</button>
+        <button class="tb-action-btn" id="tb-print-btn" data-action="printReports">Print Reports</button>
       </div>
     </div>
 
@@ -1029,7 +1029,7 @@ function renderClassSummary(cid) {
   html += `</tr></thead><tbody>`;
 
   students.forEach(st => {
-    const nameDisplay = classSummaryAnon ? esc(st._anonLabel) : `<a href="#" data-sid="${st.id}" onclick="event.preventDefault();tqSelectStudent('${st.id}');switchTab('questionnaire')" style="color:inherit;text-decoration:none">${esc(fullName(st))}</a>`;
+    const nameDisplay = classSummaryAnon ? esc(st._anonLabel) : `<a href="#" data-action="summaryStudentClick" data-sid="${st.id}" style="color:inherit;text-decoration:none">${esc(fullName(st))}</a>`;
     html += `<tr><td class="class-summary-name">${nameDisplay}</td>`;
     sections.forEach(sec => {
       const sp = getSectionProficiency(cid, st.id, sec.id);
@@ -1085,14 +1085,14 @@ function populateStudentSelect() {
   let html = '';
   students.forEach(s => {
     const checked = selectedStudentIds === null || selectedStudentIds.includes(s.id);
-    html += `<div class="student-picker-item${checked ? ' checked' : ''}" data-sid="${s.id}" onclick="event.stopPropagation();toggleStudentSelection('${s.id}')">
+    html += `<div class="student-picker-item${checked ? ' checked' : ''}" data-sid="${s.id}" data-action="toggleStudentSelection">
       <div class="student-picker-check">${checked ? '✓' : ''}</div>
       <span>${esc(fullName(s))}</span>
     </div>`;
   });
   html += `<div class="student-picker-actions">
-    <button class="student-picker-action" onclick="event.stopPropagation();selectAllStudents()">Select All</button>
-    <button class="student-picker-action" onclick="event.stopPropagation();selectNoneStudents()">Deselect All</button>
+    <button class="student-picker-action" data-action="selectAllStudents">Select All</button>
+    <button class="student-picker-action" data-action="selectNoneStudents">Deselect All</button>
   </div>`;
   dd.innerHTML = html;
   updatePickerLabel();
@@ -1208,7 +1208,7 @@ function renderReports() {
 
   // Progress reports — render two-panel builder layout
   const presetBtns = ['brief','standard','detailed'].map(p =>
-    `<button class="rb-preset-btn${reportConfig.preset === p ? ' active' : ''}" data-preset="${p}" onclick="rbApplyPreset('${p}')">${p.charAt(0).toUpperCase()+p.slice(1)}</button>`
+    `<button class="rb-preset-btn${reportConfig.preset === p ? ' active' : ''}" data-preset="${p}" data-action="rbApplyPreset">${p.charAt(0).toUpperCase()+p.slice(1)}</button>`
   ).join('');
 
   output.innerHTML = `<div class="rb-layout">
@@ -1269,7 +1269,7 @@ function renderBuilderBlocks() {
       <span class="rb-drag-grip">${block.locked ? '🔒' : '⠿'}</span>
       ${block.locked
         ? `<span class="rb-block-label">${esc(block.label)}</span>`
-        : `<label class="rb-block-toggle" onclick="event.stopPropagation();rbToggleBlock('${block.id}')"><div class="rb-block-switch"></div></label>
+        : `<label class="rb-block-toggle" data-action="rbToggleBlock" data-blockid="${block.id}"><div class="rb-block-switch"></div></label>
            <span class="rb-block-label">${esc(block.label)}</span>`
       }
     </div>`;
@@ -1439,7 +1439,7 @@ function tqExec(cmd, value) {
 function tqUpdateToolbar() {
   const cmds = ['bold', 'italic', 'underline', 'insertUnorderedList', 'insertOrderedList'];
   cmds.forEach(cmd => {
-    const btn = document.querySelector(`.tq-tb-btn[onclick="tqExec('${cmd}')"]`);
+    const btn = document.querySelector(`.tq-tb-btn[data-cmd="${cmd}"]`);
     if (btn) btn.classList.toggle('active', document.queryCommandState(cmd));
   });
 }
@@ -2427,7 +2427,7 @@ function renderTermQuestionnaire(cid) {
       <div class="tq-dim-pills">`;
     [1,2,3,4].forEach(lvl => {
       html += `<button class="tq-pill pill-${lvl}${val === lvl ? ' active' : ''}"
-        onclick="tqSetDim('${sid}','${dim}',${lvl})">${PILL_TEXT[lvl]}</button>`;
+        data-action="tqSetDim" data-sid="${sid}" data-dim="${dim}" data-lvl="${lvl}">${PILL_TEXT[lvl]}</button>`;
     });
     html += `</div>
     </div>`;
@@ -2446,7 +2446,7 @@ function renderTermQuestionnaire(cid) {
       <div class="tq-rate-pills">`;
     [1,2,3,4].forEach(lvl => {
       html += `<button class="tq-rate-pill rp-${lvl}${val === lvl ? ' active' : ''}"
-        onclick="tqSetField('${sid}','${field}',${lvl})">${RATE_LABELS[lvl]}</button>`;
+        data-action="tqSetField" data-sid="${sid}" data-field="${field}" data-lvl="${lvl}">${RATE_LABELS[lvl]}</button>`;
     });
     html += `</div></div>`;
   });
@@ -2479,14 +2479,14 @@ function renderTermQuestionnaire(cid) {
         <div class="tq-trait-wrap">`;
   posTraitList.forEach(t => {
     html += `<button class="tq-trait-chip${socialTraits.includes(t.id) ? ' active' : ''}"
-      onclick="tqToggleTrait('${sid}','${t.id}')">${t.label}</button>`;
+      data-action="tqToggleTrait" data-sid="${sid}" data-tid="${t.id}">${t.label}</button>`;
   });
   html += `</div>
         <div class="tq-trait-divider"></div>
         <div class="tq-trait-wrap">`;
   negTraitList.forEach(t => {
     html += `<button class="tq-trait-chip concern${socialTraits.includes(t.id) ? ' active' : ''}"
-      onclick="tqToggleTrait('${sid}','${t.id}')">${t.label}</button>`;
+      data-action="tqToggleTrait" data-sid="${sid}" data-tid="${t.id}">${t.label}</button>`;
   });
   html += `</div>
       </div>
@@ -2522,7 +2522,7 @@ function renderTermQuestionnaire(cid) {
     assignmentPerf.forEach(a => {
       const r = Math.round(a.avg);
       const selected = mentionAssessments.includes(a.id);
-      html += `<div class="tq-assignment-row${selected ? ' selected' : ''}" onclick="tqToggleAssignment('${sid}','${a.id}')">
+      html += `<div class="tq-assignment-row${selected ? ' selected' : ''}" data-action="tqToggleAssignment" data-sid="${sid}" data-aid="${a.id}">
         <span class="tq-tag-check">${selected ? '✓' : ''}</span>
         <span class="tq-assignment-title">${esc(a.title)}</span>
         <span class="tq-assignment-type">${a.type === 'formative' ? 'Form' : 'Sum'}</span>
@@ -2560,22 +2560,22 @@ function renderTermQuestionnaire(cid) {
     <div class="tq-editor-wrap" style="flex:1;min-height:0">
       <div class="tq-toolbar">
         <div class="tq-toolbar-group">
-          <button type="button" class="tq-tb-btn" onclick="tqExec('bold')" title="Bold (⌘B)"><svg viewBox="0 0 24 24"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/></svg></button>
-          <button type="button" class="tq-tb-btn" onclick="tqExec('italic')" title="Italic (⌘I)"><svg viewBox="0 0 24 24"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></svg></button>
-          <button type="button" class="tq-tb-btn" onclick="tqExec('underline')" title="Underline (⌘U)"><svg viewBox="0 0 24 24"><path d="M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg></button>
+          <button type="button" class="tq-tb-btn" data-action="tqExec" data-cmd="bold" title="Bold (⌘B)"><svg viewBox="0 0 24 24"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/></svg></button>
+          <button type="button" class="tq-tb-btn" data-action="tqExec" data-cmd="italic" title="Italic (⌘I)"><svg viewBox="0 0 24 24"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></svg></button>
+          <button type="button" class="tq-tb-btn" data-action="tqExec" data-cmd="underline" title="Underline (⌘U)"><svg viewBox="0 0 24 24"><path d="M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg></button>
         </div>
         <div class="tq-toolbar-group">
-          <button type="button" class="tq-tb-btn" onclick="tqExec('insertUnorderedList')" title="Bullet List"><svg viewBox="0 0 24 24"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="5" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="5" cy="18" r="1.5" fill="currentColor" stroke="none"/></svg></button>
-          <button type="button" class="tq-tb-btn" onclick="tqExec('insertOrderedList')" title="Numbered List"><svg viewBox="0 0 24 24"><line x1="10" y1="6" x2="20" y2="6"/><line x1="10" y1="12" x2="20" y2="12"/><line x1="10" y1="18" x2="20" y2="18"/><text x="4" y="8" font-size="7" fill="currentColor" stroke="none" font-weight="600">1</text><text x="4" y="14" font-size="7" fill="currentColor" stroke="none" font-weight="600">2</text><text x="4" y="20" font-size="7" fill="currentColor" stroke="none" font-weight="600">3</text></svg></button>
+          <button type="button" class="tq-tb-btn" data-action="tqExec" data-cmd="insertUnorderedList" title="Bullet List"><svg viewBox="0 0 24 24"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="5" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="5" cy="18" r="1.5" fill="currentColor" stroke="none"/></svg></button>
+          <button type="button" class="tq-tb-btn" data-action="tqExec" data-cmd="insertOrderedList" title="Numbered List"><svg viewBox="0 0 24 24"><line x1="10" y1="6" x2="20" y2="6"/><line x1="10" y1="12" x2="20" y2="12"/><line x1="10" y1="18" x2="20" y2="18"/><text x="4" y="8" font-size="7" fill="currentColor" stroke="none" font-weight="600">1</text><text x="4" y="14" font-size="7" fill="currentColor" stroke="none" font-weight="600">2</text><text x="4" y="20" font-size="7" fill="currentColor" stroke="none" font-weight="600">3</text></svg></button>
         </div>
         <div class="tq-toolbar-group">
-          <button type="button" class="tq-tb-btn" onclick="tqExec('removeFormat')" title="Clear Formatting"><svg viewBox="0 0 24 24"><path d="M17 4H7"/><path d="M12 4v7"/><path d="M4 20l16-16"/></svg></button>
+          <button type="button" class="tq-tb-btn" data-action="tqExec" data-cmd="removeFormat" title="Clear Formatting"><svg viewBox="0 0 24 24"><path d="M17 4H7"/><path d="M12 4v7"/><path d="M4 20l16-16"/></svg></button>
         </div>
-        <button type="button" class="tq-tb-btn tq-tb-auto" onclick="tqAutoNarrative('${sid}')" title="Auto-generate from profile data" id="tq-auto-btn">
+        <button type="button" class="tq-tb-btn tq-tb-auto" data-action="tqAutoNarrative" data-sid="${sid}" title="Auto-generate from profile data" id="tq-auto-btn">
           <svg viewBox="0 0 24 24"><path d="M12 2L9.5 9.5 2 12l7.5 2.5L12 22l2.5-7.5L22 12l-7.5-2.5z" fill="currentColor" stroke="none" opacity="0.7"/></svg>
           <span>Generate</span>
         </button>
-        <button type="button" class="tq-tb-btn tq-tb-copy" onclick="tqCopyNarrative()" title="Copy to Clipboard" id="tq-copy-btn">
+        <button type="button" class="tq-tb-btn tq-tb-copy" data-action="tqCopyNarrative" title="Copy to Clipboard" id="tq-copy-btn">
           <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           <span>Copy</span>
         </button>
@@ -2609,9 +2609,9 @@ function renderTermQuestionnaire(cid) {
     const hasGenObs = recentObs.some(o => !o.assignmentContext);
     if (hasAssignObs && hasGenObs) {
       html += `<div style="display:flex;gap:4px;margin-bottom:6px">
-        <button class="tq-obs-filter-btn${tqObsFilter==='all'?' active':''}" onclick="tqObsFilter='all';renderReports()">All</button>
-        <button class="tq-obs-filter-btn${tqObsFilter==='general'?' active':''}" onclick="tqObsFilter='general';renderReports()">General</button>
-        <button class="tq-obs-filter-btn${tqObsFilter==='assignment'?' active':''}" onclick="tqObsFilter='assignment';renderReports()">Assignment</button>
+        <button class="tq-obs-filter-btn${tqObsFilter==='all'?' active':''}" data-action="tqObsFilter" data-filter="all">All</button>
+        <button class="tq-obs-filter-btn${tqObsFilter==='general'?' active':''}" data-action="tqObsFilter" data-filter="general">General</button>
+        <button class="tq-obs-filter-btn${tqObsFilter==='assignment'?' active':''}" data-action="tqObsFilter" data-filter="assignment">Assignment</button>
       </div>`;
     }
     const filteredObs = recentObs.filter(o => tqObsFilter === 'all' ? true : tqObsFilter === 'assignment' ? !!o.assignmentContext : !o.assignmentContext);
@@ -2622,7 +2622,7 @@ function renderTermQuestionnaire(cid) {
       const dateStr = d.toLocaleDateString('en-CA', { month:'short', day:'numeric' });
       const sentIcon = ob.sentiment ? (OBS_SENTIMENTS[ob.sentiment]?.icon || '') + ' ' : '';
       const selected = mentionObs.includes(ob.id);
-      html += `<div class="tq-evidence-item${selected ? ' selected' : ''}" onclick="tqToggleOb('${sid}','${ob.id}')" style="align-items:flex-start">
+      html += `<div class="tq-evidence-item${selected ? ' selected' : ''}" data-action="tqToggleOb" data-sid="${sid}" data-obid="${ob.id}" style="align-items:flex-start">
         <span class="tq-tag-check" style="margin-top:2px"></span>
         <span class="tq-evidence-text" style="flex:1;min-width:0"><span class="tq-evidence-sentiment">${sentIcon}</span>${ob.assignmentContext ? `<span style="font-size:0.5rem;font-weight:600;color:var(--active);margin-right:3px">${esc(ob.assignmentContext.assessmentTitle)}</span>` : ''}${esc(ob.text)}</span>
         <span class="tq-obs-wide-date">${dateStr}</span>
@@ -2638,9 +2638,9 @@ function renderTermQuestionnaire(cid) {
 
   // ══ NAV FOOTER (spans all 3 cols) ══
   html += `<div class="tq-nav-footer">
-    <button class="tq-nav-btn" onclick="tqPrevStudent()" ${tqStudentIndex === 0 ? 'disabled style="opacity:0.4"' : ''}>← Previous</button>
+    <button class="tq-nav-btn" data-action="tqPrevStudent" ${tqStudentIndex === 0 ? 'disabled style="opacity:0.4"' : ''}>← Previous</button>
     <span style="font-family:'SF Mono',monospace;font-size:0.6rem;color:var(--text-3);text-transform:uppercase">${tqStudentIndex + 1} of ${students.length}</span>
-    <button class="tq-nav-btn primary" onclick="tqNextStudent()">${tqStudentIndex >= students.length - 1 ? 'Done ✓' : 'Save & Next →'}</button>
+    <button class="tq-nav-btn primary" data-action="tqNextStudent">${tqStudentIndex >= students.length - 1 ? 'Done ✓' : 'Save & Next →'}</button>
   </div>`;
 
   html += `</div>`; // close tq-wrap
@@ -2678,6 +2678,42 @@ function renderTermQuestionnaire(cid) {
   }
 })();
 
+// ── Delegated click handler for reports ──
+document.addEventListener('click', function(e) {
+  var el = e.target.closest('[data-action]');
+  if (!el) return;
+  var action = el.dataset.action;
+  var handlers = {
+    'switchTab':              function() { switchTab(el.dataset.tab); },
+    'toggleStudentPicker':    function() { toggleStudentPicker(e); },
+    'tqPrevStudent':          function() { tqPrevStudent(); },
+    'tqNextStudent':          function() { tqNextStudent(); },
+    'toggleAnon':             function() { classSummaryAnon = !classSummaryAnon; el.classList.toggle('active', classSummaryAnon); renderReports(); },
+    'printReports':           function() { window.print(); },
+    'rbApplyPreset':          function() { rbApplyPreset(el.dataset.preset); },
+    'rbToggleBlock':          function() { e.stopPropagation(); rbToggleBlock(el.dataset.blockid); },
+    'summaryStudentClick':    function() { e.preventDefault(); tqSelectStudent(el.dataset.sid); switchTab('questionnaire'); },
+    'toggleStudentSelection': function() { e.stopPropagation(); toggleStudentSelection(el.dataset.sid); },
+    'selectAllStudents':      function() { e.stopPropagation(); selectAllStudents(); },
+    'selectNoneStudents':     function() { e.stopPropagation(); selectNoneStudents(); },
+    'tqSetDim':               function() { tqSetDim(el.dataset.sid, el.dataset.dim, parseInt(el.dataset.lvl)); },
+    'tqSetField':             function() { tqSetField(el.dataset.sid, el.dataset.field, parseInt(el.dataset.lvl)); },
+    'tqToggleTrait':          function() { tqToggleTrait(el.dataset.sid, el.dataset.tid); },
+    'tqToggleAssignment':     function() { tqToggleAssignment(el.dataset.sid, el.dataset.aid); },
+    'tqExec':                 function() { tqExec(el.dataset.cmd); },
+    'tqAutoNarrative':        function() { tqAutoNarrative(el.dataset.sid); },
+    'tqCopyNarrative':        function() { tqCopyNarrative(); },
+    'tqObsFilter':            function() { tqObsFilter = el.dataset.filter; renderReports(); },
+    'tqToggleOb':             function() { tqToggleOb(el.dataset.sid, el.dataset.obid); }
+  };
+  if (handlers[action]) {
+    handlers[action]();
+  }
+});
+
+// Handle report-period select change via delegation
+document.getElementById('report-period').addEventListener('change', function() { renderReports(); });
+
 // Intercept sidebar clicks — navigate to that student contextually
 document.getElementById('sidebar-mount').addEventListener('click', function(e) {
   const row = e.target.closest('.student-row');
@@ -2701,6 +2737,11 @@ document.getElementById('sidebar-mount').addEventListener('click', function(e) {
     tqSelectStudent(sid);
   }
 });
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
 </script>
 </body>
 </html>

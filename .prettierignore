@@ -1,0 +1,6 @@
+vendor/
+curriculum_data.js
+curriculum_by_course.json
+node_modules/
+*.min.js
+.DS_Store

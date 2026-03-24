@@ -1,14 +1,39 @@
 /* gb-constants.js — Shared constants for TeacherDashboard */
 
+/**
+ * @typedef {Object} Course
+ * @property {string} id - Course identifier (e.g. 'sci8')
+ * @property {string} name - Display name (e.g. 'Science 8')
+ * @property {'proficiency'|'points'} gradingSystem - Grading mode
+ * @property {'mostRecent'|'highest'|'mode'|'decayingAvg'} calcMethod - Proficiency calculation method
+ * @property {number} decayWeight - Weight for decaying average (0-1)
+ * @property {string[]} curriculumTags - Linked curriculum codes (e.g. ['SCI8'])
+ */
+
+/**
+ * @typedef {Object} LearningTag
+ * @property {string} id - Tag identifier (e.g. 'QAP')
+ * @property {string} label - Short display label
+ * @property {string} text - Description text
+ * @property {string[]} [i_can_statements] - Student-facing learning targets
+ */
+
+/**
+ * @typedef {Object} LearningSection
+ * @property {string} id - Section identifier
+ * @property {string} subject - Parent subject code
+ * @property {string} name - Full display name
+ * @property {string} shortName - Abbreviated name
+ * @property {string} color - Hex color code
+ * @property {LearningTag[]} tags - Tags within this section
+ */
+
 /* ── Student Display Helpers ───────────────────────────────── */
 const PRONOUNS_OPTIONS = ['he/him','she/her','they/them','prefer not to say'];
 
 /* ── Courses ────────────────────────────────────────────────── */
 const DEFAULT_COURSES = {
-  sci8:  { id:'sci8',  name:'Science 8',                      gradingSystem:'proficiency', calcMethod:'mostRecent', decayWeight:0.65, curriculumTags:['SCI8'] },
-  ss10:  { id:'ss10',  name:'Social Studies 10',               gradingSystem:'proficiency', calcMethod:'mostRecent', decayWeight:0.65, curriculumTags:['SS10'] },
-  phe12: { id:'phe12', name:'Physical & Health Education 12',  gradingSystem:'proficiency', calcMethod:'mostRecent', decayWeight:0.65, curriculumTags:['PHE12'] },
-  math9: { id:'math9', name:'Mathematics 9',                   gradingSystem:'proficiency', calcMethod:'mostRecent', decayWeight:0.65, curriculumTags:['MATH9'] }
+  sci8:  { id:'sci8',  name:'Science 8',  gradingSystem:'proficiency', calcMethod:'mostRecent', decayWeight:0.65, curriculumTags:['SCI8'] }
 };
 
 /* ── Learning Map: Sections & Tags ──────────────────────────── */
@@ -58,132 +83,6 @@ const LEARNING_MAP = {
         tags: [
           { id: 'SC', label: 'Scientific Communication', text: '',
             i_can_statements: ['I can communicate my scientific findings clearly using appropriate scientific vocabulary.','I can use digital tools to represent and share scientific information.','I can express how my local environment and First Peoples perspectives relate to the science I\'m learning.'] }
-        ]
-      }
-    ]
-  },
-  ss10: {
-    subjects: [
-      { id: 'SS10', name: 'Social Studies 10', color: '#dc2626' }
-    ],
-    sections: [
-      {
-        id: 'SS10_use_social_studies', subject: 'SS10', name: 'Use Social Studies Inquiry Processes and Skills', shortName: 'Inquiry', color: '#dc2626',
-        tags: [
-          { id: 'USS', label: 'Use Social Studies Inquiry', text: '',
-            i_can_statements: ['I can develop meaningful research questions about Canadian history and current events.','I can collect and organize information from a variety of credible sources.','I can present my conclusions clearly in writing, discussion, or multimedia.','I can adjust my conclusions when I find new or contradictory evidence.'] }
-        ]
-      },
-      {
-        id: 'SS10_significance', subject: 'SS10', name: 'Significance', shortName: 'Significance', color: '#dc2626',
-        tags: [
-          { id: 'AS', label: 'Assess the Significance', text: '',
-            i_can_statements: ['I can explain what makes a person, event, or development historically significant.','I can show how the same event can be seen as more or less significant depending on who you ask.','I can evaluate significance using criteria like duration, breadth of impact, and depth of change.'] }
-        ]
-      },
-      {
-        id: 'SS10_evidence', subject: 'SS10', name: 'Evidence', shortName: 'Evidence', color: '#dc2626',
-        tags: [
-          { id: 'ACA', label: 'Assess Competing Accounts', text: '',
-            i_can_statements: ['I can compare two accounts of the same event and evaluate which is better supported.','I can identify bias, perspective, and purpose in a historical or media source.','I can explain what makes some evidence stronger than others.','I can identify gaps or silences in historical accounts.'] }
-        ]
-      },
-      {
-        id: 'SS10_continuity_and_chan', subject: 'SS10', name: 'Continuity and Change', shortName: 'Continuity', color: '#dc2626',
-        tags: [
-          { id: 'CCC', label: 'Compare and Contrast Continuities', text: '',
-            i_can_statements: ['I can describe how life changed for Canadians during a specific era.','I can identify what aspects of Canadian society have remained consistent across time.','I can show how the same historical period was experienced differently by different groups (e.g., First Nations vs. settlers, men vs. women).'] }
-        ]
-      },
-      {
-        id: 'SS10_cause_and_consequen', subject: 'SS10', name: 'Cause and Consequence', shortName: 'Cause', color: '#dc2626',
-        tags: [
-          { id: 'AHU', label: 'Assess How Underlying Conditions', text: '',
-            i_can_statements: ['I can identify multiple layers of cause for a historical event.','I can evaluate how one person\'s or group\'s actions changed the course of events.','I can trace the short- and long-term consequences of a policy, law, or decision.','I can distinguish between causes that were economic, political, social, or ideological.'] }
-        ]
-      },
-      {
-        id: 'SS10_perspective', subject: 'SS10', name: 'Perspective', shortName: 'Perspective', color: '#dc2626',
-        tags: [
-          { id: 'EID', label: 'Explain and Infer Different', text: '',
-            i_can_statements: ['I can explain how a Canadian government policy was seen differently by different communities.','I can take the perspective of a marginalized group and explain how they experienced a historical event.','I can compare how Indigenous and non-Indigenous Canadians might view the same law or event.'] }
-        ]
-      },
-      {
-        id: 'SS10_ethical_judgment', subject: 'SS10', name: 'Ethical Judgment', shortName: 'Ethics', color: '#dc2626',
-        tags: [
-          { id: 'MRE', label: 'Make Reasoned Ethical Judgments', text: '',
-            i_can_statements: ['I can make an ethical judgment about a Canadian government policy while considering historical context.','I can discuss what \'reconciliation\' means and what it might require of individuals and the government.','I can evaluate whether apologies and redress are adequate responses to historical injustices.','I can distinguish between acknowledging wrongdoing and assigning collective guilt.'] }
-        ]
-      }
-    ]
-  },
-  phe12: {
-    subjects: [
-      { id: 'PHE12', name: 'Physical and Health Education 12', color: '#059669' }
-    ],
-    sections: [
-      {
-        id: 'PHE12_physical_literacy', subject: 'PHE12', name: 'Physical Literacy', shortName: 'Physical', color: '#059669',
-        tags: [
-          { id: 'DER', label: 'Develop Refine', text: '',
-            i_can_statements: ['I can apply sophisticated movement skills and strategies across a diverse range of physical activities, including lifetime and recreational activities.','I can analyze and teach movement concepts and tactical strategies to others.','I can design and implement a personal training monitoring system that guides safe and effective fitness development.','I can lead and model excellence in safety, fair play, and sportsmanship as a senior student and community member.','I can articulate a detailed, realistic personal physical activity plan for post-graduation life.'] }
-        ]
-      },
-      {
-        id: 'PHE12_healthy_and_active', subject: 'PHE12', name: 'Healthy and Active Living', shortName: 'Healthy Living', color: '#059669',
-        tags: [
-          { id: 'PAD', label: 'Participate Daily', text: '',
-            i_can_statements: ['I can independently sustain a fitness program aligned with evidence-based guidelines for adult health.','I can synthesize knowledge of health determinants into a coherent understanding of how lifestyle, environment, and society shape wellness.','I can develop a comprehensive, realistic nutrition strategy for post-graduation life, accounting for budget, time, and social context.','I can critically deconstruct wellness culture, health trends, and commercial health messaging using research literacy.','I can create and present a comprehensive personal wellness plan for post-graduation life, integrating all dimensions of health.'] }
-        ]
-      },
-      {
-        id: 'PHE12_social_and_communi', subject: 'PHE12', name: 'Social and Community Health', shortName: 'Social Health', color: '#059669',
-        tags: [
-          { id: 'PRS', label: 'Propose Strategies', text: '',
-            i_can_statements: ['I can lead others in recognizing and responding to unsafe, coercive, and exploitative situations with confidence and effectiveness.','I can take a leadership role in challenging discrimination, stereotyping, and oppression in my school and community.','I can mentor peers in developing healthy relationship skills and support those experiencing relationship difficulties.','I can design, lead, and evaluate meaningful health promotion initiatives within my school or community.'] }
-        ]
-      },
-      {
-        id: 'PHE12_mental_well_being', subject: 'PHE12', name: 'Mental Well-being', shortName: 'Mental Health', color: '#059669',
-        tags: [
-          { id: 'DEA', label: 'Describe and Assess', text: '',
-            i_can_statements: ['I can evaluate and advocate for evidence-based mental well-being strategies at individual, school, and community levels.','I can demonstrate sophisticated mental health literacy \u2014 accurately describing disorders, treatments, and support systems \u2014 and apply it in peer advocacy.','I can design and evaluate a personal mental wellness plan that addresses the unique stressors of post-graduation transition.','I can articulate how my identity, experiences, and values will shape my well-being and relationships in adult life.'] }
-        ]
-      }
-    ]
-  },
-  math9: {
-    subjects: [
-      { id: 'MATH9', name: 'Mathematics 9', color: '#7c3aed' }
-    ],
-    sections: [
-      {
-        id: 'MATH9_reasoning_and_anal', subject: 'MATH9', name: 'Reasoning and Analyzing', shortName: 'Reasoning', color: '#7c3aed',
-        tags: [
-          { id: 'RC', label: 'Reading Comprehension', text: '',
-            i_can_statements: ['I can use logical reasoning and pattern recognition to solve mathematical problems.','I can estimate reasonably with rational numbers and judge whether my answers make sense.','I can apply mental math strategies flexibly for rational number and algebraic computations.','I can use graphing technology to explore linear relations and test algebraic conjectures.','I can model real-world problems using rational numbers, ratios, and linear relationships.'] }
-        ]
-      },
-      {
-        id: 'MATH9_understanding_and', subject: 'MATH9', name: 'Understanding and Solving', shortName: 'Solving', color: '#7c3aed',
-        tags: [
-          { id: 'PS', label: 'Problem Solving', text: '',
-            i_can_statements: ['I can choose and apply multiple strategies to solve algebraic and geometric problems.','I can visualize and sketch diagrams to support understanding of linear relations and similarity.','I can solve problems connected to real-world, cultural, and place-based contexts.'] }
-        ]
-      },
-      {
-        id: 'MATH9_communicating_and', subject: 'MATH9', name: 'Communicating and Representing', shortName: 'Communicating', color: '#7c3aed',
-        tags: [
-          { id: 'CS', label: 'Communication Skills', text: '',
-            i_can_statements: ['I can use correct mathematical vocabulary when discussing algebra, data, and geometry.','I can explain and justify my mathematical reasoning using multiple representations.','I can represent relationships using tables, graphs, equations, and diagrams.'] }
-        ]
-      },
-      {
-        id: 'MATH9_connecting_and_ref', subject: 'MATH9', name: 'Connecting and Reflecting', shortName: 'Connecting', color: '#7c3aed',
-        tags: [
-          { id: 'MC', label: 'Make Connections', text: '',
-            i_can_statements: ['I can reflect on my problem-solving approaches and identify what strategies were most effective.','I can connect math to science, social studies, and my community.','I can incorporate First Peoples mathematical knowledge and cultural contexts into my mathematical thinking.'] }
         ]
       }
     ]
@@ -279,7 +178,7 @@ const OBS_CONTEXTS = {
 };
 
 /* ── Shared HTML: Unified Toolbar ──────────────────────────── */
-const TB_SIDEBAR_SVG = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><line x1="5.5" y1="2.5" x2="5.5" y2="13.5"/></svg>`;
+const TB_SIDEBAR_SVG = `<svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><line x1="5.5" y1="2.5" x2="5.5" y2="13.5"/></svg>`;
 const TB_PAGES = [
   { id:'dashboard', label:'Dashboard', href:'index.html' },
   { id:'assignments', label:'Assignments', href:'settings.html' },

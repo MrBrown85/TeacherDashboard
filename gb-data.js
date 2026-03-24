@@ -6,6 +6,57 @@
    - Falls back to localStorage when Supabase is unavailable (file:// or offline)
 */
 
+/**
+ * @typedef {Object} Student
+ * @property {string} id - Unique student identifier
+ * @property {string} firstName
+ * @property {string} lastName
+ * @property {string} [preferred] - Preferred/nickname
+ * @property {string} [pronouns] - e.g. 'she/her', 'they/them'
+ * @property {string} [studentNumber]
+ * @property {string} [email]
+ * @property {string} [dateOfBirth] - YYYY-MM-DD
+ * @property {string[]} designations - Special education designation codes
+ * @property {string} [enrolledDate] - ISO date
+ * @property {Array} [attendance] - Attendance records
+ * @property {string} sortName - 'LastName FirstName' for sorting
+ */
+
+/**
+ * @typedef {Object} Assessment
+ * @property {string} id - Unique assessment identifier
+ * @property {string} title - Display title
+ * @property {string} date - ISO date string (YYYY-MM-DD)
+ * @property {'summative'|'formative'} type
+ * @property {string[]} tagIds - Linked learning tag IDs
+ * @property {number} [maxPoints] - Max points (points grading mode)
+ * @property {number} [weight] - Assessment weight (default 1)
+ * @property {string} [rubricId] - Linked rubric ID
+ * @property {'individual'|'pairs'|'groups'} [collaboration]
+ * @property {string} [moduleId] - Parent module ID
+ * @property {string} [notes] - Teacher notes
+ * @property {string[]} [coreCompetencyIds] - Linked core competency IDs
+ */
+
+/**
+ * @typedef {Object} Observation
+ * @property {string} id - Unique observation identifier
+ * @property {string} studentId
+ * @property {string} text - Observation note text
+ * @property {Object} [dims] - Dimension ratings (e.g. { engagement: 'strength' })
+ * @property {'strength'|'growth'|'concern'} [sentiment]
+ * @property {string} [context] - e.g. 'whole-class', 'small-group', 'independent'
+ * @property {string} created - ISO timestamp
+ */
+
+/**
+ * @typedef {Object} TermRating
+ * @property {string} studentId
+ * @property {string} termId
+ * @property {Object} [dims] - Dimension proficiency ratings
+ * @property {string} [narrative] - Teacher narrative (may contain safe HTML)
+ */
+
 /* ══════════════════════════════════════════════════════════════════
    In-memory cache — populated by initData(), read by get*(), updated by save*()
    ══════════════════════════════════════════════════════════════════ */
@@ -76,8 +127,68 @@ function _updateSyncIndicator() {
 }
 
 /* ══════════════════════════════════════════════════════════════════
+   Cross-tab conflict detection
+   ══════════════════════════════════════════════════════════════════ */
+let _crossTabChannel = null;
+let _crossTabAlerted = false;
+
+function _initCrossTab() {
+  if (_crossTabChannel) return;
+  _crossTabAlerted = false;
+  try {
+    _crossTabChannel = new BroadcastChannel('td-data-sync');
+    _crossTabChannel.onmessage = function(e) {
+      if (e.data && e.data.type === 'data-changed' && !_crossTabAlerted) {
+        _crossTabAlerted = true;
+        if (typeof showSyncToast === 'function') {
+          // Dismiss after showing — we'll use a custom element so it doesn't auto-dismiss
+          var el = document.getElementById('sync-toast');
+          if (el) el.remove();
+          var toast = document.createElement('div');
+          toast.className = 'sync-toast error';
+          toast.id = 'sync-toast';
+          toast.setAttribute('role', 'alert');
+          toast.setAttribute('aria-live', 'assertive');
+          toast.innerHTML = '<span>Data changed in another tab</span><button class="sync-toast-btn" onclick="_crossTabAlerted=false;window.location.reload()">Reload</button>';
+          document.body.appendChild(toast);
+        }
+      }
+    };
+  } catch (e) {
+    // BroadcastChannel not supported — fall back to storage event
+  }
+  // Fallback: storage event fires cross-tab when localStorage changes
+  window.addEventListener('storage', function(e) {
+    if (e.key && e.key.startsWith('gb-') && !_crossTabAlerted) {
+      _crossTabAlerted = true;
+      if (typeof showSyncToast === 'function') {
+        var el = document.getElementById('sync-toast');
+        if (el) el.remove();
+        var toast = document.createElement('div');
+        toast.className = 'sync-toast error';
+        toast.id = 'sync-toast';
+        toast.setAttribute('role', 'alert');
+        toast.setAttribute('aria-live', 'assertive');
+        toast.innerHTML = '<span>Data changed in another tab</span><button class="sync-toast-btn" onclick="_crossTabAlerted=false;window.location.reload()">Reload</button>';
+        document.body.appendChild(toast);
+      }
+    }
+  });
+}
+
+function _broadcastChange(cid, field) {
+  if (_crossTabChannel) {
+    try { _crossTabChannel.postMessage({ type: 'data-changed', cid: cid, field: field }); } catch (e) {}
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════
    Supabase sync helpers (fire-and-forget)
    ══════════════════════════════════════════════════════════════════ */
+let _hadSyncError = false;
+let _retryQueue = [];
+let _retryTimer = null;
+
 function _syncToSupabase(table, key, data) {
   _doSync(table, key, data).catch(err => console.error(`Sync error (${table}/${key}):`, err));
 }
@@ -112,13 +223,36 @@ async function _doSync(table, key, data) {
     _pendingSyncs--;
     if (_pendingSyncs <= 0) { _pendingSyncs = 0; _syncStatus = 'idle'; }
     _updateSyncIndicator();
+    // Show recovery toast if we previously had an error
+    if (_hadSyncError && _syncStatus === 'idle') {
+      _hadSyncError = false;
+      if (typeof showSyncToast === 'function') showSyncToast('All changes synced', 'success');
+    }
   } catch (err) {
     _pendingSyncs--;
     if (_pendingSyncs <= 0) _pendingSyncs = 0;
     _syncStatus = 'error';
     _updateSyncIndicator();
+    // Show error toast and queue retry
+    if (!_hadSyncError) {
+      _hadSyncError = true;
+      if (typeof showSyncToast === 'function') showSyncToast('Sync failed \u2014 changes saved locally', 'error');
+    }
+    _retryQueue.push({ table, key, data });
+    if (!_retryTimer) _retryTimer = setTimeout(_retryFailedSyncs, 10000);
     throw err;
   }
+}
+
+function _retryFailedSyncs() {
+  _retryTimer = null;
+  const queue = _retryQueue.splice(0);
+  queue.forEach(item => _syncToSupabase(item.table, item.key, item.data));
+}
+
+function retrySyncs() {
+  clearTimeout(_retryTimer);
+  _retryFailedSyncs();
 }
 
 async function _deleteFromSupabase(table, key) {
@@ -172,21 +306,26 @@ async function initAllCourses() {
     }
   }
 
-  // Fall back to localStorage if needed
+  // Fall back to defaults if needed
   if (!_useSupabase || _cache.courses === null) {
-    _cache.courses = _loadCoursesFromLS();
-    _cache.config = _safeParseLS('gb-config', {});
-
-    // If we got localStorage data but Supabase is active, seed Supabase
-    if (_useSupabase && _cache.courses) {
+    if (_useSupabase) {
+      // New Supabase account — use DEFAULT_COURSES, not stale localStorage
+      _cache.courses = JSON.parse(JSON.stringify(DEFAULT_COURSES));
+      _cache.config = {};
       _syncToSupabase('teacher_config', 'courses', _cache.courses);
       _syncToSupabase('teacher_config', 'config', _cache.config);
+    } else {
+      _cache.courses = _loadCoursesFromLS();
+      _cache.config = _safeParseLS('gb-config', {});
     }
   }
 
   // Ensure COURSES global is set
   COURSES = _cache.courses;
   if (!localStorage.getItem('gb-courses') && !_useSupabase) saveCourses(COURSES);
+
+  // Start cross-tab conflict detection
+  _initCrossTab();
 }
 
 /** Load all data for a specific course into the cache. */
@@ -222,10 +361,17 @@ async function _doInitData(cid) {
         _cache[field][cid] = byKey[dataKey] !== undefined ? byKey[dataKey] : _defaultForField(field);
       }
 
-      // If Supabase had no data for this course, seed from localStorage
+      // If Supabase had no data for this course, use empty defaults
+      // (seedIfNeeded will populate demo data if appropriate)
       if (!rows || rows.length === 0) {
-        _loadCourseFromLS(cid);
-        _seedCourseToSupabase(cid);
+        for (const [field] of Object.entries(_DATA_KEYS)) {
+          _cache[field][cid] = _defaultForField(field);
+        }
+      }
+      // Fall back to built-in learning map if none stored
+      const lm = _cache.learningMaps[cid];
+      if (!lm || (!lm._customized && (!lm.sections || lm.sections.length === 0))) {
+        _cache.learningMaps[cid] = LEARNING_MAP[cid] || { subjects: [], sections: [] };
       }
       return;
     }
@@ -303,15 +449,20 @@ function _loadCoursesFromLS() {
   return JSON.parse(JSON.stringify(DEFAULT_COURSES));
 }
 
+/* Fields that affect proficiency calculations */
+const _PROF_FIELDS = ['scores', 'assessments', 'overrides', 'statuses', 'courseConfigs', 'learningMaps'];
+
 /* Helper: write to cache + sync */
 function _saveCourseField(field, cid, value) {
   _cache[field][cid] = value;
+  if (_PROF_FIELDS.includes(field) && typeof clearProfCache === 'function') clearProfCache();
   const dataKey = _DATA_KEYS[field];
   if (_useSupabase) {
     _syncToSupabase('course_data', { cid, dataKey }, value);
   } else {
     localStorage.setItem('gb-' + dataKey + '-' + cid, JSON.stringify(value));
   }
+  _broadcastChange(cid, field);
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -948,3 +1099,104 @@ function getReportConfig(cid) {
   try { return JSON.parse(localStorage.getItem('gb-report-config-'+cid)) || null; } catch { return null; }
 }
 function saveReportConfig(cid, config) { _saveCourseField('reportConfig', cid, config); }
+
+/* ── Namespace ──────────────────────────────────────────────── */
+window.GB = {
+  getSyncStatus,
+  retrySyncs,
+  initAllCourses,
+  initData,
+  esc,
+  escJs,
+  initials,
+  pronounsSelect,
+  fullName,
+  displayName,
+  displayNameFirst,
+  sortStudents,
+  anonymizeStudents,
+  migrateStudent,
+  migrateAllStudents,
+  formatTs,
+  formatDate,
+  uid,
+  getParam,
+  getTodayStr,
+  loadCourses,
+  saveCourses,
+  createCourse,
+  updateCourse,
+  deleteCourseData,
+  getGradingScale,
+  loadCurriculumIndex,
+  getCoursesByGrade,
+  getSubjectsByGrade,
+  buildLearningMapFromTags,
+  getLearningMap,
+  saveLearningMap,
+  resetLearningMap,
+  ensureCustomLearningMap,
+  getModules,
+  saveModules,
+  getModuleById,
+  getAssignmentStatuses,
+  saveAssignmentStatuses,
+  getAssignmentStatus,
+  setAssignmentStatus,
+  getRubrics,
+  saveRubrics,
+  getRubricById,
+  deleteRubric,
+  getSections,
+  getSubjects,
+  getAllTags,
+  getTagById,
+  getSectionForTag,
+  getConfig,
+  saveConfig,
+  getCourseConfig,
+  saveCourseConfig,
+  getStudents,
+  saveStudents,
+  getAssessments,
+  saveAssessments,
+  getOverrides,
+  saveOverrides,
+  getNotes,
+  saveNotes,
+  getScores,
+  saveScores,
+  getPointsScore,
+  setPointsScore,
+  getActiveCourse,
+  setActiveCourse,
+  getFlags,
+  saveFlags,
+  isStudentFlagged,
+  toggleFlag,
+  getGoals,
+  saveGoals,
+  getReflections,
+  saveReflections,
+  getQuickObs,
+  saveQuickObs,
+  getStudentQuickObs,
+  getAllQuickObs,
+  addQuickOb,
+  deleteQuickOb,
+  getQuickObsByDim,
+  getAssignmentObs,
+  getStudentAssignmentFeedback,
+  hasAssignmentFeedback,
+  getCustomTags,
+  saveCustomTags,
+  addCustomTag,
+  removeCustomTag,
+  resolveTag,
+  getTermRatings,
+  saveTermRatings,
+  getStudentTermRating,
+  upsertTermRating,
+  getReportConfig,
+  saveReportConfig,
+};

@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sign In — TeacherDashboard</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#007AFF">
 <link rel="stylesheet" href="gb-styles.css?v=3">
 <link rel="stylesheet" href="login.css">
 </head>
@@ -69,7 +71,7 @@
     if (sb) {
       const { data: { session } } = await sb.auth.getSession();
       if (session) {
-        window.location.href = 'index.html';
+        window.location.href = 'app.html';
         return;
       }
     }
@@ -118,7 +120,7 @@ async function handleSignIn(e) {
     const email = document.getElementById('si-email').value.trim();
     const password = document.getElementById('si-password').value;
     await signIn(email, password);
-    window.location.href = 'index.html';
+    window.location.href = 'app.html';
   } catch(err) {
     showError(err.message || 'Sign in failed. Please try again.');
     btn.disabled = false;
@@ -145,6 +147,7 @@ async function handleSignUp(e) {
     await signUp(email, password, name);
     showSuccess('Check your email for a confirmation link.');
     btn.textContent = 'Account Created';
+    setTimeout(function() { btn.disabled = false; btn.textContent = 'Create Account'; }, 4000);
   } catch(err) {
     showError(err.message || 'Sign up failed. Please try again.');
     btn.disabled = false;
@@ -172,5 +175,10 @@ async function handleForgot(e) {
 }
 </script>
 
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
 </body>
 </html>

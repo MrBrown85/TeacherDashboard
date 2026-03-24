@@ -851,8 +851,15 @@ function closeEditStudent() {
 
 function saveEditStudent() {
   const cid = activeCourse;
-  const firstName = (document.getElementById('edit-first').value || '').trim();
-  if (!firstName) { document.getElementById('edit-first').focus(); return; }
+  const firstEl = document.getElementById('edit-first');
+  const firstName = (firstEl.value || '').trim();
+  if (!firstName) {
+    firstEl.style.border = '2px solid var(--score-1)';
+    firstEl.placeholder = 'First name is required';
+    firstEl.oninput = function() { this.style.border = ''; };
+    firstEl.focus();
+    return;
+  }
   const lastName = (document.getElementById('edit-last').value || '').trim();
   const preferred = (document.getElementById('edit-pref').value || '').trim();
   const pronouns = (document.getElementById('edit-pro').value || '').trim();
@@ -914,6 +921,11 @@ document.addEventListener('click', function(e) {
     handlers[action]();
   }
 });
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
 </script>
 </body>
 </html>

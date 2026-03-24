@@ -15,7 +15,7 @@
     <main class="page-main" id="main"></main>
   </div>
 </div>
-<script src="curriculum_data.js"></script>
+<!-- curriculum_data.js (971 KB) is lazy-loaded by loadCurriculumIndex() in gb-data.js -->
 <script src="vendor/supabase.min.js"></script>
 <script src="gb-supabase.js"></script>
 <script src="gb-constants.js"></script>
@@ -72,171 +72,11 @@ async function switchCourse(cid) {
   render();
 }
 
-function render() {
-  if (classManagerOpen) { renderClassManager(); return; }
-  // If active course is archived, switch to first non-archived
-  if (activeCourse && getCourseConfig(activeCourse).archived) {
-    const nonArchived = Object.keys(COURSES).find(c => !getCourseConfig(c).archived);
-    if (nonArchived) { activeCourse = nonArchived; setActiveCourse(nonArchived); }
-  }
-  const cid = activeCourse;
-  const sections = getSections(cid);
-  let students = getStudents(cid);
-  const flags = getFlags(cid);
-  const assessments = getAssessments(cid);
-  const allScores = getScores(cid);
-
-  // Sort
-  switch (sortMode) {
-    case 'last-asc':
-      students = sortStudents(students, 'lastName');
-      break;
-    case 'last-desc':
-      students = sortStudents(students, 'lastName').reverse();
-      break;
-    case 'first-asc':
-      students = sortStudents(students, 'firstName');
-      break;
-    case 'first-desc':
-      students = sortStudents(students, 'firstName').reverse();
-      break;
-    case 'overall-desc':
-      students.sort((a, b) => getOverallProficiency(cid, b.id) - getOverallProficiency(cid, a.id));
-      break;
-    case 'overall-asc':
-      students.sort((a, b) => {
-        const pa = getOverallProficiency(cid, a.id);
-        const pb = getOverallProficiency(cid, b.id);
-        if (pa === 0 && pb === 0) return 0;
-        if (pa === 0) return 1;
-        if (pb === 0) return -1;
-        return pa - pb;
-      });
-      break;
-    case 'flagged':
-      students.sort((a, b) => {
-        const fa = flags[a.id] ? 0 : 1;
-        const fb = flags[b.id] ? 0 : 1;
-        if (fa !== fb) return fa - fb;
-        return (a.lastName||'').localeCompare(b.lastName||'') || (a.firstName||'').localeCompare(b.firstName||'');
-      });
-      break;
-  }
-
-  // Search filter
-  if (searchQuery) {
-    const q = searchQuery.toLowerCase();
-    students = students.filter(s => {
-      return displayName(s).toLowerCase().includes(q) ||
-        (s.firstName||'').toLowerCase().includes(q) ||
-        (s.lastName||'').toLowerCase().includes(q) ||
-        (s.studentNumber||'').toLowerCase().includes(q);
-    });
-  }
-
-  if (showFlaggedOnly) {
-    students = students.filter(s => flags[s.id]);
-  }
-
-  const flagCount = Object.keys(flags).length;
-  const allStudents = getStudents(cid);
-
-  /* ── Compute class-level data ─────────────────────────────── */
-  const overallVals = allStudents.map(s => getOverallProficiency(cid, s.id)).filter(v => v > 0);
-  const classAvg = overallVals.length > 0 ? overallVals.reduce((a, b) => a + b, 0) / overallVals.length : 0;
-  const classR = Math.round(classAvg);
-
-  const coverageVals = allStudents.map(s => getCompletionPct(cid, s.id));
-  const classCoverage = coverageVals.length > 0 ? Math.round(coverageVals.reduce((a, b) => a + b, 0) / coverageVals.length) : 0;
-
-  // Section-level class averages
-  const sectionClassAvgs = sections.map(sec => {
-    const vals = allStudents.map(s => getSectionProficiency(cid, s.id, sec.id)).filter(v => v > 0);
-    const avg = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-    return { section: sec, avg, count: vals.length };
-  });
-
-  // Tag coverage: how many tags have at least some evidence across the class?
-  const allTags = getAllTags(cid);
-  let tagsWithEvidence = 0;
-  const tagCoverageMap = {};
-  allTags.forEach(tag => {
-    const hasEvidence = allStudents.some(s => {
-      const scores = getTagScores(cid, s.id, tag.id);
-      return scores.some(sc => sc.type === 'summative' && sc.score > 0);
-    });
-    tagCoverageMap[tag.id] = hasEvidence;
-    if (hasEvidence) tagsWithEvidence++;
-  });
-  const tagCoveragePct = allTags.length > 0 ? Math.round((tagsWithEvidence / allTags.length) * 100) : 0;
-
-  // Core competency coverage
-  const assessedCCs = new Set();
-  assessments.forEach(a => {
-    (a.coreCompetencyIds || []).forEach(ccId => assessedCCs.add(ccId));
-  });
-  const ccCounts = {};
-  const ccAssessments = {};
-  assessments.forEach(a => {
-    (a.coreCompetencyIds || []).forEach(ccId => {
-      ccCounts[ccId] = (ccCounts[ccId] || 0) + 1;
-      if (!ccAssessments[ccId]) ccAssessments[ccId] = [];
-      ccAssessments[ccId].push(a.title || 'Untitled');
-    });
-  });
-
-  // Recent observations
-  const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
-  const weekAgoStr = weekAgo.toISOString().slice(0, 10);
-  let recentObsCount = 0;
-  allStudents.forEach(s => {
-    const obs = getStudentQuickObs(cid, s.id);
-    recentObsCount += obs.filter(o => o.date >= weekAgoStr).length;
-  });
-
-  // Action items
-  const actionItems = [];
-
-  // Tags with no evidence at all
-  const uncoveredTags = allTags.filter(t => !tagCoverageMap[t.id]);
-  if (uncoveredTags.length > 0) {
-    const secNames = [...new Set(uncoveredTags.map(t => {
-      const sec = getSectionForTag(cid, t.id);
-      return sec ? (sec.shortName || sec.name) : '';
-    }).filter(Boolean))];
-    actionItems.push({ icon: '📋', text: `${uncoveredTags.length} learning standard${uncoveredTags.length !== 1 ? 's' : ''} not yet assessed (${secNames.join(', ')})`, link: 'settings.html?course=' + cid, linkText: 'Plan' });
-  }
-
-  // CCs not yet covered
-  const uncoveredCCs = CORE_COMPETENCIES.filter(cc => !assessedCCs.has(cc.id));
-  if (uncoveredCCs.length > 0) {
-    actionItems.push({ icon: '🎯', text: `${uncoveredCCs.length} core competenc${uncoveredCCs.length !== 1 ? 'ies' : 'y'} not yet tagged: ${uncoveredCCs.map(cc => cc.label).join(', ')}`, link: 'settings.html?course=' + cid, linkText: 'Tag' });
-  }
-
-  // Students with low coverage
-  const lowCoverageStudents = allStudents.filter(s => getCompletionPct(cid, s.id) < 50);
-  if (lowCoverageStudents.length > 0) {
-    actionItems.push({ icon: '⚠️', text: `${lowCoverageStudents.length} student${lowCoverageStudents.length !== 1 ? 's' : ''} below 50% evidence coverage`, link: '', linkText: '' });
-  }
-
-  // Observations prompt
-  if (recentObsCount === 0) {
-    actionItems.push({ icon: '📝', text: 'No observations recorded this week', link: 'observations.html', linkText: 'Observe' });
-  }
-
-  // Students without any observations
-  const unobservedStudents = allStudents.filter(s => getStudentQuickObs(cid, s.id).length === 0);
-  if (unobservedStudents.length > 0) {
-    actionItems.push({ icon: '👤', text: `${unobservedStudents.length} student${unobservedStudents.length !== 1 ? 's have' : ' has'} no observations yet`, link: 'observations.html', linkText: 'Observe' });
-  }
-
-  let html = '';
-
-  /* ── Toolbar (rendered to separate mount) ──────────────── */
+function renderDashToolbar(cid, students, flagCount) {
   const courseOptions = Object.keys(COURSES).filter(cid => !getCourseConfig(cid).archived).map(cid =>
     `<option value="${cid}"${cid === activeCourse ? ' selected' : ''}>${esc(COURSES[cid].name)}</option>`
   ).join('');
-  document.getElementById('dash-toolbar-mount').innerHTML = `<div class="dash-toolbar">
+  return `<div class="dash-toolbar">
     <select class="dash-course-select" onchange="switchCourse(this.value)" aria-label="Select course">${courseOptions}</select>
     <button class="dash-add-btn" data-action="openClassManager">Class Management</button>
     <div class="dash-search-wrap">
@@ -256,10 +96,11 @@ function render() {
     <div class="dash-toolbar-spacer"></div>
     <span class="dash-toolbar-label">${students.length} student${students.length !== 1 ? 's' : ''}</span>
   </div>`;
+}
 
-  // CSV input moved to Class Manager
+function renderOverviewPanel(cid, sections, allStudents, assessments, classAvg, classR, tagCoveragePct, sectionClassAvgs, tagsWithEvidence, allTags, tagCoverageMap, assessedCCs, ccCounts, ccAssessments, recentObsCount, flagCount, actionItems) {
+  let html = '';
 
-  /* ── Overview Panel ─────────────────────────────────────── */
   html += `<div class="dash-section">`;
   html += `<div class="dash-overview">`;
 
@@ -432,33 +273,35 @@ function render() {
 
   html += `</div>`; // close dash-overview
 
-  // ── Birthday Widget ──
+  return html;
+}
+
+function renderBirthdayWidget(cid) {
   const upcomingBdays = getUpcomingBirthdays(cid);
-  if (upcomingBdays.length > 0) {
-    html += `<div class="dash-birthday-box">
-      <div class="dash-section-title">Upcoming Birthdays</div>`;
-    upcomingBdays.forEach(b => {
-      const dob = new Date(b.student.dateOfBirth);
-      const monthDay = dob.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
-      const countdown = b.daysUntil === 0 ? '<span class="bday-today">Today!</span>'
-        : b.daysUntil === 1 ? '<span class="bday-soon">Tomorrow</span>'
-        : `<span class="bday-days">in ${b.daysUntil} days</span>`;
-      html += `<div class="bday-row">
-        <div class="bday-avatar">${initials(b.student)}</div>
-        <div class="bday-info">
-          <div class="bday-name">${esc(displayName(b.student))}</div>
-          <div class="bday-date">${monthDay}</div>
-        </div>
-        <div class="bday-countdown">${countdown}</div>
-      </div>`;
-    });
-    html += `</div>`;
-  }
+  if (upcomingBdays.length === 0) return '';
+  let html = `<div class="dash-birthday-box">
+    <div class="dash-section-title">Upcoming Birthdays</div>`;
+  upcomingBdays.forEach(b => {
+    const dob = new Date(b.student.dateOfBirth);
+    const monthDay = dob.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+    const countdown = b.daysUntil === 0 ? '<span class="bday-today">Today!</span>'
+      : b.daysUntil === 1 ? '<span class="bday-soon">Tomorrow</span>'
+      : `<span class="bday-days">in ${b.daysUntil} days</span>`;
+    html += `<div class="bday-row">
+      <div class="bday-avatar">${initials(b.student)}</div>
+      <div class="bday-info">
+        <div class="bday-name">${esc(displayName(b.student))}</div>
+        <div class="bday-date">${monthDay}</div>
+      </div>
+      <div class="bday-countdown">${countdown}</div>
+    </div>`;
+  });
+  html += `</div>`;
+  return html;
+}
 
-  html += `</div>`; // close dash-section
-
-  /* ── Student Card Grid ──────────────────────────────────── */
-  html += `<div class="dash-section">`;
+function renderStudentCards(cid, students, allStudents, sections, assessments, allScores, flags) {
+  let html = `<div class="dash-section">`;
   if (students.length === 0 && allStudents.length === 0) {
     html += `<div class="dash-empty">
       <div class="dash-empty-icon">👩‍🏫</div>
@@ -510,7 +353,7 @@ function render() {
         obsText = '<span style="color:var(--text-3)">No observations</span>';
       }
 
-      html += `<div class="dash-card${flagged ? ' flagged' : ''}" data-action="goToStudent" data-sid="${st.id}&course=${cid}'">`;
+      html += `<div class="dash-card${flagged ? ' flagged' : ''}" data-action="goToStudent" data-sid="${st.id}" data-course="${cid}">`;
 
       // Header
       html += `<div class="dash-card-header">
@@ -557,6 +400,183 @@ function render() {
     html += `</div>`; // close grid
   }
   html += `</div>`; // close dash-section (students)
+  return html;
+}
+
+function render() {
+  if (classManagerOpen) { renderClassManager(); return; }
+  // If active course is archived, switch to first non-archived
+  if (activeCourse && getCourseConfig(activeCourse).archived) {
+    const nonArchived = Object.keys(COURSES).find(c => !getCourseConfig(c).archived);
+    if (nonArchived) { activeCourse = nonArchived; setActiveCourse(nonArchived); }
+  }
+  const cid = activeCourse;
+  const sections = getSections(cid);
+  let students = getStudents(cid);
+  const flags = getFlags(cid);
+  const assessments = getAssessments(cid);
+  const allScores = getScores(cid);
+
+  // Sort
+  switch (sortMode) {
+    case 'last-asc':
+      students = sortStudents(students, 'lastName');
+      break;
+    case 'last-desc':
+      students = sortStudents(students, 'lastName').reverse();
+      break;
+    case 'first-asc':
+      students = sortStudents(students, 'firstName');
+      break;
+    case 'first-desc':
+      students = sortStudents(students, 'firstName').reverse();
+      break;
+    case 'overall-desc':
+      students.sort((a, b) => getOverallProficiency(cid, b.id) - getOverallProficiency(cid, a.id));
+      break;
+    case 'overall-asc':
+      students.sort((a, b) => {
+        const pa = getOverallProficiency(cid, a.id);
+        const pb = getOverallProficiency(cid, b.id);
+        if (pa === 0 && pb === 0) return 0;
+        if (pa === 0) return 1;
+        if (pb === 0) return -1;
+        return pa - pb;
+      });
+      break;
+    case 'flagged':
+      students.sort((a, b) => {
+        const fa = flags[a.id] ? 0 : 1;
+        const fb = flags[b.id] ? 0 : 1;
+        if (fa !== fb) return fa - fb;
+        return (a.lastName||'').localeCompare(b.lastName||'') || (a.firstName||'').localeCompare(b.firstName||'');
+      });
+      break;
+  }
+
+  // Search filter
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    students = students.filter(s => {
+      return displayName(s).toLowerCase().includes(q) ||
+        (s.firstName||'').toLowerCase().includes(q) ||
+        (s.lastName||'').toLowerCase().includes(q) ||
+        (s.studentNumber||'').toLowerCase().includes(q);
+    });
+  }
+
+  if (showFlaggedOnly) {
+    students = students.filter(s => flags[s.id]);
+  }
+
+  const flagCount = Object.keys(flags).length;
+  const allStudents = getStudents(cid);
+
+  /* ── Compute class-level data ─────────────────────────────── */
+  const overallVals = allStudents.map(s => getOverallProficiency(cid, s.id)).filter(v => v > 0);
+  const classAvg = overallVals.length > 0 ? overallVals.reduce((a, b) => a + b, 0) / overallVals.length : 0;
+  const classR = Math.round(classAvg);
+
+  const coverageVals = allStudents.map(s => getCompletionPct(cid, s.id));
+  const classCoverage = coverageVals.length > 0 ? Math.round(coverageVals.reduce((a, b) => a + b, 0) / coverageVals.length) : 0;
+
+  // Section-level class averages
+  const sectionClassAvgs = sections.map(sec => {
+    const vals = allStudents.map(s => getSectionProficiency(cid, s.id, sec.id)).filter(v => v > 0);
+    const avg = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+    return { section: sec, avg, count: vals.length };
+  });
+
+  // Tag coverage: how many tags have at least some evidence across the class?
+  const allTags = getAllTags(cid);
+  let tagsWithEvidence = 0;
+  const tagCoverageMap = {};
+  allTags.forEach(tag => {
+    const hasEvidence = allStudents.some(s => {
+      const scores = getTagScores(cid, s.id, tag.id);
+      return scores.some(sc => sc.type === 'summative' && sc.score > 0);
+    });
+    tagCoverageMap[tag.id] = hasEvidence;
+    if (hasEvidence) tagsWithEvidence++;
+  });
+  const tagCoveragePct = allTags.length > 0 ? Math.round((tagsWithEvidence / allTags.length) * 100) : 0;
+
+  // Core competency coverage
+  const assessedCCs = new Set();
+  assessments.forEach(a => {
+    (a.coreCompetencyIds || []).forEach(ccId => assessedCCs.add(ccId));
+  });
+  const ccCounts = {};
+  const ccAssessments = {};
+  assessments.forEach(a => {
+    (a.coreCompetencyIds || []).forEach(ccId => {
+      ccCounts[ccId] = (ccCounts[ccId] || 0) + 1;
+      if (!ccAssessments[ccId]) ccAssessments[ccId] = [];
+      ccAssessments[ccId].push(a.title || 'Untitled');
+    });
+  });
+
+  // Recent observations
+  const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
+  const weekAgoStr = weekAgo.toISOString().slice(0, 10);
+  let recentObsCount = 0;
+  allStudents.forEach(s => {
+    const obs = getStudentQuickObs(cid, s.id);
+    recentObsCount += obs.filter(o => o.date >= weekAgoStr).length;
+  });
+
+  // Action items
+  const actionItems = [];
+
+  // Tags with no evidence at all
+  const uncoveredTags = allTags.filter(t => !tagCoverageMap[t.id]);
+  if (uncoveredTags.length > 0) {
+    const secNames = [...new Set(uncoveredTags.map(t => {
+      const sec = getSectionForTag(cid, t.id);
+      return sec ? (sec.shortName || sec.name) : '';
+    }).filter(Boolean))];
+    actionItems.push({ icon: '📋', text: `${uncoveredTags.length} learning standard${uncoveredTags.length !== 1 ? 's' : ''} not yet assessed (${secNames.join(', ')})`, link: 'settings.html?course=' + cid, linkText: 'Plan' });
+  }
+
+  // CCs not yet covered
+  const uncoveredCCs = CORE_COMPETENCIES.filter(cc => !assessedCCs.has(cc.id));
+  if (uncoveredCCs.length > 0) {
+    actionItems.push({ icon: '🎯', text: `${uncoveredCCs.length} core competenc${uncoveredCCs.length !== 1 ? 'ies' : 'y'} not yet tagged: ${uncoveredCCs.map(cc => cc.label).join(', ')}`, link: 'settings.html?course=' + cid, linkText: 'Tag' });
+  }
+
+  // Students with low coverage
+  const lowCoverageStudents = allStudents.filter(s => getCompletionPct(cid, s.id) < 50);
+  if (lowCoverageStudents.length > 0) {
+    actionItems.push({ icon: '⚠️', text: `${lowCoverageStudents.length} student${lowCoverageStudents.length !== 1 ? 's' : ''} below 50% evidence coverage`, link: '', linkText: '' });
+  }
+
+  // Observations prompt
+  if (recentObsCount === 0) {
+    actionItems.push({ icon: '📝', text: 'No observations recorded this week', link: 'observations.html', linkText: 'Observe' });
+  }
+
+  // Students without any observations
+  const unobservedStudents = allStudents.filter(s => getStudentQuickObs(cid, s.id).length === 0);
+  if (unobservedStudents.length > 0) {
+    actionItems.push({ icon: '👤', text: `${unobservedStudents.length} student${unobservedStudents.length !== 1 ? 's have' : ' has'} no observations yet`, link: 'observations.html', linkText: 'Observe' });
+  }
+
+  /* ── Toolbar (rendered to separate mount) ──────────────── */
+  document.getElementById('dash-toolbar-mount').innerHTML = renderDashToolbar(cid, students, flagCount);
+
+  // CSV input moved to Class Manager
+
+  /* ── Overview Panel ─────────────────────────────────────── */
+  let html = '';
+  html += renderOverviewPanel(cid, sections, allStudents, assessments, classAvg, classR, tagCoveragePct, sectionClassAvgs, tagsWithEvidence, allTags, tagCoverageMap, assessedCCs, ccCounts, ccAssessments, recentObsCount, flagCount, actionItems);
+
+  // ── Birthday Widget ──
+  html += renderBirthdayWidget(cid);
+
+  html += `</div>`; // close dash-section
+
+  /* ── Student Card Grid ──────────────────────────────────── */
+  html += renderStudentCards(cid, students, allStudents, sections, assessments, allScores, flags);
 
   document.getElementById('main').innerHTML = html;
 
@@ -615,7 +635,11 @@ function cmSaveStudent() {
   if (!cmSelectedCourse) return;
   const firstName = (document.getElementById('cm-add-first')?.value||'').trim();
   const lastName = (document.getElementById('cm-add-last')?.value||'').trim();
-  if (!firstName) { document.getElementById('cm-add-first')?.focus(); return; }
+  if (!firstName) {
+    const el = document.getElementById('cm-add-first');
+    if (el) { el.style.border = '2px solid var(--score-1)'; el.placeholder = 'First name is required'; el.oninput = function() { this.style.border = ''; }; el.focus(); }
+    return;
+  }
   const preferred = (document.getElementById('cm-add-pref')?.value||'').trim();
   const pronouns = (document.getElementById('cm-add-pro')?.value||'').trim();
   const studentNumber = (document.getElementById('cm-add-num')?.value||'').trim();
@@ -929,7 +953,7 @@ function renderCmDetail(cid) {
     <div class="cm-field">
       <label class="cm-label">Class Name</label>
       <input class="cm-input" id="cm-name" value="${esc(course.name)}"
-        onblur="cmUpdateField('name', this.value)">
+        onblur="cmUpdateField('name', this.value, this)">
     </div>
     <div class="cm-row">
       <div class="cm-field">
@@ -1618,7 +1642,14 @@ function cwGetPreName() {
 
 function cwFinishCreate() {
   const name = cwStep2Name || cwGetPreName();
-  if (!name.trim()) { cwStep = 2; renderClassManager(); return; }
+  if (!name.trim()) {
+    cwStep = 2; renderClassManager();
+    requestAnimationFrame(() => {
+      const el = document.getElementById('cm-new-name');
+      if (el) { el.style.border = '2px solid var(--score-1)'; el.placeholder = 'Class name is required'; el.oninput = function() { this.style.border = ''; }; el.focus(); }
+    });
+    return;
+  }
 
   const course = createCourse({
     name: name.trim(),
@@ -1687,8 +1718,12 @@ function cmCreateToggle(btn, containerId) {
 }
 
 // ── CM Edit Actions (auto-save on blur/change) ──
-function cmUpdateField(field, value) {
+function cmUpdateField(field, value, inputEl) {
   if (!cmSelectedCourse) return;
+  if (field === 'name' && !value.trim()) {
+    if (inputEl) { inputEl.style.border = '2px solid var(--score-1)'; inputEl.placeholder = 'Class name is required'; inputEl.oninput = function() { this.style.border = ''; }; inputEl.focus(); }
+    return;
+  }
   updateCourse(cmSelectedCourse, { [field]: value.trim() });
   // Update sidebar name live
   const nameEl = document.querySelector('.cm-class-item.selected .cm-class-name');
@@ -2234,6 +2269,11 @@ document.addEventListener('click', function(e) {
     handlers[action]();
   }
 });
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
 </script>
 </body>
 </html>

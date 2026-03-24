@@ -550,9 +550,21 @@ function clearAllFilters() {
 
 function submitOb() {
   const input = document.getElementById('capture-input');
-  if (!input || selectedStudents.length === 0) return;
+  if (!input) return;
   const text = input.value.trim();
-  if (!text) { input.focus(); return; }
+  if (selectedStudents.length === 0) {
+    // Highlight the student list to indicate selection is needed
+    const studentList = document.querySelector('.student-list');
+    if (studentList) { studentList.style.border = '2px solid var(--score-1)'; setTimeout(() => { studentList.style.border = ''; }, 2000); }
+    return;
+  }
+  if (!text) {
+    input.style.border = '2px solid var(--score-1)';
+    input.placeholder = 'Enter an observation';
+    input.oninput = function() { this.style.border = ''; };
+    input.focus();
+    return;
+  }
   selectedStudents.forEach(sid => addQuickOb(activeCourse, sid, text, [...activeTags], activeSentiment, activeContext));
   input.value = ''; activeTags = []; activeSentiment = null; activeContext = null;
   render();
@@ -662,6 +674,11 @@ document.addEventListener('click', function(e) {
     handlers[action]();
   }
 });
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
 </script>
 </body>
 </html>
