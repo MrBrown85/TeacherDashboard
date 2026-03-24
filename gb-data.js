@@ -258,11 +258,16 @@ function retrySyncs() {
 async function _deleteFromSupabase(table, key) {
   const sb = getSupabase();
   if (!sb || !_teacherId) return;
-  if (table === 'course_data') {
-    await sb.from('course_data').delete()
-      .eq('teacher_id', _teacherId)
-      .eq('course_id', key.cid)
-      .eq('data_key', key.dataKey);
+  try {
+    if (table === 'course_data') {
+      const { error } = await sb.from('course_data').delete()
+        .eq('teacher_id', _teacherId)
+        .eq('course_id', key.cid)
+        .eq('data_key', key.dataKey);
+      if (error) throw error;
+    }
+  } catch (err) {
+    console.error('Failed to delete from Supabase:', err);
   }
 }
 
