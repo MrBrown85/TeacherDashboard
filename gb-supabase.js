@@ -92,6 +92,10 @@
   window.signOut = async function() {
     const sb = getSupabase();
     if (!sb) return;
+    // Wait for any pending data syncs to finish before clearing local data
+    if (typeof waitForPendingSyncs === 'function') {
+      await waitForPendingSyncs(5000);
+    }
     try {
       const { error } = await sb.auth.signOut();
       if (error) console.warn('Sign-out error (proceeding anyway):', error.message);

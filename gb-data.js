@@ -117,6 +117,20 @@ function getSyncStatus() {
   return { status: _syncStatus, pending: _pendingSyncs };
 }
 
+/** Returns a promise that resolves when all pending syncs complete (or after timeout). */
+function waitForPendingSyncs(timeoutMs = 5000) {
+  if (_pendingSyncs <= 0) return Promise.resolve();
+  return new Promise(resolve => {
+    const start = Date.now();
+    const check = setInterval(() => {
+      if (_pendingSyncs <= 0 || Date.now() - start > timeoutMs) {
+        clearInterval(check);
+        resolve();
+      }
+    }, 100);
+  });
+}
+
 function _updateSyncIndicator() {
   const dot = document.getElementById('sync-indicator-dot');
   if (!dot) return;
@@ -589,6 +603,8 @@ function createCourse(data) {
   COURSES[id] = course;
   saveCourses(COURSES);
   saveLearningMap(id, { subjects:[], sections:[], _customized:true, _version:1 });
+  // Seed all course data to Supabase so it persists across sessions
+  if (_useSupabase) _seedCourseToSupabase(id);
   return course;
 }
 
