@@ -824,7 +824,7 @@ function getSubjectsByGrade(grade) {
 }
 
 function buildLearningMapFromTags(shortTags) {
-  if (!CURRICULUM_INDEX) return { subjects: [], sections: [], _customized: true, _version: 1 };
+  if (!CURRICULUM_INDEX) return { subjects: [], sections: [], _customized: true, _version: 1, _flatVersion: 2 };
   const subjects = [];
   const sections = [];
   const seenCategoryNames = {};
@@ -841,9 +841,6 @@ function buildLearningMapFromTags(shortTags) {
     for (const category of course.categories) {
       if (!category.competencies || category.competencies.length === 0) continue;
 
-      const slug = category.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 20);
-      const sectionId = courseTag + '_' + slug;
-
       let sectionName = category.name;
       if (isHybrid) {
         if (seenCategoryNames[category.name]) {
@@ -855,8 +852,10 @@ function buildLearningMapFromTags(shortTags) {
       }
 
       const shortName = category.name.replace(/\s*\(.*?\)\s*/g, '').split(/\s+and\s+/i)[0].trim();
+      const truncShortName = shortName.length > 20 ? shortName.slice(0, 18) + '\u2026' : shortName;
 
-      const tags = category.competencies.map(comp => {
+      // Flat format: one section per competency (1:1 section-to-tag)
+      for (const comp of category.competencies) {
         let baseId = isHybrid ? (courseTag + '_' + comp.tag) : comp.tag;
         if (usedTagIds[baseId]) {
           usedTagIds[baseId]++;
@@ -864,30 +863,33 @@ function buildLearningMapFromTags(shortTags) {
         } else {
           usedTagIds[baseId] = 1;
         }
-        return {
+        const tag = {
           id: baseId,
           label: comp.short_label,
           text: comp.raw,
-          i_can_statements: comp.i_can_statements || []
+          i_can_statements: comp.i_can_statements || [],
+          color: colour,
+          subject: courseTag,
+          name: sectionName,
+          shortName: truncShortName
         };
-      });
-      addedSections = true;
-
-      sections.push({
-        id: sectionId,
-        subject: courseTag,
-        name: sectionName,
-        shortName: shortName.length > 20 ? shortName.slice(0, 18) + '\u2026' : shortName,
-        color: colour,
-        tags: tags
-      });
+        sections.push({
+          id: baseId,
+          subject: courseTag,
+          name: sectionName,
+          shortName: truncShortName,
+          color: colour,
+          tags: [tag]
+        });
+        addedSections = true;
+      }
     }
     if (addedSections) {
       subjects.push({ id: courseTag, name: course.course_name, color: colour });
     }
   }
 
-  return { subjects, sections, _customized: true, _version: 1 };
+  return { subjects, sections, _customized: true, _version: 1, _flatVersion: 2 };
 }
 
 /* ══════════════════════════════════════════════════════════════════
