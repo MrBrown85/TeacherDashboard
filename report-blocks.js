@@ -162,7 +162,8 @@ window.ReportBlocks = (function() {
       if (secOverride) {
         html += '<div style="font-size:0.62rem;color:var(--text-3);font-style:italic;margin:2px 0 6px;padding-left:2px">Teacher override (calculated: ' + secOverride.calculated + ' ' + (PROF_LABELS[Math.round(secOverride.calculated)] || '') + '): ' + esc(secOverride.reason) + '</div>';
       }
-      sec.tags.forEach(function(tag) {
+      var tag = sec.tags[0];
+      if (tag) {
         var prof = getTagProficiency(cid, student.id, tag.id);
         var r = Math.round(prof);
         var color = PROF_COLORS[r] || PROF_COLORS[0];
@@ -207,7 +208,7 @@ window.ReportBlocks = (function() {
             '<span class="report-outcome-pill" data-prof="' + r + '" data-prof-bg="' + r + '" style="background:' + (prof > 0 ? tint : 'rgba(0,0,0,0.04)') + ';color:' + (prof > 0 ? color : 'var(--text-3)') + '">' + label + '</span>' +
           '</div>' +
         '</div>';
-      });
+      }
       html += '</div>';
     });
     html += '</div>';
