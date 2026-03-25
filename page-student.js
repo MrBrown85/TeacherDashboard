@@ -427,9 +427,8 @@ window.PageStudent = (function() {
     });
 
     tagColGroups.forEach(function(g) {
-      g.tags.forEach(function(tag) {
-        html += '<th class="gt-col-score" style="color:' + g.sec.color + '" title="' + esc(tag.text || tag.label) + '">' + esc(tag.id) + '</th>';
-      });
+      var tag = g.tags[0];
+      if (tag) html += '<th class="gt-col-score" style="color:' + g.sec.color + '" title="' + esc(tag.text || tag.label) + '">' + esc(tag.id) + '</th>';
     });
     html += '<th class="gt-col-avg">Avg</th></tr></thead><tbody>';
 
@@ -463,20 +462,20 @@ window.PageStudent = (function() {
         '<td class="gt-cell-type"><span class="type-badge ' + (assess.type==='summative'?'type-badge-s':'type-badge-f') + '">' + (assess.type==='summative'?'S':'F') + '</span></td>';
 
       tagColGroups.forEach(function(g) {
-        g.tags.forEach(function(tag) {
-          var included = (assess.tagIds||[]).includes(tag.id);
-          if (!included) {
-            html += '<td class="gt-cell-score gt-cell-na"></td>';
+        var tag = g.tags[0];
+        if (!tag) return;
+        var included = (assess.tagIds||[]).includes(tag.id);
+        if (!included) {
+          html += '<td class="gt-cell-score gt-cell-na"></td>';
+        } else {
+          var entry = assessScores.find(function(s) { return s.tagId === tag.id; });
+          var score = entry ? entry.score : 0;
+          if (score > 0) {
+            html += '<td class="gt-cell-score"><span class="gt-score-pip" style="background:' + PROF_COLORS[score] + '">' + score + '</span></td>';
           } else {
-            var entry = assessScores.find(function(s) { return s.tagId === tag.id; });
-            var score = entry ? entry.score : 0;
-            if (score > 0) {
-              html += '<td class="gt-cell-score"><span class="gt-score-pip" style="background:' + PROF_COLORS[score] + '">' + score + '</span></td>';
-            } else {
-              html += '<td class="gt-cell-score"><span class="gt-score-empty">—</span></td>';
-            }
+            html += '<td class="gt-cell-score"><span class="gt-score-empty">—</span></td>';
           }
-        });
+        }
       });
 
       html += '<td class="gt-cell-avg">' + (rowAvg > 0 ? '<span style="color:' + PROF_COLORS[rowAvgR] + ';font-weight:700">' + rowAvg.toFixed(1) + '</span>' : '<span style="color:var(--text-3)">—</span>') + '</td>';
@@ -534,7 +533,8 @@ window.PageStudent = (function() {
         '</div>';
       }
 
-      sec.tags.forEach(function(tag) {
+      var tag = sec.tags[0];
+      if (tag) {
         var tp = getTagProficiency(cid, studentId, tag.id);
         var tagScores = getTagScores(cid, studentId, tag.id).filter(function(s) { return s.type === 'summative'; });
         var evidenceCount = tagScores.length;
@@ -563,7 +563,7 @@ window.PageStudent = (function() {
           });
         }
         html += '</div>';
-      });
+      }
 
       // Goal section
       var goalText = studentGoals[sec.id] || '';

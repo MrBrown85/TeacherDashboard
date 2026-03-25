@@ -58,11 +58,12 @@ window.DashOverview = (function() {
       '<div style="font-family:\'SF Mono\', ui-monospace, \'Menlo\', monospace;font-size:0.52rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-3);margin-bottom:4px">' + tagsWithEvidence + ' of ' + allTags.length + ' standards assessed</div>' +
       '<div class="dash-tag-grid">';
     sections.forEach(function(sec) {
-      sec.tags.forEach(function(tag) {
+      var tag = sec.tags[0];
+      if (tag) {
         var hasEv = tagCoverageMap[tag.id];
         var bg = hasEv ? sec.color : 'rgba(0,0,0,0.06)';
         html += '<div class="dash-tag-pip" title="' + esc(tag.text || tag.label) + (hasEv ? '' : ' \u2014 not yet assessed') + '" style="background:' + bg + '"></div>';
-      });
+      }
     });
     html += '</div></div>';
     html += '</div>';

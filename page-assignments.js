@@ -530,25 +530,14 @@ window.PageAssignments = (function() {
       '<label class="af-label">Learning Outcomes</label>' +
       '<div class="af-tags-container">';
     sections.forEach(function(sec) {
-      var checkedCount = sec.tags.filter(function(t) { return selTags.includes(t.id); }).length;
-      var hasChecked = checkedCount > 0;
-      html += '<div class="af-section-group' + (hasChecked ? ' af-section-open' : '') + '">' +
-        '<div class="af-section-header" style="border-left-color:' + sec.color + '" data-action="toggleSectionOpen">' +
-          '<span class="af-section-chevron">\u25B6</span>' +
-          '<span class="af-section-name" style="color:' + sec.color + '">' + esc(sec.name) + '</span>' +
-          (checkedCount > 0 ? '<span class="af-section-badge" style="background:' + sec.color + '">' + checkedCount + '</span>' : '') +
-          '<button class="af-select-all" data-action="toggleSectionTags" data-secid="' + sec.id + '" data-stop-prop="true">Select All</button>' +
-        '</div>' +
-        '<div class="af-section-tags">';
-      sec.tags.forEach(function(tag) {
-        var checked = selTags.includes(tag.id);
-        html += '<label class="af-tag-item' + (checked?' checked':'') + '" data-section="' + sec.id + '">' +
-          '<input type="checkbox" value="' + tag.id + '" class="af-tag-cb" data-section="' + sec.id + '"' + (checked?' checked':'') + ' data-action-change="tagCheckbox">' +
-          '<span class="af-tag-id" style="color:' + sec.color + '">' + esc(tag.id) + '</span>' +
-          '<span class="af-tag-name">' + esc(tag.label) + '</span>' +
-        '</label>';
-      });
-      html += '</div></div>';
+      var tag = sec.tags[0];
+      if (!tag) return;
+      var checked = selTags.includes(tag.id);
+      html += '<label class="af-tag-item' + (checked?' checked':'') + '" data-section="' + sec.id + '" style="border-left:3px solid ' + sec.color + ';padding-left:8px;margin-bottom:4px">' +
+        '<input type="checkbox" value="' + tag.id + '" class="af-tag-cb" data-section="' + sec.id + '"' + (checked?' checked':'') + ' data-action-change="tagCheckbox">' +
+        '<span class="af-tag-id" style="color:' + sec.color + '">' + esc(tag.id) + '</span>' +
+        '<span class="af-tag-name">' + esc(sec.name) + '</span>' +
+      '</label>';
     });
     html += '</div></div>';
 
