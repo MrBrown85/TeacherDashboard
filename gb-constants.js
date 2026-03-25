@@ -16,16 +16,21 @@
  * @property {string} label - Short display label
  * @property {string} text - Description text
  * @property {string[]} [i_can_statements] - Student-facing learning targets
+ * @property {string} [color] - Hex color code (promoted from section in flat format)
+ * @property {string} [subject] - Parent subject code (promoted from section in flat format)
+ * @property {string} [shortName] - Abbreviated name (promoted from section in flat format)
+ * @property {string} [name] - Full display name (promoted from section in flat format)
+ * @property {string} [_legacySectionId] - Old section ID for migration tracing
  */
 
 /**
  * @typedef {Object} LearningSection
- * @property {string} id - Section identifier
+ * @property {string} id - In flat format, equals the tag ID
  * @property {string} subject - Parent subject code
  * @property {string} name - Full display name
  * @property {string} shortName - Abbreviated name
  * @property {string} color - Hex color code
- * @property {LearningTag[]} tags - Tags within this section
+ * @property {LearningTag[]} tags - Single tag in flat format
  */
 
 /* ── Student Display Helpers ───────────────────────────────── */
@@ -36,52 +41,53 @@ const DEFAULT_COURSES = {
   sci8:  { id:'sci8',  name:'Science 8',  gradingSystem:'proficiency', calcMethod:'mostRecent', decayWeight:0.65, curriculumTags:['SCI8'] }
 };
 
-/* ── Learning Map: Sections & Tags ──────────────────────────── */
+/* ── Learning Map: Learning Standards (flat format) ─────────── */
 const LEARNING_MAP = {
   sci8: {
+    _flatVersion: 2,
     subjects: [
       { id: 'SCI8', name: 'Science 8', color: '#0891b2' }
     ],
     sections: [
       {
-        id: 'SCI8_questioning_and_pred', subject: 'SCI8', name: 'Questioning and Predicting', shortName: 'Questioning', color: '#0891b2',
+        id: 'QAP', subject: 'SCI8', name: 'Questioning and Predicting', shortName: 'Questioning', color: '#0891b2',
         tags: [
-          { id: 'QAP', label: 'Question and Predict', text: '',
+          { id: 'QAP', label: 'Question and Predict', text: '', color: '#0891b2', subject: 'SCI8', name: 'Questioning and Predicting', shortName: 'Questioning',
             i_can_statements: ['I can identify a scientific question that genuinely interests me and pursue it with curiosity.','I can make careful observations of the natural world and generate questions based on what I notice.','I can formulate a hypothesis and predict what I think will happen in an investigation.'] }
         ]
       },
       {
-        id: 'SCI8_planning_and_conduc', subject: 'SCI8', name: 'Planning and Conducting', shortName: 'Planning', color: '#0891b2',
+        id: 'PI', subject: 'SCI8', name: 'Planning and Conducting', shortName: 'Planning', color: '#0891b2',
         tags: [
-          { id: 'PI', label: 'Plan Investigations', text: '',
+          { id: 'PI', label: 'Plan Investigations', text: '', color: '#0891b2', subject: 'SCI8', name: 'Planning and Conducting', shortName: 'Planning',
             i_can_statements: ['I can plan a fair test by identifying and controlling variables.','I can choose the right tools and methods to collect accurate and reliable data.','I can use appropriate SI units and convert between units when needed.','I can follow safety and ethical guidelines during investigations.'] }
         ]
       },
       {
-        id: 'SCI8_processing_and_anal', subject: 'SCI8', name: 'Processing and Analyzing Data and Information', shortName: 'Processing', color: '#0891b2',
+        id: 'IP', subject: 'SCI8', name: 'Processing and Analyzing Data and Information', shortName: 'Processing', color: '#0891b2',
         tags: [
-          { id: 'IP', label: 'Identify Patterns', text: '',
+          { id: 'IP', label: 'Identify Patterns', text: '', color: '#0891b2', subject: 'SCI8', name: 'Processing and Analyzing Data and Information', shortName: 'Processing',
             i_can_statements: ['I can organize data into tables and graphs to reveal patterns.','I can analyze my data to identify trends, patterns, and relationships.','I can apply First Peoples knowledge and perspectives as valid sources of scientific understanding.','I can use scientific understanding to draw conclusions supported by evidence.'] }
         ]
       },
       {
-        id: 'SCI8_evaluating', subject: 'SCI8', name: 'Evaluating', shortName: 'Evaluating', color: '#0891b2',
+        id: 'EM', subject: 'SCI8', name: 'Evaluating', shortName: 'Evaluating', color: '#0891b2',
         tags: [
-          { id: 'EM', label: 'Evaluate Methods', text: '',
+          { id: 'EM', label: 'Evaluate Methods', text: '', color: '#0891b2', subject: 'SCI8', name: 'Evaluating', shortName: 'Evaluating',
             i_can_statements: ['I can identify sources of error in my investigation and suggest specific improvements.','I can evaluate the quality of my data and explain how it could be made more reliable.','I can consider the social, ethical, and environmental implications of a scientific issue.','I can exercise informed skepticism \u2014 questioning claims and demanding evidence.'] }
         ]
       },
       {
-        id: 'SCI8_applying_and_innova', subject: 'SCI8', name: 'Applying and Innovating', shortName: 'Applying', color: '#0891b2',
+        id: 'CA', subject: 'SCI8', name: 'Applying and Innovating', shortName: 'Applying', color: '#0891b2',
         tags: [
-          { id: 'CA', label: 'Community Applications', text: '',
+          { id: 'CA', label: 'Community Applications', text: '', color: '#0891b2', subject: 'SCI8', name: 'Applying and Innovating', shortName: 'Applying',
             i_can_statements: ['I can apply what I\'ve learned in science to a new situation or problem.','I can design a project or solution that addresses a real need in my community or the world.','I can generate and refine creative ideas when problem-solving.'] }
         ]
       },
       {
-        id: 'SCI8_communicating', subject: 'SCI8', name: 'Communicating', shortName: 'Communicating', color: '#0891b2',
+        id: 'SC', subject: 'SCI8', name: 'Communicating', shortName: 'Communicating', color: '#0891b2',
         tags: [
-          { id: 'SC', label: 'Scientific Communication', text: '',
+          { id: 'SC', label: 'Scientific Communication', text: '', color: '#0891b2', subject: 'SCI8', name: 'Communicating', shortName: 'Communicating',
             i_can_statements: ['I can communicate my scientific findings clearly using appropriate scientific vocabulary.','I can use digital tools to represent and share scientific information.','I can express how my local environment and First Peoples perspectives relate to the science I\'m learning.'] }
         ]
       }
