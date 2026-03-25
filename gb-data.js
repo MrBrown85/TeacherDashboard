@@ -439,7 +439,7 @@ function _loadCourseFromLS(cid) {
   if (!modData) {
     modData = _safeParseLS('gb-units-' + cid, null);
     if (modData) {
-      localStorage.setItem('gb-modules-' + cid, JSON.stringify(modData));
+      _safeLSSet('gb-modules-' + cid, JSON.stringify(modData));
       localStorage.removeItem('gb-units-' + cid);
     }
   }
@@ -469,6 +469,14 @@ function _safeParseLS(key, fallback) {
   } catch { return fallback; }
 }
 
+function _safeLSSet(key, value) {
+  try {
+    _safeLSSet(key, value);
+  } catch (e) {
+    console.warn('localStorage write failed (' + key + '):', e);
+  }
+}
+
 function _loadCoursesFromLS() {
   try {
     const stored = JSON.parse(localStorage.getItem('gb-courses'));
@@ -488,7 +496,7 @@ function _saveCourseField(field, cid, value) {
   if (_useSupabase) {
     _syncToSupabase('course_data', { cid, dataKey }, value);
   } else {
-    localStorage.setItem('gb-' + dataKey + '-' + cid, JSON.stringify(value));
+    _safeLSSet('gb-' + dataKey + '-' + cid, JSON.stringify(value));
   }
   _broadcastChange(cid, field);
 }
@@ -597,7 +605,7 @@ function saveCourses(obj) {
   if (_useSupabase) {
     _syncToSupabase('teacher_config', 'courses', obj);
   } else {
-    localStorage.setItem('gb-courses', JSON.stringify(obj));
+    _safeLSSet('gb-courses', JSON.stringify(obj));
   }
 }
 
@@ -842,7 +850,7 @@ function getModules(cid) {
     let data = JSON.parse(localStorage.getItem('gb-modules-' + cid));
     if (!data) {
       data = JSON.parse(localStorage.getItem('gb-units-' + cid));
-      if (data) { localStorage.setItem('gb-modules-' + cid, JSON.stringify(data)); localStorage.removeItem('gb-units-' + cid); }
+      if (data) { _safeLSSet('gb-modules-' + cid, JSON.stringify(data)); localStorage.removeItem('gb-units-' + cid); }
     }
     return data || [];
   } catch { return []; }
@@ -898,7 +906,7 @@ function saveConfig(obj) {
   if (_useSupabase) {
     _syncToSupabase('teacher_config', 'config', obj);
   } else {
-    localStorage.setItem('gb-config', JSON.stringify(obj));
+    _safeLSSet('gb-config', JSON.stringify(obj));
   }
 }
 function getCourseConfig(cid) {
