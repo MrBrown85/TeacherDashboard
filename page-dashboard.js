@@ -1174,26 +1174,26 @@ window.PageDashboard = (function() {
     });
     html += '<button class="cm-add-link" data-action="cmAddSubject">+ Add Subject</button></div>';
 
-    // Sections & Standards
+    // Learning Standards (flat format)
     html += '<div class="cm-field">' +
-      '<label class="cm-label">Sections &amp; Learning Standards</label>';
+      '<label class="cm-label">Learning Standards</label>';
     if ((lm.sections||[]).length === 0) {
       html += '<div class="cm-curriculum-empty">' +
         '<div class="cm-curriculum-empty-icon">\uD83D\uDCD0</div>' +
-        '<div class="cm-curriculum-empty-text">No sections yet. Add a section to start defining your learning standards.</div>' +
+        '<div class="cm-curriculum-empty-text">No learning standards yet. Add a standard to start defining your curriculum.</div>' +
       '</div>';
     }
     (lm.sections||[]).forEach(function(sec) {
+      var tag = sec.tags[0] || {};
       var sub = (lm.subjects||[]).find(function(s) { return s.id === sec.subject; });
       var subName = sub ? sub.name : '';
       var subColor = sub ? sub.color : 'var(--text-3)';
-      html += '<div class="cm-sec-group" id="cm-sec-' + sec.id + '">' +
-        '<div class="cm-sec-header" data-action="cmToggleSec">' +
+      html += '<div class="cm-sec-group open" id="cm-sec-' + sec.id + '">' +
+        '<div class="cm-sec-header">' +
           '<div class="cm-sec-header-top">' +
-            '<span class="cm-sec-chevron">\u25B6</span>' +
             '<div class="cm-sec-color-bar" style="background:' + sec.color + '"></div>' +
             '<span class="cm-sec-name-display">' + esc(sec.name) + '</span>' +
-            '<span class="cm-sec-count">' + sec.tags.length + ' standard' + (sec.tags.length!==1?'s':'') + '</span>' +
+            '<span class="cm-tag-id" style="color:' + sec.color + ';font-size:0.7rem;margin-left:8px">' + esc(tag.id) + '</span>' +
           '</div>' +
           '<div class="cm-sec-header-meta">' +
             '<span class="cm-sec-subject-badge"><span class="cm-sec-subject-dot" style="background:' + subColor + '"></span>' + esc(subName) + '</span>' +
@@ -1202,12 +1202,12 @@ window.PageDashboard = (function() {
         '<div class="cm-sec-body">' +
           '<div class="cm-sec-edit-row">' +
             '<div class="cm-sec-edit-name">' +
-              '<label class="cm-label">Section Name</label>' +
-              '<input class="cm-input" value="' + esc(sec.name) + '" style="font-weight:600;font-size:0.82rem" data-stop-prop="true" data-action-blur="cmSecName" data-secid="' + sec.id + '">' +
+              '<label class="cm-label">Standard Name</label>' +
+              '<input class="cm-input" value="' + esc(sec.name) + '" style="font-weight:600;font-size:0.82rem" data-stop-prop="true" data-action-blur="cmStdName" data-secid="' + sec.id + '">' +
             '</div>' +
             '<div class="cm-sec-edit-subject">' +
               '<label class="cm-label">Subject</label>' +
-              '<select class="cm-input" style="font-size:0.78rem" data-stop-prop="true" data-action-change="cmSecSubject" data-secid="' + sec.id + '">' +
+              '<select class="cm-input" style="font-size:0.78rem" data-stop-prop="true" data-action-change="cmStdSubject" data-secid="' + sec.id + '">' +
                 (lm.subjects||[]).map(function(s) { return '<option value="' + s.id + '"' + (s.id===sec.subject?' selected':'') + '>' + esc(s.name) + '</option>'; }).join('') +
               '</select>' +
             '</div>' +
@@ -1219,23 +1219,20 @@ window.PageDashboard = (function() {
                   '<div class="cm-color-palette" id="cm-palette-section-' + sec.id + '"></div>' +
                 '</div>' +
               '</div>' +
-              '<button class="cm-delete-mini" data-action="cmDeleteSec" data-stop-prop="true" data-secid="' + sec.id + '" title="Delete section" style="width:32px;height:32px;margin-bottom:2px">\u2715</button>' +
+              '<button class="cm-delete-mini" data-action="cmDeleteStd" data-stop-prop="true" data-secid="' + sec.id + '" title="Delete standard" style="width:32px;height:32px;margin-bottom:2px">\u2715</button>' +
             '</div>' +
-          '</div>';
-      sec.tags.forEach(function(tag) {
-        html += '<div class="cm-tag-row">' +
-          '<span class="cm-tag-id" style="color:' + sec.color + '">' + esc(tag.id) + '</span>' +
-          '<div class="cm-tag-fields">' +
-            '<input class="cm-input" value="' + esc(tag.label) + '" placeholder="Standard label" style="padding:5px 8px;font-size:0.82rem;font-weight:500" data-action-blur="cmTagLabel" data-secid="' + sec.id + '" data-tagid="' + tag.id + '">' +
-            '<textarea class="cm-textarea" placeholder="I can\u2026 statement" style="min-height:34px;padding:5px 8px;font-size:0.78rem" data-action-blur="cmTagText" data-secid="' + sec.id + '" data-tagid="' + tag.id + '">' + esc(tag.text||'') + '</textarea>' +
           '</div>' +
-          '<button class="cm-delete-mini" data-action="cmDeleteTag" data-secid="' + sec.id + '" data-tagid="' + tag.id + '" title="Delete tag" aria-label="Delete tag" style="margin-top:4px">\u2715</button>' +
-        '</div>';
-      });
-      html += '<button class="cm-add-link" data-action="cmAddTag" data-secid="' + sec.id + '">+ Add Standard</button>' +
+          '<div class="cm-tag-row" style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">' +
+            '<div class="cm-tag-fields" style="flex:1">' +
+              '<label class="cm-label">Short Label</label>' +
+              '<input class="cm-input" value="' + esc(tag.label) + '" placeholder="Short label" style="padding:5px 8px;font-size:0.82rem;font-weight:500" data-action-blur="cmStdLabel" data-secid="' + sec.id + '">' +
+              '<label class="cm-label" style="margin-top:6px">I can\u2026 Statement</label>' +
+              '<textarea class="cm-textarea" placeholder="I can\u2026 statement" style="min-height:34px;padding:5px 8px;font-size:0.78rem" data-action-blur="cmStdText" data-secid="' + sec.id + '">' + esc(tag.text||'') + '</textarea>' +
+            '</div>' +
+          '</div>' +
         '</div></div>';
     });
-    html += '<button class="cm-add-link" data-action="cmAddSec">+ Add Section</button></div></div>';
+    html += '<button class="cm-add-link" data-action="cmAddStd">+ Add Standard</button></div></div>';
 
     // Section 4: BC Curriculum Link
     var linkedTags = course.curriculumTags || [];
@@ -1968,50 +1965,64 @@ window.PageDashboard = (function() {
     }
   }
 
-  function cmAddSec() {
+  // ── Flat Learning Standard CRUD ──────────────────────────────
+  function cmAddStd() {
     if (!cmSelectedCourse) return;
     var map = ensureCustomLearningMap(cmSelectedCourse);
     if (map.subjects.length === 0) {
       map.subjects.push({ id:'subj1', name:'General', color:'#6366f1' });
     }
     var subId = map.subjects[0].id;
-    var secId = 'S' + Date.now().toString(36).slice(-4).toUpperCase();
+    var stdId = 'S' + Date.now().toString(36).slice(-4).toUpperCase();
+    var colour = map.subjects.find(function(s) { return s.id===subId; })?.color || '#6366f1';
     map.sections.push({
-      id: secId, subject: subId, name:'New Section', shortName:'New',
-      color: map.subjects.find(function(s) { return s.id===subId; })?.color || '#6366f1',
-      tags: [{ id: secId+'1', label:'New Standard', text:'' }]
+      id: stdId, subject: subId, name:'New Standard', shortName:'New', color: colour,
+      tags: [{ id: stdId, label:'New Standard', text:'', color: colour, subject: subId, name:'New Standard', shortName:'New' }]
     });
+    map._flatVersion = 2;
     saveLearningMap(cmSelectedCourse, map);
     render();
     requestAnimationFrame(function() {
-      var el = document.getElementById('cm-sec-'+secId);
+      var el = document.getElementById('cm-sec-'+stdId);
       if (el) { el.classList.add('open'); el.scrollIntoView({behavior:'smooth',block:'center'}); }
     });
   }
 
-  function cmUpdateSecName(secId, val) {
+  function cmUpdateStdName(secId, val) {
     if (!cmSelectedCourse) return;
     var map = ensureCustomLearningMap(cmSelectedCourse);
     var sec = map.sections.find(function(s) { return s.id === secId; });
-    if (sec) { sec.name = val.trim(); sec.shortName = val.trim().split(' ')[0]; saveLearningMap(cmSelectedCourse, map); }
+    if (!sec) return;
+    var trimmed = val.trim();
+    sec.name = trimmed;
+    sec.shortName = trimmed.split(' ')[0];
+    if (sec.tags[0]) { sec.tags[0].name = trimmed; sec.tags[0].shortName = sec.shortName; }
+    saveLearningMap(cmSelectedCourse, map);
   }
 
-  function cmUpdateSecSubject(secId, subId) {
+  function cmUpdateStdSubject(secId, subId) {
     if (!cmSelectedCourse) return;
     var map = ensureCustomLearningMap(cmSelectedCourse);
     var sec = map.sections.find(function(s) { return s.id === secId; });
-    if (sec) { sec.subject = subId; saveLearningMap(cmSelectedCourse, map); }
+    if (!sec) return;
+    sec.subject = subId;
+    if (sec.tags[0]) sec.tags[0].subject = subId;
+    saveLearningMap(cmSelectedCourse, map);
   }
 
-  function cmUpdateSecColor(secId, color) {
+  function cmUpdateStdColor(secId, color) {
     if (!cmSelectedCourse) return;
     var map = ensureCustomLearningMap(cmSelectedCourse);
     var sec = map.sections.find(function(s) { return s.id === secId; });
-    if (sec) { sec.color = color; saveLearningMap(cmSelectedCourse, map); render(); }
+    if (!sec) return;
+    sec.color = color;
+    if (sec.tags[0]) sec.tags[0].color = color;
+    saveLearningMap(cmSelectedCourse, map);
+    render();
   }
 
-  function cmDeleteSec(secId) {
-    showConfirm('Delete Section', 'Delete this section and all its tags? Existing scores are preserved.',
+  function cmDeleteStd(secId) {
+    showConfirm('Delete Standard', 'Delete this learning standard? Existing scores are preserved.',
       'Delete', 'danger', function() {
         var map = ensureCustomLearningMap(cmSelectedCourse);
         map.sections = map.sections.filter(function(s) { return s.id !== secId; });
@@ -2020,55 +2031,31 @@ window.PageDashboard = (function() {
       });
   }
 
-  function cmToggleSec(headerEl) {
-    var group = headerEl.closest('.cm-sec-group');
-    group.classList.toggle('open');
-  }
-
-  function cmAddTag(secId) {
+  function cmUpdateStdLabel(secId, val) {
     if (!cmSelectedCourse) return;
     var map = ensureCustomLearningMap(cmSelectedCourse);
     var sec = map.sections.find(function(s) { return s.id === secId; });
-    if (!sec) return;
-    sec.tags.push({ id: uid(), label:'New Standard', text:'' });
-    saveLearningMap(cmSelectedCourse, map);
-    render();
-    requestAnimationFrame(function() {
-      var el = document.getElementById('cm-sec-'+secId);
-      if (el) el.classList.add('open');
-    });
+    if (sec && sec.tags[0]) { sec.tags[0].label = val.trim(); saveLearningMap(cmSelectedCourse, map); }
   }
 
-  function cmUpdateTagLabel(secId, tagId, val) {
+  function cmUpdateStdText(secId, val) {
     if (!cmSelectedCourse) return;
     var map = ensureCustomLearningMap(cmSelectedCourse);
     var sec = map.sections.find(function(s) { return s.id === secId; });
-    var tag = sec?.tags.find(function(t) { return t.id === tagId; });
-    if (tag) { tag.label = val.trim(); saveLearningMap(cmSelectedCourse, map); }
+    if (sec && sec.tags[0]) { sec.tags[0].text = val.trim(); saveLearningMap(cmSelectedCourse, map); }
   }
 
-  function cmUpdateTagText(secId, tagId, val) {
-    if (!cmSelectedCourse) return;
-    var map = ensureCustomLearningMap(cmSelectedCourse);
-    var sec = map.sections.find(function(s) { return s.id === secId; });
-    var tag = sec?.tags.find(function(t) { return t.id === tagId; });
-    if (tag) { tag.text = val.trim(); saveLearningMap(cmSelectedCourse, map); }
-  }
-
-  function cmDeleteTag(secId, tagId) {
-    if (!cmSelectedCourse) return;
-    var map = ensureCustomLearningMap(cmSelectedCourse);
-    var sec = map.sections.find(function(s) { return s.id === secId; });
-    if (sec) {
-      sec.tags = sec.tags.filter(function(t) { return t.id !== tagId; });
-      saveLearningMap(cmSelectedCourse, map);
-      render();
-      requestAnimationFrame(function() {
-        var el = document.getElementById('cm-sec-'+secId);
-        if (el) el.classList.add('open');
-      });
-    }
-  }
+  // Legacy aliases
+  function cmAddSec() { cmAddStd(); }
+  function cmUpdateSecName(secId, val) { cmUpdateStdName(secId, val); }
+  function cmUpdateSecSubject(secId, subId) { cmUpdateStdSubject(secId, subId); }
+  function cmUpdateSecColor(secId, color) { cmUpdateStdColor(secId, color); }
+  function cmDeleteSec(secId) { cmDeleteStd(secId); }
+  function cmToggleSec(headerEl) { headerEl.closest('.cm-sec-group').classList.toggle('open'); }
+  function cmAddTag(secId) { /* no-op in flat mode */ }
+  function cmUpdateTagLabel(secId, tagId, val) { cmUpdateStdLabel(secId, val); }
+  function cmUpdateTagText(secId, tagId, val) { cmUpdateStdText(secId, val); }
+  function cmDeleteTag(secId, tagId) { cmDeleteStd(secId); }
 
   /* ── Delegated click handler ────────────────────────────── */
   function _handleClick(e) {
@@ -2102,9 +2089,11 @@ window.PageDashboard = (function() {
       'cmAddSubject':         function() { cmAddSubject(); },
       'cmToggleSec':          function() { cmToggleSec(el); },
       'cmDeleteSec':          function() { cmDeleteSec(el.dataset.secid); },
+      'cmDeleteStd':          function() { cmDeleteStd(el.dataset.secid); },
       'cmDeleteTag':          function() { cmDeleteTag(el.dataset.secid, el.dataset.tagid); },
       'cmAddTag':             function() { cmAddTag(el.dataset.secid); },
       'cmAddSec':             function() { cmAddSec(); },
+      'cmAddStd':             function() { cmAddStd(); },
       'cmStartRelink':        function() { cmStartRelink(el.dataset.cid); },
       'cmDuplicateCourse':    function() { cmDuplicateCourse(el.dataset.cid); },
       'cmToggleArchive':      function() { cmToggleArchive(el.dataset.cid); },
@@ -2189,12 +2178,21 @@ window.PageDashboard = (function() {
       cmUpdateSubjectColor(el.dataset.subid, el.value);
       return;
     }
-    // Section subject
+    // Standard subject
+    if (el.dataset.actionChange === 'cmStdSubject') {
+      cmUpdateStdSubject(el.dataset.secid, el.value);
+      return;
+    }
+    // Standard color (via palette)
+    if (el.dataset.actionChange === 'cmStdColor') {
+      cmUpdateStdColor(el.dataset.secid, el.value);
+      return;
+    }
+    // Legacy: Section subject/color
     if (el.dataset.actionChange === 'cmSecSubject') {
       cmUpdateSecSubject(el.dataset.secid, el.value);
       return;
     }
-    // Section color
     if (el.dataset.actionChange === 'cmSecColor') {
       cmUpdateSecColor(el.dataset.secid, el.value);
       return;
@@ -2225,6 +2223,19 @@ window.PageDashboard = (function() {
       cmUpdateSubjectName(el.dataset.subid, el.value);
       return;
     }
+    if (el.dataset.actionBlur === 'cmStdName') {
+      cmUpdateStdName(el.dataset.secid, el.value);
+      return;
+    }
+    if (el.dataset.actionBlur === 'cmStdLabel') {
+      cmUpdateStdLabel(el.dataset.secid, el.value);
+      return;
+    }
+    if (el.dataset.actionBlur === 'cmStdText') {
+      cmUpdateStdText(el.dataset.secid, el.value);
+      return;
+    }
+    // Legacy blur handlers
     if (el.dataset.actionBlur === 'cmSecName') {
       cmUpdateSecName(el.dataset.secid, el.value);
       return;
