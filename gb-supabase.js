@@ -102,13 +102,22 @@
     } catch (err) {
       console.warn('Sign-out exception (proceeding anyway):', err);
     }
-    // Clear all application data from localStorage (FOIPPA: no student data left on shared computers)
+    // Clear all application + auth data from localStorage (FOIPPA: no data left on shared computers)
     const keysToRemove = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && key.startsWith('gb-')) keysToRemove.push(key);
+      if (key && (key.startsWith('gb-') || key.startsWith('sb-'))) keysToRemove.push(key);
     }
     keysToRemove.forEach(k => localStorage.removeItem(k));
+    // Clear session storage and cookies
+    sessionStorage.clear();
+    document.cookie.split(';').forEach(c => {
+      document.cookie = c.trim().split('=')[0] + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
+    });
+    // Clear service worker caches
+    if ('caches' in window) {
+      caches.keys().then(names => names.forEach(name => caches.delete(name)));
+    }
     window.location.href = 'login.html';
   };
 
