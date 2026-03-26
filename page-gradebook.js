@@ -420,20 +420,27 @@ window.PageGradebook = (function() {
       '<button class="gb-scores-add-btn" data-action="showAddAssessPopover" title="New assignment">+ New</button>' +
     '</div>';
 
-    html += '<div class="gb-scores-wrap"><div class="gb-scores-scroll"><table class="gb-scores-table ' + rowH + '" style="font-size:' + _scoreTextSize + 'px">';
+    // Student sidebar (fixed, outside the scrolling table)
+    html += '<div class="gb-scores-layout" style="font-size:' + _scoreTextSize + 'px">';
+    html += '<div class="gb-scores-sidebar">';
+    html += '<div class="gb-scores-sidebar-header">Student</div>';
+    sortedStudents.forEach(function(s, si) {
+      var altClass = si % 2 === 1 ? ' gb-scores-alt' : '';
+      var overall = getOverallProficiency(cid, s.id);
+      var finalPct = overall > 0 ? Math.round(overall / 4 * 100) : 0;
+      var fr = Math.round(overall);
+      html += '<div class="gb-scores-sidebar-row' + altClass + '" data-sid="' + s.id + '">' +
+        '<span class="gb-scores-sidebar-name">' + esc(fullName(s)) + '</span>' +
+        '<span class="gb-scores-sidebar-pct" style="color:' + (overall > 0 ? PROF_COLORS[fr] : 'var(--text-3)') + '">' + (finalPct > 0 ? finalPct + '%' : '\u2014') + '</span>' +
+      '</div>';
+    });
+    html += '</div>';
 
-    // Header row — student name + frozen cols + assignment columns
+    // Scrolling scores grid
+    html += '<div class="gb-scores-wrap"><div class="gb-scores-scroll"><table class="gb-scores-table ' + rowH + '">';
+
+    // Header row — assignment columns only
     html += '<thead><tr>';
-    html += '<th class="gb-scores-corner gb-scores-sticky">Student</th>';
-    if (_pinnedCols.categories) {
-      html += '<th class="gb-scores-frozen">Summ % <span class="gb-pin active" data-action="togglePin" data-col="categories" title="Unpin">\uD83D\uDCCC</span></th>';
-      html += '<th class="gb-scores-frozen">Form %</th>';
-    } else {
-      html += '<th class="gb-scores-frozen" style="display:none"></th>';
-    }
-    if (_pinnedCols.final) {
-      html += '<th class="gb-scores-frozen gb-scores-final">Final <span class="gb-pin active" data-action="togglePin" data-col="final" title="Unpin">\uD83D\uDCCC</span></th>';
-    }
     sortedAssess.forEach(function(a) {
       var isPrimary = a.type === 'summative';
       var typeClass = isPrimary ? ' gb-scores-summ' : ' gb-scores-form';
@@ -455,32 +462,11 @@ window.PageGradebook = (function() {
     });
     html += '</tr></thead>';
 
-    // Data rows
+    // Data rows (scores only — student name is in the sidebar)
     html += '<tbody>';
     sortedStudents.forEach(function(s, si) {
       var altClass = si % 2 === 1 ? ' gb-scores-alt' : '';
       html += '<tr class="gb-scores-row' + altClass + '" data-sid="' + s.id + '">';
-      html += '<td class="gb-scores-name gb-scores-sticky">' + esc(fullName(s)) + '</td>';
-
-      // Frozen summary columns
-      if (_pinnedCols.categories) {
-        // Summative %: average of summative scores only
-        var summScores = (scores[s.id] || []).filter(function(sc) { return sc.type === 'summative' && sc.score > 0; });
-        var summAvg = summScores.length > 0 ? summScores.reduce(function(a, b) { return a + b.score; }, 0) / summScores.length : 0;
-        var summPct = summAvg > 0 ? Math.round(summAvg / 4 * 100) : 0;
-        html += '<td class="gb-scores-frozen">' + (summPct > 0 ? summPct + '%' : '\u2014') + '</td>';
-        // Formative %
-        var formScores = (scores[s.id] || []).filter(function(sc) { return sc.type === 'formative' && sc.score > 0; });
-        var formAvg = formScores.length > 0 ? formScores.reduce(function(a, b) { return a + b.score; }, 0) / formScores.length : 0;
-        var formPct = formAvg > 0 ? Math.round(formAvg / 4 * 100) : 0;
-        html += '<td class="gb-scores-frozen">' + (formPct > 0 ? formPct + '%' : '\u2014') + '</td>';
-      }
-      if (_pinnedCols.final) {
-        var overall = getOverallProficiency(cid, s.id);
-        var finalPct = overall > 0 ? Math.round(overall / 4 * 100) : 0;
-        var fr = Math.round(overall);
-        html += '<td class="gb-scores-frozen gb-scores-final" style="color:' + (overall > 0 ? PROF_COLORS[fr] : 'var(--text-3)') + ';font-weight:700">' + (finalPct > 0 ? finalPct + '%' : '\u2014') + '</td>';
-      }
 
       // Score cells per assignment
       sortedAssess.forEach(function(a) {
@@ -525,7 +511,7 @@ window.PageGradebook = (function() {
 
       html += '</tr>';
     });
-    html += '</tbody></table></div></div>';
+    html += '</tbody></table></div></div></div>'; // close scroll + wrap + layout
     return html;
   }
 
