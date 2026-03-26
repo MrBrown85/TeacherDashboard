@@ -115,6 +115,41 @@ window.PageDashboard = (function() {
 
   // Drag-and-drop for standards between group folders
   var _cmDragStdId = null;
+  var _cmMergeTargetId = null;
+  var _cmMergeHoverTimer = null;
+  var _cmMergeAnimating = false;
+  var CM_GROUP_COLORS = ['#6366f1','#06b6d4','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#64748b'];
+
+  function _cmClearMerge() {
+    if (_cmMergeHoverTimer) { clearTimeout(_cmMergeHoverTimer); _cmMergeHoverTimer = null; }
+    if (_cmMergeTargetId) { var el = document.getElementById('cm-std-' + _cmMergeTargetId); if (el) el.classList.remove('merge-target'); }
+    _cmMergeTargetId = null; _cmMergeAnimating = false;
+  }
+
+  function _cmMergeToNewGroup(draggedId, targetId) {
+    if (!cmSelectedCourse) return;
+    var map = ensureCustomLearningMap(cmSelectedCourse);
+    if (!map.competencyGroups) map.competencyGroups = [];
+    var idx = map.competencyGroups.length;
+    var grp = {
+      id: 'grp_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+      name: 'Group ' + (idx + 1),
+      color: CM_GROUP_COLORS[idx % CM_GROUP_COLORS.length],
+      sortOrder: idx
+    };
+    map.competencyGroups.push(grp);
+    [draggedId, targetId].forEach(function(sid) {
+      var sec = (map.sections || []).find(function(s) { return s.id === sid; });
+      if (sec) sec.groupId = grp.id;
+    });
+    saveLearningMap(cmSelectedCourse, map);
+    renderClassManager();
+    setTimeout(function() {
+      var input = document.querySelector('.mod-folder[data-module-id="' + grp.id + '"] .mod-folder-name-input');
+      if (input) { input.focus(); input.select(); }
+    }, 50);
+  }
+
   (function initCmStdDrag() {
     document.addEventListener('dragstart', function(e) {
       var card = e.target.closest && e.target.closest('.cm-std-card[data-std-drag]');
@@ -126,28 +161,65 @@ window.PageDashboard = (function() {
     });
     document.addEventListener('dragover', function(e) {
       if (!_cmDragStdId) return;
+      // Card-on-card merge: hover over another ungrouped card to create a new group
+      var targetCard = e.target.closest && e.target.closest('.cm-std-card[data-std-drag]');
+      if (targetCard) {
+        var targetId = targetCard.dataset.stdDrag;
+        if (targetId !== _cmDragStdId) {
+          // Check target is ungrouped
+          var map = cmSelectedCourse ? getLearningMap(cmSelectedCourse) : null;
+          var targetSec = map && (map.sections || []).find(function(s) { return s.id === targetId; });
+          if (targetSec && !targetSec.groupId) {
+            e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+            if (_cmMergeTargetId === targetId) return;
+            _cmClearMerge(); _cmMergeTargetId = targetId;
+            _cmMergeHoverTimer = setTimeout(function() {
+              _cmMergeAnimating = true;
+              var el = document.getElementById('cm-std-' + targetId);
+              if (el) el.classList.add('merge-target');
+            }, 300);
+            return;
+          }
+        }
+      } else {
+        if (_cmMergeTargetId) _cmClearMerge();
+      }
+      // Folder drop
       var folder = e.target.closest && e.target.closest('.mod-folder[data-folder-drop]');
       if (!folder) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-      // Add drag-over highlight and auto-open collapsed folder
       document.querySelectorAll('.mod-folder.drag-over').forEach(function(f) { f.classList.remove('drag-over'); });
       folder.classList.add('drag-over');
       if (!folder.classList.contains('open')) folder.classList.add('open');
     });
     document.addEventListener('dragleave', function(e) {
       if (!_cmDragStdId) return;
+      var targetCard = e.target.closest && e.target.closest('.cm-std-card[data-std-drag]');
+      if (targetCard && !targetCard.contains(e.relatedTarget)) {
+        if (_cmMergeTargetId === targetCard.dataset.stdDrag) _cmClearMerge();
+        return;
+      }
       var folder = e.target.closest && e.target.closest('.mod-folder[data-folder-drop]');
       if (folder && !folder.contains(e.relatedTarget)) folder.classList.remove('drag-over');
     });
     document.addEventListener('drop', function(e) {
       if (!_cmDragStdId) return;
+      // Card-on-card merge drop
+      var targetCard = e.target.closest && e.target.closest('.cm-std-card[data-std-drag]');
+      if (targetCard && _cmMergeAnimating && _cmMergeTargetId === targetCard.dataset.stdDrag) {
+        e.preventDefault(); e.stopPropagation();
+        _cmMergeToNewGroup(_cmDragStdId, targetCard.dataset.stdDrag);
+        _cmClearMerge(); _cmDragStdId = null;
+        document.querySelectorAll('.cm-std-card.dragging').forEach(function(c) { c.classList.remove('dragging'); });
+        return;
+      }
+      // Folder drop
       var folder = e.target.closest && e.target.closest('.mod-folder[data-folder-drop]');
       if (!folder) return;
       e.preventDefault();
       var targetGroupId = folder.dataset.folderDrop;
       if (targetGroupId === '__none__') targetGroupId = '';
-      // Update the section's groupId
       if (cmSelectedCourse) {
         var map = ensureCustomLearningMap(cmSelectedCourse);
         var sec = (map.sections || []).find(function(s) { return s.id === _cmDragStdId; });
@@ -163,7 +235,7 @@ window.PageDashboard = (function() {
       document.querySelectorAll('.cm-std-card.dragging').forEach(function(c) { c.classList.remove('dragging'); });
     });
     document.addEventListener('dragend', function() {
-      _cmDragStdId = null;
+      _cmDragStdId = null; _cmClearMerge();
       document.querySelectorAll('.mod-folder.drag-over').forEach(function(f) { f.classList.remove('drag-over'); });
       document.querySelectorAll('.cm-std-card.dragging').forEach(function(c) { c.classList.remove('dragging'); });
     });
@@ -1058,7 +1130,14 @@ window.PageDashboard = (function() {
     }
 
     html += '</div></div>';
+    // Preserve scroll position of the detail pane across re-renders
+    var detailEl = document.querySelector('.cm-detail');
+    var scrollTop = detailEl ? detailEl.scrollTop : 0;
     document.getElementById('main').innerHTML = html;
+    if (scrollTop > 0) {
+      var newDetail = document.querySelector('.cm-detail');
+      if (newDetail) newDetail.scrollTop = scrollTop;
+    }
   }
 
   function renderCmSidebar(courseIds) {
@@ -1772,7 +1851,7 @@ window.PageDashboard = (function() {
   function cmSetGradingSystem(val) {
     if (!cmSelectedCourse) return;
     updateCourse(cmSelectedCourse, { gradingSystem: val });
-    render();
+    renderClassManager();
   }
 
   function cmSetCalcMethod(val) {
@@ -1781,7 +1860,7 @@ window.PageDashboard = (function() {
     cc.calcMethod = val;
     saveCourseConfig(cmSelectedCourse, cc);
     updateCourse(cmSelectedCourse, { calcMethod: val });
-    render();
+    renderClassManager();
   }
 
   function cmUpdateDecay(val) {

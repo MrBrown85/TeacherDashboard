@@ -23,6 +23,34 @@ window.DashCurriculumWizard = (function() {
 
   // Drag-and-drop for competencies between group folders in wizard step 3
   var _cwDragCompId = null;
+  var _cwMergeTargetId = null;
+  var _cwMergeHoverTimer = null;
+  var _cwMergeAnimating = false;
+
+  function _cwClearMerge() {
+    if (_cwMergeHoverTimer) { clearTimeout(_cwMergeHoverTimer); _cwMergeHoverTimer = null; }
+    if (_cwMergeTargetId) { var el = document.querySelector('.cm-std-card[data-comp-drag="' + _cwMergeTargetId + '"]'); if (el) el.classList.remove('merge-target'); }
+    _cwMergeTargetId = null; _cwMergeAnimating = false;
+  }
+
+  function _cwMergeToNewGroup(draggedId, targetId) {
+    var idx = cwCompetencyGroups.length;
+    var grp = {
+      id: 'grp_' + Date.now() + Math.random().toString(36).slice(2, 5),
+      name: 'Group ' + (idx + 1),
+      color: CW_GROUP_COLORS[idx % CW_GROUP_COLORS.length],
+      sortOrder: idx
+    };
+    cwCompetencyGroups.push(grp);
+    cwSectionGroupMap[draggedId] = grp.id;
+    cwSectionGroupMap[targetId] = grp.id;
+    _renderClassManager();
+    setTimeout(function() {
+      var input = document.querySelector('.mod-folder[data-group-id="' + grp.id + '"] .mod-folder-name-input');
+      if (input) { input.focus(); input.select(); }
+    }, 50);
+  }
+
   (function initCwCompDrag() {
     document.addEventListener('dragstart', function(e) {
       var card = e.target.closest && e.target.closest('.cm-std-card[data-comp-drag]');
@@ -34,6 +62,26 @@ window.DashCurriculumWizard = (function() {
     });
     document.addEventListener('dragover', function(e) {
       if (!_cwDragCompId) return;
+      // Card-on-card merge: hover over another ungrouped card to create a new group
+      var targetCard = e.target.closest && e.target.closest('.cm-std-card[data-comp-drag]');
+      if (targetCard) {
+        var targetId = targetCard.dataset.compDrag;
+        if (targetId !== _cwDragCompId && !cwSectionGroupMap[targetId]) {
+          e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+          if (_cwMergeTargetId === targetId) return;
+          _cwClearMerge(); _cwMergeTargetId = targetId;
+          _cwMergeHoverTimer = setTimeout(function() {
+            _cwMergeAnimating = true;
+            var el = document.querySelector('.cm-std-card[data-comp-drag="' + targetId + '"]');
+            if (el) el.classList.add('merge-target');
+          }, 300);
+          return;
+        }
+      } else {
+        // Left the card area — clear merge state
+        if (_cwMergeTargetId) _cwClearMerge();
+      }
+      // Folder drop
       var folder = e.target.closest && e.target.closest('.mod-folder[data-folder-drop]');
       if (!folder) return;
       e.preventDefault();
@@ -44,11 +92,27 @@ window.DashCurriculumWizard = (function() {
     });
     document.addEventListener('dragleave', function(e) {
       if (!_cwDragCompId) return;
+      // Card merge leave
+      var targetCard = e.target.closest && e.target.closest('.cm-std-card[data-comp-drag]');
+      if (targetCard && !targetCard.contains(e.relatedTarget)) {
+        if (_cwMergeTargetId === targetCard.dataset.compDrag) _cwClearMerge();
+        return;
+      }
       var folder = e.target.closest && e.target.closest('.mod-folder[data-folder-drop]');
       if (folder && !folder.contains(e.relatedTarget)) folder.classList.remove('drag-over');
     });
     document.addEventListener('drop', function(e) {
       if (!_cwDragCompId) return;
+      // Card-on-card merge drop
+      var targetCard = e.target.closest && e.target.closest('.cm-std-card[data-comp-drag]');
+      if (targetCard && _cwMergeAnimating && _cwMergeTargetId === targetCard.dataset.compDrag) {
+        e.preventDefault(); e.stopPropagation();
+        _cwMergeToNewGroup(_cwDragCompId, targetCard.dataset.compDrag);
+        _cwClearMerge(); _cwDragCompId = null;
+        document.querySelectorAll('.cm-std-card.dragging').forEach(function(c) { c.classList.remove('dragging'); });
+        return;
+      }
+      // Folder drop
       var folder = e.target.closest && e.target.closest('.mod-folder[data-folder-drop]');
       if (!folder) return;
       e.preventDefault();
@@ -64,7 +128,7 @@ window.DashCurriculumWizard = (function() {
       _renderClassManager();
     });
     document.addEventListener('dragend', function() {
-      _cwDragCompId = null;
+      _cwDragCompId = null; _cwClearMerge();
       document.querySelectorAll('.mod-folder.drag-over').forEach(function(f) { f.classList.remove('drag-over'); });
       document.querySelectorAll('.cm-std-card.dragging').forEach(function(c) { c.classList.remove('dragging'); });
     });
