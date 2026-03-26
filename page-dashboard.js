@@ -244,7 +244,7 @@ window.PageDashboard = (function() {
     html += '<div class="dash-section">';
     html += '<div class="dash-overview">';
 
-    // COLUMN 1: Class Distribution + Learning Outcomes
+    // COLUMN 1: Class Distribution + Curricular Competencies
     html += '<div class="dash-overview-section">';
 
     // Class Distribution
@@ -298,7 +298,7 @@ window.PageDashboard = (function() {
       '</div>';
     }
 
-    html += '<div style="margin-top:14px"><div class="dash-section-title">Learning Outcomes' +
+    html += '<div style="margin-top:14px"><div class="dash-section-title">Curricular Competencies' +
         '<a href="#/gradebook?course=' + cid + '">View Gradebook \u2192</a>' +
       '</div></div>';
 
@@ -1304,8 +1304,10 @@ window.PageDashboard = (function() {
       '</div>' +
     '</div>';
 
-    // Section 3: Curriculum -- Subjects
-    html += '<div class="cm-section">' +
+    html += '</div>'; // close right column
+
+    // Section 3: Curriculum -- Subjects (full width)
+    html += '<div class="cm-section" style="grid-column:1/-1">' +
       '<div class="cm-section-title">Curriculum</div>' +
       '<div class="cm-field">' +
         '<label class="cm-label">Subjects</label>';
@@ -1395,7 +1397,7 @@ window.PageDashboard = (function() {
 
     // Section 4: BC Curriculum Link
     var linkedTags = course.curriculumTags || [];
-    html += '<div class="cm-section">' +
+    html += '<div class="cm-section" style="grid-column:1/-1">' +
       '<div class="cm-section-title">BC Curriculum Link</div>';
     if (linkedTags.length > 0) {
       linkedTags.forEach(function(tag) {
@@ -1412,8 +1414,6 @@ window.PageDashboard = (function() {
         '<button class="cm-relink-btn" data-action="cmStartRelink" data-cid="' + cid + '">Link to BC Curriculum</button>';
     }
     html += '</div>';
-
-    html += '</div>'; // close right column
 
     // Actions row
     var isArchived = cc.archived || false;

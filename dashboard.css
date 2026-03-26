@@ -664,7 +664,7 @@
 .cm-std-header:hover { background:rgba(0,122,255,0.03); }
 /* Drag grip on standard cards */
 .cm-std-card[draggable="true"] .cm-std-header::before {
-  content:'\u283F'; position:absolute; left:4px; top:0; bottom:0;
+  content:'\283F'; position:absolute; left:4px; top:0; bottom:0;
   width:22px; display:flex; align-items:center; justify-content:center;
   color:var(--text-3); font-size:var(--text-lg); opacity:0.2;
   transition:opacity 0.12s; cursor:grab;

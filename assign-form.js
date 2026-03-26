@@ -164,7 +164,7 @@ window.AssignForm = (function() {
 
     // Tags
     html += '<div class="af-field">' +
-      '<label class="af-label">Learning Outcomes</label>' +
+      '<label class="af-label">Curricular Competencies</label>' +
       '<div class="af-tags-container">';
     sections.forEach(function(sec) {
       var checkedCount = sec.tags.filter(function(t) { return selTags.includes(t.id); }).length;

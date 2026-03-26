@@ -484,6 +484,31 @@ window.DashCurriculumWizard = (function() {
     cwStep2Grading = (document.querySelector('#cm-cg-grading .cm-seg-btn.active') || {}).dataset?.val || 'proficiency';
     cwStep2Calc = (document.querySelector('#cm-cg-calc .cm-seg-btn.active') || {}).dataset?.val || 'mostRecent';
     cwStep2Decay = document.getElementById('cm-cg-decay-slider')?.value || '65';
+
+    // Auto-create groups from JSON categories on first entry
+    if (cwCompetencyGroups.length === 0 && cwSelectedTags.length > 0 && CURRICULUM_INDEX) {
+      var colorIdx = 0;
+      cwSelectedTags.forEach(function(courseTag) {
+        var courseData = CURRICULUM_INDEX[courseTag];
+        if (!courseData || !courseData.categories) return;
+        courseData.categories.forEach(function(cat) {
+          var grpId = 'grp_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5) + '_' + colorIdx;
+          cwCompetencyGroups.push({
+            id: grpId,
+            name: cat.name,
+            color: CW_GROUP_COLORS[colorIdx % CW_GROUP_COLORS.length],
+            sortOrder: colorIdx
+          });
+          // Map each competency in this category to the group
+          (cat.competencies || []).forEach(function(comp) {
+            var secId = comp.id || comp.tag;
+            cwSectionGroupMap[secId] = grpId;
+          });
+          colorIdx++;
+        });
+      });
+    }
+
     cwStep = 3;
     _renderClassManager();
   }
