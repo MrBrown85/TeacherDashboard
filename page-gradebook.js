@@ -116,7 +116,7 @@ window.PageGradebook = (function() {
     html += '<select class="gb-course-select" data-action="switchCourse" aria-label="Select course">' + courseOpts + '</select>';
 
     html += '<div class="gb-seg-control" role="tablist" aria-label="View mode">' +
-      '<button class="gb-seg-btn' + (viewMode==='detailed'?' active':'') + '" data-action="setView" data-mode="detailed" role="tab" aria-selected="' + (viewMode==='detailed') + '">Detailed</button>' +
+      '<button class="gb-seg-btn' + (viewMode==='detailed'?' active':'') + '" data-action="setView" data-mode="detailed" role="tab" aria-selected="' + (viewMode==='detailed') + '">Competencies</button>' +
       '<button class="gb-seg-btn' + (viewMode==='scores'?' active':'') + '" data-action="setView" data-mode="scores" role="tab" aria-selected="' + (viewMode==='scores') + '">Scores</button>' +
       '<button class="gb-seg-btn' + (viewMode==='summary'?' active':'') + '" data-action="setView" data-mode="summary" role="tab" aria-selected="' + (viewMode==='summary') + '">Summary</button>' +
     '</div>';
