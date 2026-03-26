@@ -317,11 +317,11 @@
 
 /* Section Strip — Apple HIG 8pt grid */
 .dash-card-sections {
-  display:flex; flex-wrap:wrap; gap:8px; padding:0 16px;
+  display:flex; flex-direction:column; gap:8px; padding:0 16px;
   margin-bottom:8px; position:relative;
 }
 .dash-section-group {
-  display:flex; flex-direction:column; gap:4px; flex:1 1 45%;
+  display:flex; flex-direction:column; gap:4px;
   padding:8px; border-radius:8px;
   background:var(--overlay-hover); min-width:0;
 }
