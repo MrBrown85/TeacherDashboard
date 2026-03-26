@@ -132,7 +132,7 @@ window.PageGradebook = (function() {
 
     html += '<div style="margin-left:auto;display:flex;align-items:center;gap:12px">' +
       '<span class="gb-toolbar-label">' + (assessments.length !== allAssessments.length ? assessments.length + ' OF ' + allAssessments.length : allAssessments.length) + ' ASSIGNMENTS \u00b7 ' + students.length + ' STUDENTS</span>' +
-      (viewMode === 'scores' ? '<button class="gb-scores-export-btn" data-action="exportScoresCSV" title="Export CSV">\u2913 Export</button>' : '') +
+      (viewMode === 'scores' ? '<button class="tb-toggle-btn" data-action="exportScoresCSV" title="Export CSV">\u2913 Export</button>' : '') +
       '<a class="tb-action-btn" href="#/assignments?course=' + activeCourse + '&new=1">+ New Assessment</a>' +
     '</div>';
     html += '</div>';
