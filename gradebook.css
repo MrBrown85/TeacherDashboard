@@ -458,6 +458,15 @@ th.gb-group-alt { background-color: rgba(0,0,0,0.03); }
   background:var(--overlay-hover); color:var(--text-2);
 }
 
+/* Designation tags inline with student name */
+.gb-des-tag {
+  display:inline-block; font-family:'SF Mono', ui-monospace, monospace;
+  font-size:9px; font-weight:700; line-height:1;
+  padding:1px 4px; margin-left:3px; border-radius:3px;
+  background:var(--overlay-hover); color:var(--text-3);
+  vertical-align:middle; cursor:default;
+}
+
 /* Q3: Row headers — scrolls vertically (driven by data) */
 .gb-grid-rowheads {
   grid-row:2; grid-column:1;

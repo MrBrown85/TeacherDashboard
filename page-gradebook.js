@@ -675,8 +675,12 @@ window.PageGradebook = (function() {
       var overall = getOverallProficiency(cid, s.id);
       var finalPct = overall > 0 ? Math.round(overall / 4 * 100) : 0;
       var fr = Math.round(overall);
-      html += '<div class="gb-grid-rowhead' + altClass + '" style="height:' + rowPx + 'px">' +
-        '<span class="gb-grid-rowhead-name">' + esc(fullName(s)) + '</span>' +
+      var desTags = (s.designations || []).map(function(code) {
+        var d = BC_DESIGNATIONS[code]; if (!d) return '';
+        return '<span class="gb-des-tag" title="' + esc(code) + ' \u2014 ' + esc(d.name) + (d.iep ? ' \u00b7 IEP' : '') + (d.modified ? ' \u00b7 Modified' : '') + '">' + esc(code) + '</span>';
+      }).join('');
+      html += '<div class="gb-grid-rowhead' + altClass + '" style="min-height:' + rowPx + 'px">' +
+        '<span class="gb-grid-rowhead-name">' + esc(fullName(s)) + desTags + '</span>' +
         '<span class="gb-grid-rowhead-pct" style="color:' + (overall > 0 ? PROF_COLORS[fr] : 'var(--text-3)') + '">' + (finalPct > 0 ? finalPct + '%' : '\u2014') + '</span>' +
       '</div>';
     });
