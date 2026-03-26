@@ -330,6 +330,22 @@ window.PageGradebook = (function() {
     var aid = colEl.dataset.aid;
     var d = _colHoverData[aid];
     if (!d) return;
+    // Highlight the column header
+    colEl.classList.add('gb-col-hover');
+    // Highlight matching data cells in Q4
+    var table = document.querySelector('.gb-scores-table');
+    if (table) {
+      var colheads = document.querySelectorAll('#gb-colheads .gb-grid-colhead');
+      var colIdx = -1;
+      colheads.forEach(function(el, i) { if (el.dataset.aid === aid) colIdx = i; });
+      if (colIdx >= 0) {
+        table.querySelectorAll('tbody tr').forEach(function(row) {
+          var cell = row.children[colIdx];
+          if (cell) cell.classList.add('gb-col-hover');
+        });
+      }
+    }
+    // Show tooltip
     if (!_colHoverTip) {
       _colHoverTip = document.createElement('div');
       _colHoverTip.className = 'gb-colhead-hover-card';
@@ -346,7 +362,6 @@ window.PageGradebook = (function() {
       (d.tagNames.length && !d.isScoreOnly ? '<div class="gb-hover-tags">' + d.tagNames.map(function(t) { return '<span class="gb-hover-tag">' + esc(t) + '</span>'; }).join('') + '</div>' : '');
     _colHoverTip.innerHTML = html;
     _colHoverTip.style.display = 'block';
-    // Position below the column header
     var rect = colEl.getBoundingClientRect();
     _colHoverTip.style.left = (rect.left + rect.width / 2) + 'px';
     _colHoverTip.style.top = (rect.bottom + 4) + 'px';
@@ -354,6 +369,10 @@ window.PageGradebook = (function() {
 
   function hideColTooltip() {
     if (_colHoverTip) _colHoverTip.style.display = 'none';
+    // Remove all column highlights
+    document.querySelectorAll('.gb-col-hover').forEach(function(el) {
+      el.classList.remove('gb-col-hover');
+    });
   }
 
   /* ── Scroll shadow indicators ──────────────────────────── */

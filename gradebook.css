@@ -399,9 +399,8 @@ th.gb-group-alt { background-color: rgba(0,0,0,0.03); }
   border-right:none;
 }
 .gb-grid-colhead::after {
-  content:''; position:absolute; top:0; right:0; bottom:0; width:0;
+  content:''; position:absolute; top:auto; right:0; bottom:0; height:4px; width:0;
   border-right:0.5px solid var(--divider-subtle);
-  transform-origin:bottom right; transform:skewX(-45deg);
 }
 .gb-grid-colhead-text {
   flex:1; position:relative; overflow:visible;
@@ -574,6 +573,8 @@ th.gb-group-alt { background-color: rgba(0,0,0,0.03); }
   border:1px solid var(--divider-subtle); padding:0; text-align:center;
   white-space:nowrap;
 }
+/* Remove top border on first data row so lines don't bleed into header */
+.gb-scores-table tbody tr:first-child td { border-top:none; }
 
 /* Header — z-index hierarchy: cells(1) < frozen-body(5) < header(8) < corner(12) */
 .gb-scores-table thead th {
@@ -734,6 +735,10 @@ th.gb-group-alt { background-color: rgba(0,0,0,0.03); }
 
 /* Score mode: subtle column highlight */
 .gb-scores-col-active { background:rgba(0,122,255,0.03) !important; }
+
+/* Header hover: highlight entire column */
+.gb-grid-colhead.gb-col-hover { background:var(--active-light) !important; }
+.gb-scores-cell.gb-col-hover { background:var(--active-light) !important; }
 
 /* Text size controls */
 .gb-scores-size-controls {
