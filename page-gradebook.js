@@ -131,7 +131,8 @@ window.PageGradebook = (function() {
     html += '<div class="gb-search-wrap"><span class="gb-search-icon">🔍</span><input class="gb-search-input" type="text" placeholder="Search…" value="' + esc(searchQuery) + '" data-action-input="gbSearch" aria-label="Search students"></div>';
 
     html += '<div style="margin-left:auto;display:flex;align-items:center;gap:12px">' +
-      '<span class="gb-toolbar-label">' + (assessments.length !== allAssessments.length ? assessments.length + ' of ' + allAssessments.length : allAssessments.length) + ' assignments · ' + students.length + ' students</span>' +
+      '<span class="gb-toolbar-label">' + (assessments.length !== allAssessments.length ? assessments.length + ' OF ' + allAssessments.length : allAssessments.length) + ' ASSIGNMENTS \u00b7 ' + students.length + ' STUDENTS</span>' +
+      (viewMode === 'scores' ? '<button class="gb-scores-export-btn" data-action="exportScoresCSV" title="Export CSV">\u2913 Export</button>' : '') +
       '<a class="tb-action-btn" href="#/assignments?course=' + activeCourse + '&new=1">+ New Assessment</a>' +
     '</div>';
     html += '</div>';
@@ -618,27 +619,11 @@ window.PageGradebook = (function() {
     // Assignments sorted newest-first (left)
     var sortedAssess = assessments.slice().sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
 
-    var html = '<div class="gb-scores-toolbar">' +
-      '<div class="gb-scores-pin-toggles">' +
-        '<button class="gb-scores-pin-btn' + (_pinnedCols.categories ? ' active' : '') + '" data-action="togglePin" data-col="categories" title="Toggle category columns">Summ/Form</button>' +
-        '<button class="gb-scores-pin-btn' + (_pinnedCols.final ? ' active' : '') + '" data-action="togglePin" data-col="final" title="Toggle final column">Final</button>' +
-      '</div>' +
-      '<div style="flex:1"></div>' +
-      '<div class="gb-scores-size-controls">' +
-        '<button class="gb-scores-size-btn" data-action="decreaseTextSize" title="Decrease text size">\u2212</button>' +
-        '<span class="gb-scores-size-label">' + _scoreTextSize + 'px</span>' +
-        '<button class="gb-scores-size-btn" data-action="increaseTextSize" title="Increase text size">+</button>' +
-      '</div>' +
-      '<button class="gb-scores-density-btn" data-action="toggleDensity" title="Toggle compact/comfortable">' +
-        (_scoreDensity === 'compact' ? '\u2630' : '\u2261') + '</button>' +
-      '<button class="gb-scores-export-btn" data-action="exportScoresCSV" title="Export CSV">\u2913 Export</button>' +
-      '<button class="gb-scores-add-btn" data-action="showAddAssessPopover" title="New assignment">+ New</button>' +
-    '</div>';
-
-    var rowPx = isCompact ? 28 : 40;
+    var html = '';
+    var rowPx = 40;
 
     // 4-quadrant grid: corner | col-headers / row-headers | data
-    html += '<div class="gb-grid" style="font-size:' + _scoreTextSize + 'px">';
+    html += '<div class="gb-grid">';
 
     // Q1: Corner (top-left, fixed)
     html += '<div class="gb-grid-corner"><div class="gb-grid-corner-inner">Student</div></div>';
