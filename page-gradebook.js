@@ -391,7 +391,33 @@ window.PageGradebook = (function() {
   function renderSummaryTable(cid, students, sections, isLetter, scores) {
     var sortedStudents = applySorting(cid, students, sections, isLetter);
     var html = '<div class="gb-scroll-wrap"><div class="gb-scroll"><table class="gb-table">';
-    html += '<thead><tr><th class="gb-corner gb-sortable" data-action="toggleSort" data-sortkey="name">Student' + sortArrow('name') + '</th>';
+    // Competency group header row (if groups exist)
+    var _gbGrouped = getGroupedSections(cid);
+    var _hasGbGroups = _gbGrouped.groups.some(function(gi) { return gi.sections.length > 0; });
+    html += '<thead>';
+    if (_hasGbGroups) {
+      html += '<tr><th></th><th></th>';
+      if (isLetter) html += '<th></th>';
+      var _secGrpMap = {};
+      _gbGrouped.groups.forEach(function(gi) { gi.sections.forEach(function(s) { _secGrpMap[s.id] = gi.group; }); });
+      // Build colspan cells for groups
+      var _prevGid = '__init__', _span = 0, _cells = [];
+      sections.forEach(function(sec, i) {
+        var grp = _secGrpMap[sec.id]; var gid = grp ? grp.id : '';
+        if (gid === _prevGid) { _span++; }
+        else { if (_span > 0) _cells.push({ gid: _prevGid, grp: _prevGid ? _secGrpMap[sections[i-_span].id] : null, span: _span }); _span = 1; _prevGid = gid; }
+      });
+      if (_span > 0) _cells.push({ gid: _prevGid, grp: _prevGid ? _secGrpMap[sections[sections.length-_span].id] : null, span: _span });
+      _cells.forEach(function(c) {
+        if (c.grp) {
+          html += '<th colspan="' + c.span + '" style="text-align:center;font-size:0.65rem;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:' + c.grp.color + ';padding:4px 2px">' + esc(c.grp.name) + '</th>';
+        } else {
+          html += '<th colspan="' + c.span + '"></th>';
+        }
+      });
+      html += '<th></th><th></th></tr>';
+    }
+    html += '<tr><th class="gb-corner gb-sortable" data-action="toggleSort" data-sortkey="name">Student' + sortArrow('name') + '</th>';
     html += renderOverallHeader();
     if (isLetter) html += '<th class="gb-summary-header gb-sortable" data-action="toggleSort" data-sortkey="grade">Grade' + sortArrow('grade') + '</th>';
     sections.forEach(function(sec) {

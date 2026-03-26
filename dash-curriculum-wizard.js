@@ -14,6 +14,13 @@ window.DashCurriculumWizard = (function() {
   var cwStep2Name = '', cwStep2Grade = '', cwStep2Desc = '';
   var cwStep2Grading = 'proficiency', cwStep2Calc = 'mostRecent', cwStep2Decay = '65';
 
+  // Step 3 (Customize) state
+  var cwCompetencyGroups = [];     // [{id, name, color, sortOrder}]
+  var cwSectionGroupMap = {};      // sectionId -> groupId
+  var cwCustomSections = [];       // [{id, label, text, color}]
+  var cwCollapsedGroups = {};      // groupId -> bool
+  var CW_GROUP_COLORS = ['#6366f1','#06b6d4','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#64748b'];
+
   /* ── State accessors ─────────────────────────────────────── */
   function getState() {
     return {
@@ -41,6 +48,7 @@ window.DashCurriculumWizard = (function() {
     cwLoadError = false;
     cwStep2Name = ''; cwStep2Grade = ''; cwStep2Desc = '';
     cwStep2Grading = 'proficiency'; cwStep2Calc = 'mostRecent'; cwStep2Decay = '65';
+    cwCompetencyGroups = []; cwSectionGroupMap = {}; cwCustomSections = []; cwCollapsedGroups = {};
   }
 
   function setCurriculumLoaded(loaded, error) {
@@ -71,12 +79,13 @@ window.DashCurriculumWizard = (function() {
   function renderCmCreateForm() {
     if (cwStep === 1) return renderCwStep1();
     if (cwStep === 2) return renderCwStep2();
-    if (cwStep === 3) return renderCwStep3();
+    if (cwStep === 3) return renderCwStep3Customize();
+    if (cwStep === 4) return renderCwStep4Review();
     return '';
   }
 
   function renderCwStepBar() {
-    var labels = ['Choose Courses', 'Class Details', 'Review'];
+    var labels = ['Choose Courses', 'Class Details', 'Customize', 'Review'];
     return '<div class="cw-steps">' + labels.map(function(l, i) {
       var n = i + 1;
       var cls = n < cwStep ? 'done' : n === cwStep ? 'active' : '';
@@ -218,12 +227,181 @@ window.DashCurriculumWizard = (function() {
     return html;
   }
 
-  function renderCwStep3() {
+  /* ── Step 3: Customize Competencies ────────────────────────── */
+  function _cwBuildSectionList() {
+    var sections = [];
+    if (cwSelectedTags.length > 0 && CURRICULUM_INDEX) {
+      cwSelectedTags.forEach(function(courseTag) {
+        var courseData = CURRICULUM_INDEX[courseTag];
+        if (!courseData) return;
+        (courseData.categories || []).forEach(function(cat) {
+          (cat.competencies || []).forEach(function(comp) {
+            sections.push({ id: comp.id || comp.tag, label: comp.short_label || comp.tag, tag: comp.tag, catName: cat.name, courseTag: courseTag });
+          });
+        });
+      });
+    }
+    cwCustomSections.forEach(function(cs) {
+      sections.push({ id: cs.id, label: cs.label, tag: cs.id, catName: 'Custom', courseTag: '', _custom: true });
+    });
+    return sections;
+  }
+
+  function renderCwStep3Customize() {
     var html = '<div class="cm-detail-inner" style="display:block">';
     html += renderCwStepBar();
 
-    var className = document.getElementById('cm-new-name')?.value || cwGetPreName();
-    var gradeLevel = document.getElementById('cm-new-grade')?.value || (cwSelectedGrade ? String(cwSelectedGrade) : '');
+    var allSections = _cwBuildSectionList();
+
+    html += '<div class="cm-section"><div class="cm-section-title">Customize Competencies</div>' +
+      '<div class="cm-hint" style="margin-bottom:12px">Organize your competencies into groups, or leave them ungrouped. This step is optional.</div>';
+
+    // Render groups
+    cwCompetencyGroups.sort(function(a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
+    cwCompetencyGroups.forEach(function(grp, gi) {
+      var groupSections = allSections.filter(function(s) { return cwSectionGroupMap[s.id] === grp.id; });
+      var collapsed = cwCollapsedGroups[grp.id];
+      html += '<div class="cw-comp-folder' + (collapsed ? '' : ' open') + '" data-group-id="' + grp.id + '">' +
+        '<div class="cw-comp-folder-header" data-action="cwToggleGroup" data-gid="' + grp.id + '">' +
+          '<span class="cw-comp-chevron">' + (collapsed ? '\u25B6' : '\u25BC') + '</span>' +
+          '<span class="cw-comp-color" style="background:' + grp.color + '">' +
+            '<input type="color" value="' + grp.color + '" data-action-change="cwGroupColor" data-gid="' + grp.id + '" style="opacity:0;position:absolute;width:100%;height:100%;cursor:pointer">' +
+          '</span>' +
+          '<input class="cw-comp-name-input" value="' + esc(grp.name) + '" data-action-blur="cwGroupName" data-gid="' + grp.id + '" data-stop-prop="true">' +
+          '<span class="cw-comp-meta">' + groupSections.length + ' item' + (groupSections.length !== 1 ? 's' : '') + '</span>' +
+          '<button class="cw-comp-delete" data-action="cwDeleteGroup" data-gid="' + grp.id + '" data-stop-prop="true" title="Delete group">\u2715</button>' +
+        '</div>' +
+        '<div class="cw-comp-folder-body"' + (collapsed ? ' style="display:none"' : '') + '>';
+      if (groupSections.length === 0) {
+        html += '<div class="cw-comp-empty">Drag competencies here or use the dropdown on each competency</div>';
+      }
+      groupSections.forEach(function(sec) {
+        html += _cwRenderCompItem(sec, grp.id);
+      });
+      html += '</div></div>';
+    });
+
+    // Ungrouped
+    var ungrouped = allSections.filter(function(s) { return !cwSectionGroupMap[s.id]; });
+    html += '<div class="cw-comp-folder cw-comp-ungrouped open">' +
+      '<div class="cw-comp-folder-header" data-action="cwToggleGroup" data-gid="__none__">' +
+        '<span class="cw-comp-chevron">\u25BC</span>' +
+        '<span style="font-size:0.88rem;color:var(--text-3)">\uD83D\uDCC1</span>' +
+        '<span style="font-size:0.95rem;font-weight:500;color:var(--text-3)">Ungrouped</span>' +
+        '<span class="cw-comp-meta">' + ungrouped.length + ' item' + (ungrouped.length !== 1 ? 's' : '') + '</span>' +
+      '</div>' +
+      '<div class="cw-comp-folder-body">';
+    ungrouped.forEach(function(sec) {
+      html += _cwRenderCompItem(sec, null);
+    });
+    html += '</div></div>';
+
+    // Action buttons
+    html += '<div style="display:flex;gap:8px;margin-top:12px">' +
+      '<button class="cw-custom-btn" data-action="cwAddGroup" style="flex:0">\u2795 Add Group</button>' +
+      '<button class="cw-custom-btn" data-action="cwAddCustomComp" style="flex:0">\u2795 Add Custom Competency</button>' +
+    '</div>';
+
+    html += '</div>'; // close cm-section
+
+    html += '<div class="cw-footer">' +
+      '<button class="btn btn-ghost" data-action="cwGoBack">Back</button>' +
+      '<button class="btn btn-ghost" data-action="cwGoToStep4">Skip</button>' +
+      '<button class="btn btn-primary" data-action="cwGoToStep4">Next</button>' +
+    '</div>';
+    html += '</div>';
+    return html;
+  }
+
+  function _cwRenderCompItem(sec, currentGroupId) {
+    var groupOptions = '<option value=""' + (!currentGroupId ? ' selected' : '') + '>None</option>';
+    cwCompetencyGroups.forEach(function(g) {
+      groupOptions += '<option value="' + g.id + '"' + (currentGroupId === g.id ? ' selected' : '') + '>' + esc(g.name) + '</option>';
+    });
+    return '<div class="cw-comp-item" draggable="true" data-comp-drag="' + esc(sec.id) + '">' +
+      '<span class="cw-comp-tag" style="color:var(--text-3)">' + esc(sec.tag) + '</span>' +
+      '<span class="cw-comp-label">' + esc(sec.label) + '</span>' +
+      '<select class="cw-comp-group-select" data-action-change="cwCompGroupChange" data-secid="' + esc(sec.id) + '" data-stop-prop="true">' + groupOptions + '</select>' +
+      (sec._custom ? '<button class="cw-comp-remove" data-action="cwRemoveCustomComp" data-secid="' + esc(sec.id) + '" data-stop-prop="true" title="Remove">\u2715</button>' : '') +
+    '</div>';
+  }
+
+  /* ── Step 3 actions ──────────────────────────────────────── */
+  function cwAddGroup() {
+    var idx = cwCompetencyGroups.length;
+    cwCompetencyGroups.push({
+      id: 'grp_' + Date.now() + Math.random().toString(36).slice(2,5),
+      name: 'Group ' + (idx + 1),
+      color: CW_GROUP_COLORS[idx % CW_GROUP_COLORS.length],
+      sortOrder: idx
+    });
+    _renderClassManager();
+    setTimeout(function() {
+      var inputs = document.querySelectorAll('.cw-comp-name-input');
+      var last = inputs[inputs.length - 1];
+      if (last) { last.focus(); last.select(); }
+    }, 50);
+  }
+
+  function cwDeleteGroup(gid) {
+    cwCompetencyGroups = cwCompetencyGroups.filter(function(g) { return g.id !== gid; });
+    Object.keys(cwSectionGroupMap).forEach(function(secId) {
+      if (cwSectionGroupMap[secId] === gid) delete cwSectionGroupMap[secId];
+    });
+    _renderClassManager();
+  }
+
+  function cwToggleGroup(gid) {
+    cwCollapsedGroups[gid] = !cwCollapsedGroups[gid];
+    var folder = document.querySelector('.cw-comp-folder[data-group-id="' + gid + '"]');
+    if (folder) {
+      folder.classList.toggle('open', !cwCollapsedGroups[gid]);
+      var chevron = folder.querySelector('.cw-comp-chevron');
+      if (chevron) chevron.textContent = cwCollapsedGroups[gid] ? '\u25B6' : '\u25BC';
+      var body = folder.querySelector('.cw-comp-folder-body');
+      if (body) body.style.display = cwCollapsedGroups[gid] ? 'none' : '';
+    }
+  }
+
+  function cwUpdateGroupName(gid, name) {
+    var g = cwCompetencyGroups.find(function(x) { return x.id === gid; });
+    if (g && name.trim()) g.name = name.trim();
+  }
+
+  function cwUpdateGroupColor(gid, color) {
+    var g = cwCompetencyGroups.find(function(x) { return x.id === gid; });
+    if (g) { g.color = color; _renderClassManager(); }
+  }
+
+  function cwCompGroupChange(secId, groupId) {
+    if (groupId) cwSectionGroupMap[secId] = groupId;
+    else delete cwSectionGroupMap[secId];
+    _renderClassManager();
+  }
+
+  function cwAddCustomComp() {
+    var id = 'custom_' + Date.now() + Math.random().toString(36).slice(2,5);
+    cwCustomSections.push({ id: id, label: 'Custom ' + (cwCustomSections.length + 1), text: '' });
+    _renderClassManager();
+    setTimeout(function() {
+      var items = document.querySelectorAll('.cw-comp-item[data-comp-drag="' + id + '"] .cw-comp-label');
+      // Focus won't work on span, but the item is visible
+    }, 50);
+  }
+
+  function cwRemoveCustomComp(secId) {
+    cwCustomSections = cwCustomSections.filter(function(s) { return s.id !== secId; });
+    delete cwSectionGroupMap[secId];
+    _renderClassManager();
+  }
+
+  /* ── Step 4: Review ──────────────────────────────────────── */
+  function renderCwStep4Review() {
+    var html = '<div class="cm-detail-inner" style="display:block">';
+    html += renderCwStepBar();
+
+    var className = cwStep2Name || cwGetPreName();
+    var gradeLevel = cwStep2Grade || (cwSelectedGrade ? String(cwSelectedGrade) : '');
 
     html += '<div class="cm-section"><div class="cm-section-title">Review</div>' +
       '<div class="cm-field"><label class="cm-label">Class Name</label><div style="font-size:var(--text-lg);font-weight:600;color:var(--text)">' + esc(className || 'Untitled') + '</div></div>' +
@@ -252,6 +430,16 @@ window.DashCurriculumWizard = (function() {
       });
     } else {
       html += '<div class="cm-section"><div class="cw-empty-msg">Custom class \u2014 no curriculum data. You can add sections and tags manually after creation.</div></div>';
+    }
+
+    // Show competency groups summary if any
+    if (cwCompetencyGroups.length > 0) {
+      html += '<div class="cm-section"><div class="cm-section-title">Competency Groups</div>';
+      cwCompetencyGroups.forEach(function(grp) {
+        var count = Object.values(cwSectionGroupMap).filter(function(gid) { return gid === grp.id; }).length;
+        html += '<div class="cw-review-sec"><span class="cw-review-sec-dot" style="background:' + grp.color + '"></span>' + esc(grp.name) + '<span class="cw-review-sec-count">' + count + ' competenc' + (count !== 1 ? 'ies' : 'y') + '</span></div>';
+      });
+      html += '</div>';
     }
 
     html += '<div class="cw-footer"><button class="btn btn-ghost" data-action="cwGoBack">Back</button><button class="btn btn-primary" data-action="cwFinishCreate">Create Class</button></div>';
@@ -302,8 +490,14 @@ window.DashCurriculumWizard = (function() {
     _renderClassManager();
   }
 
+  function cwGoToStep4() {
+    cwStep = 4;
+    _renderClassManager();
+  }
+
   function cwGoBack() {
-    if (cwStep === 3) cwStep = 2;
+    if (cwStep === 4) cwStep = 3;
+    else if (cwStep === 3) cwStep = 2;
     else if (cwStep === 2) cwStep = 1;
     _renderClassManager();
   }
@@ -344,6 +538,25 @@ window.DashCurriculumWizard = (function() {
     if (cwSelectedTags.length > 0 && CURRICULUM_INDEX) {
       var map = buildLearningMapFromTags(cwSelectedTags);
       if (map) {
+        // Apply competency groups from step 3
+        if (cwCompetencyGroups.length > 0) {
+          map.competencyGroups = cwCompetencyGroups.slice();
+          (map.sections || []).forEach(function(sec) {
+            if (cwSectionGroupMap[sec.id]) sec.groupId = cwSectionGroupMap[sec.id];
+          });
+        }
+        // Add custom sections from step 3
+        cwCustomSections.forEach(function(cs) {
+          var sub = (map.subjects && map.subjects[0]) ? map.subjects[0].id : '';
+          var color = (map.subjects && map.subjects[0]) ? map.subjects[0].color : '#6366f1';
+          var sec = {
+            id: cs.id, subject: sub, name: cs.label, shortName: cs.label,
+            color: color, _custom: true,
+            tags: [{ id: cs.id, label: cs.label, text: cs.text || '', color: color, subject: sub, name: cs.label, shortName: cs.label, i_can_statements: [] }]
+          };
+          if (cwSectionGroupMap[cs.id]) sec.groupId = cwSectionGroupMap[cs.id];
+          map.sections.push(sec);
+        });
         saveLearningMap(course.id, map);
         updateCourse(course.id, { curriculumTags: cwSelectedTags.slice() });
       }
@@ -372,15 +585,25 @@ window.DashCurriculumWizard = (function() {
     renderCwStepBar: renderCwStepBar,
     renderCwStep1: renderCwStep1,
     renderCwStep2: renderCwStep2,
-    renderCwStep3: renderCwStep3,
+    renderCwStep3Customize: renderCwStep3Customize,
+    renderCwStep4Review: renderCwStep4Review,
     cwSelectGrade: cwSelectGrade,
     cwSelectSubject: cwSelectSubject,
     cwToggleCourse: cwToggleCourse,
     cwSkipToCustom: cwSkipToCustom,
     cwGoToStep2: cwGoToStep2,
     cwGoToStep3: cwGoToStep3,
+    cwGoToStep4: cwGoToStep4,
     cwGoBack: cwGoBack,
     cwGetPreName: cwGetPreName,
-    cwFinishCreate: cwFinishCreate
+    cwFinishCreate: cwFinishCreate,
+    cwAddGroup: cwAddGroup,
+    cwDeleteGroup: cwDeleteGroup,
+    cwToggleGroup: cwToggleGroup,
+    cwUpdateGroupName: cwUpdateGroupName,
+    cwUpdateGroupColor: cwUpdateGroupColor,
+    cwCompGroupChange: cwCompGroupChange,
+    cwAddCustomComp: cwAddCustomComp,
+    cwRemoveCustomComp: cwRemoveCustomComp
   };
 })();

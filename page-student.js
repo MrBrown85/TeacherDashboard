@@ -372,16 +372,30 @@ window.PageStudent = (function() {
         '<div class="completion-stat"><strong>' + coveredTags + '/' + allTags.length + '</strong> tags covered</div>' +
       '</div>' +
     '</div>';
-    sections.forEach(function(sec) {
+    var _stGrouped = getGroupedSections(cid);
+    var _renderSecMini = function(sec) {
       var sp = getSectionProficiency(cid, studentId, sec.id);
       var isActive = activeSectionFilters.has(sec.id);
       var isDimmed = activeSectionFilters.size > 0 && !isActive;
-      html += '<div class="section-mini-card' + (isActive ? ' active-filter' : '') + (isDimmed ? ' dimmed' : '') + '" data-action="toggleSectionFilter" data-secid="' + sec.id + '">' +
+      return '<div class="section-mini-card' + (isActive ? ' active-filter' : '') + (isDimmed ? ' dimmed' : '') + '" data-action="toggleSectionFilter" data-secid="' + sec.id + '">' +
         '<div class="section-mini-stripe" style="background:' + sec.color + '"></div>' +
-        '<div class="section-mini-val" style="color:' + (sp > 0 ? sec.color : 'var(--text-3)') + '">' + (sp > 0 ? sp.toFixed(1) : '—') + '</div>' +
+        '<div class="section-mini-val" style="color:' + (sp > 0 ? sec.color : 'var(--text-3)') + '">' + (sp > 0 ? sp.toFixed(1) : '\u2014') + '</div>' +
         '<div class="section-mini-label">' + esc(sec.name) + '</div>' +
       '</div>';
-    });
+    };
+    if (_stGrouped.groups.length > 0) {
+      _stGrouped.groups.forEach(function(gi) {
+        if (gi.sections.length === 0) return;
+        html += '<div style="display:flex;flex-direction:column;gap:2px;border-left:2px solid ' + gi.group.color + ';padding-left:4px;margin-top:8px">' +
+          '<div style="font-size:8px;text-transform:uppercase;letter-spacing:0.5px;color:' + gi.group.color + ';font-weight:600">' + esc(gi.group.name) + '</div>' +
+          '<div style="display:flex;gap:4px">';
+        gi.sections.forEach(function(sec) { html += _renderSecMini(sec); });
+        html += '</div></div>';
+      });
+      _stGrouped.ungrouped.forEach(function(sec) { html += _renderSecMini(sec); });
+    } else {
+      sections.forEach(function(sec) { html += _renderSecMini(sec); });
+    }
     html += '</div>';
 
     // ── Assessment Grades Table ──

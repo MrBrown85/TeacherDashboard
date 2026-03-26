@@ -414,17 +414,45 @@ window.PageDashboard = (function() {
           (missingCount > 0 ? '<span class="dash-card-missing" title="' + missingCount + ' past-due unscored">\u26A0' + missingCount + '</span>' : '') +
         '</div>';
 
-        // Section strip
+        // Section strip (with optional competency groups)
         html += '<div class="dash-card-sections">';
-        sections.forEach(function(sec) {
-          var secVal = getSectionProficiency(cid, st.id, sec.id);
-          var sr = Math.round(secVal);
-          html += '<div class="dash-section-mini" style="background:' + PROF_TINT[sr] + '">' +
-            '<div style="position:absolute;top:0;left:4px;right:4px;height:3px;border-radius:2px;background:' + sec.color + '"></div>' +
-            '<div class="dash-section-name">' + esc(sec.shortName || sec.name) + '</div>' +
-            '<div class="dash-section-val" style="color:' + PROF_COLORS[sr] + '">' + (secVal > 0 ? secVal.toFixed(1) : '\u2014') + '</div>' +
-          '</div>';
-        });
+        var _grouped = getGroupedSections(cid);
+        if (_grouped.groups.length > 0) {
+          _grouped.groups.forEach(function(gi) {
+            if (gi.sections.length === 0) return;
+            html += '<div class="dash-section-group" style="border-left:2px solid ' + gi.group.color + ';padding-left:2px;border-radius:4px">' +
+              '<div class="dash-section-group-label" style="color:' + gi.group.color + '">' + esc(gi.group.name) + '</div>';
+            gi.sections.forEach(function(sec) {
+              var secVal = getSectionProficiency(cid, st.id, sec.id);
+              var sr = Math.round(secVal);
+              html += '<div class="dash-section-mini" style="background:' + PROF_TINT[sr] + '">' +
+                '<div style="position:absolute;top:0;left:4px;right:4px;height:3px;border-radius:2px;background:' + sec.color + '"></div>' +
+                '<div class="dash-section-name">' + esc(sec.shortName || sec.name) + '</div>' +
+                '<div class="dash-section-val" style="color:' + PROF_COLORS[sr] + '">' + (secVal > 0 ? secVal.toFixed(1) : '\u2014') + '</div>' +
+              '</div>';
+            });
+            html += '</div>';
+          });
+          _grouped.ungrouped.forEach(function(sec) {
+            var secVal = getSectionProficiency(cid, st.id, sec.id);
+            var sr = Math.round(secVal);
+            html += '<div class="dash-section-mini" style="background:' + PROF_TINT[sr] + '">' +
+              '<div style="position:absolute;top:0;left:4px;right:4px;height:3px;border-radius:2px;background:' + sec.color + '"></div>' +
+              '<div class="dash-section-name">' + esc(sec.shortName || sec.name) + '</div>' +
+              '<div class="dash-section-val" style="color:' + PROF_COLORS[sr] + '">' + (secVal > 0 ? secVal.toFixed(1) : '\u2014') + '</div>' +
+            '</div>';
+          });
+        } else {
+          sections.forEach(function(sec) {
+            var secVal = getSectionProficiency(cid, st.id, sec.id);
+            var sr = Math.round(secVal);
+            html += '<div class="dash-section-mini" style="background:' + PROF_TINT[sr] + '">' +
+              '<div style="position:absolute;top:0;left:4px;right:4px;height:3px;border-radius:2px;background:' + sec.color + '"></div>' +
+              '<div class="dash-section-name">' + esc(sec.shortName || sec.name) + '</div>' +
+              '<div class="dash-section-val" style="color:' + PROF_COLORS[sr] + '">' + (secVal > 0 ? secVal.toFixed(1) : '\u2014') + '</div>' +
+            '</div>';
+          });
+        }
         html += '</div>';
 
         // Footer
@@ -1174,6 +1202,26 @@ window.PageDashboard = (function() {
     });
     html += '<button class="cm-add-link" data-action="cmAddSubject">+ Add Subject</button></div>';
 
+    // Competency Groups
+    var compGroups = lm.competencyGroups || [];
+    html += '<div class="cm-field"><label class="cm-label">Competency Groups</label>';
+    if (compGroups.length === 0) {
+      html += '<div class="cm-hint" style="margin-bottom:6px">No groups yet. Groups let you organize learning standards into named categories on student cards and reports.</div>';
+    }
+    compGroups.forEach(function(grp) {
+      var count = (lm.sections || []).filter(function(s) { return s.groupId === grp.id; }).length;
+      html += '<div class="cm-subject-row">' +
+        '<div class="cm-subject-color" style="background:' + grp.color + '">' +
+          '<div class="cm-color-swatch-selected" style="background:' + grp.color + '" data-action="cmToggleColorPalette" data-target="compgroup" data-grpid="' + grp.id + '"></div>' +
+          '<div class="cm-color-palette" id="cm-palette-compgroup-' + grp.id + '"></div>' +
+        '</div>' +
+        '<input class="cm-input" value="' + esc(grp.name) + '" style="flex:1" data-action-blur="cmCompGroupName" data-grpid="' + grp.id + '">' +
+        '<span style="font-size:var(--text-2xs);color:var(--text-3);min-width:40px;text-align:right">' + count + ' item' + (count !== 1 ? 's' : '') + '</span>' +
+        '<button class="cm-delete-mini" data-action="cmDeleteCompGroup" data-grpid="' + grp.id + '" title="Delete group">\u2715</button>' +
+      '</div>';
+    });
+    html += '<button class="cm-add-link" data-action="cmAddCompGroup">+ Add Group</button></div>';
+
     // Learning Standards (flat format)
     html += '<div class="cm-field">' +
       '<label class="cm-label">Learning Standards</label>';
@@ -1211,6 +1259,13 @@ window.PageDashboard = (function() {
                 (lm.subjects||[]).map(function(s) { return '<option value="' + s.id + '"' + (s.id===sec.subject?' selected':'') + '>' + esc(s.name) + '</option>'; }).join('') +
               '</select>' +
             '</div>' +
+            (compGroups.length > 0 ? '<div style="min-width:90px">' +
+              '<label class="cm-label">Group</label>' +
+              '<select class="cm-input" style="font-size:0.78rem" data-stop-prop="true" data-action-change="cmStdGroup" data-secid="' + sec.id + '">' +
+                '<option value="">None</option>' +
+                compGroups.map(function(g) { return '<option value="' + g.id + '"' + (sec.groupId===g.id?' selected':'') + '>' + esc(g.name) + '</option>'; }).join('') +
+              '</select>' +
+            '</div>' : '') +
             '<div style="display:flex;gap:6px;align-items:flex-end">' +
               '<div>' +
                 '<label class="cm-label">Color</label>' +
@@ -1972,6 +2027,63 @@ window.PageDashboard = (function() {
     }
   }
 
+  // ── Competency Group CRUD ──────────────────────────────────
+  function cmAddCompGroup() {
+    if (!cmSelectedCourse) return;
+    var map = ensureCustomLearningMap(cmSelectedCourse);
+    if (!map.competencyGroups) map.competencyGroups = [];
+    var idx = map.competencyGroups.length;
+    var colors = ['#6366f1','#06b6d4','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#64748b'];
+    map.competencyGroups.push({
+      id: 'grp_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5),
+      name: 'Group ' + (idx + 1),
+      color: colors[idx % colors.length],
+      sortOrder: idx
+    });
+    saveLearningMap(cmSelectedCourse, map);
+    renderClassManager();
+  }
+
+  function cmUpdateCompGroupName(grpId, val) {
+    if (!cmSelectedCourse) return;
+    var map = ensureCustomLearningMap(cmSelectedCourse);
+    var g = (map.competencyGroups || []).find(function(x) { return x.id === grpId; });
+    if (g && val.trim()) { g.name = val.trim(); saveLearningMap(cmSelectedCourse, map); }
+  }
+
+  function cmUpdateCompGroupColor(grpId, color) {
+    if (!cmSelectedCourse) return;
+    var map = ensureCustomLearningMap(cmSelectedCourse);
+    var g = (map.competencyGroups || []).find(function(x) { return x.id === grpId; });
+    if (g) { g.color = color; saveLearningMap(cmSelectedCourse, map); renderClassManager(); }
+  }
+
+  function cmDeleteCompGroup(grpId) {
+    if (!cmSelectedCourse) return;
+    var map = ensureCustomLearningMap(cmSelectedCourse);
+    var count = (map.sections || []).filter(function(s) { return s.groupId === grpId; }).length;
+    var doDelete = function() {
+      map.competencyGroups = (map.competencyGroups || []).filter(function(g) { return g.id !== grpId; });
+      (map.sections || []).forEach(function(s) { if (s.groupId === grpId) delete s.groupId; });
+      saveLearningMap(cmSelectedCourse, map);
+      renderClassManager();
+    };
+    if (count > 0) {
+      showConfirm('Delete Group', count + ' standard(s) will become ungrouped. Delete anyway?', 'Delete', 'danger', doDelete);
+    } else {
+      doDelete();
+    }
+  }
+
+  function cmUpdateStdGroup(secId, groupId) {
+    if (!cmSelectedCourse) return;
+    var map = ensureCustomLearningMap(cmSelectedCourse);
+    var sec = (map.sections || []).find(function(s) { return s.id === secId; });
+    if (!sec) return;
+    if (groupId) sec.groupId = groupId; else delete sec.groupId;
+    saveLearningMap(cmSelectedCourse, map);
+  }
+
   // ── Flat Learning Standard CRUD ──────────────────────────────
   function cmAddStd() {
     if (!cmSelectedCourse) return;
@@ -2155,8 +2267,16 @@ window.PageDashboard = (function() {
       'cwSkipToCustom':       function() { cwSkipToCustom(); },
       'cwGoToStep2':          function() { cwGoToStep2(); },
       'cwGoToStep3':          function() { cwGoToStep3(); },
+      'cwGoToStep4':          function() { DashCurriculumWizard.cwGoToStep4(); },
       'cwGoBack':             function() { cwGoBack(); },
       'cwFinishCreate':       function() { cwFinishCreate(); },
+      'cwAddGroup':           function() { DashCurriculumWizard.cwAddGroup(); },
+      'cwDeleteGroup':        function() { DashCurriculumWizard.cwDeleteGroup(el.dataset.gid); },
+      'cwToggleGroup':        function() { DashCurriculumWizard.cwToggleGroup(el.dataset.gid); },
+      'cwAddCustomComp':      function() { DashCurriculumWizard.cwAddCustomComp(); },
+      'cwRemoveCustomComp':   function() { DashCurriculumWizard.cwRemoveCustomComp(el.dataset.secid); },
+      'cmAddCompGroup':       function() { cmAddCompGroup(); },
+      'cmDeleteCompGroup':    function() { cmDeleteCompGroup(el.dataset.grpid); },
       'cmCreateToggle':       function() { cmCreateToggle(el, el.dataset.group); var dp = document.getElementById('cm-cg-decay'); if (dp) dp.style.display = 'none'; },
       'cmCreateToggleDecay':  function() { cmCreateToggle(el, el.dataset.group); document.getElementById('cm-cg-decay').style.display = el.classList.contains('active') && el.dataset.val === 'decayingAvg' ? '' : 'none'; },
       'cmRelinkCancel':       function() { cmRelinkCancel(); },
@@ -2239,6 +2359,21 @@ window.PageDashboard = (function() {
       cmUpdateStdColor(el.dataset.secid, el.value);
       return;
     }
+    // Wizard: competency group color
+    if (el.dataset.actionChange === 'cwGroupColor') {
+      DashCurriculumWizard.cwUpdateGroupColor(el.dataset.gid, el.value);
+      return;
+    }
+    // Class manager: standard group assignment
+    if (el.dataset.actionChange === 'cmStdGroup') {
+      cmUpdateStdGroup(el.dataset.secid, el.value);
+      return;
+    }
+    // Wizard: competency group assignment dropdown
+    if (el.dataset.actionChange === 'cwCompGroupChange') {
+      DashCurriculumWizard.cwCompGroupChange(el.dataset.secid, el.value);
+      return;
+    }
     // Legacy: Section subject/color
     if (el.dataset.actionChange === 'cmSecSubject') {
       cmUpdateSecSubject(el.dataset.secid, el.value);
@@ -2268,6 +2403,14 @@ window.PageDashboard = (function() {
     }
     if (el.dataset.actionBlur === 'cmUpdateDesc') {
       cmUpdateField('description', el.value);
+      return;
+    }
+    if (el.dataset.actionBlur === 'cwGroupName') {
+      DashCurriculumWizard.cwUpdateGroupName(el.dataset.gid, el.value);
+      return;
+    }
+    if (el.dataset.actionBlur === 'cmCompGroupName') {
+      cmUpdateCompGroupName(el.dataset.grpid, el.value);
       return;
     }
     if (el.dataset.actionBlur === 'cmSubjectName') {

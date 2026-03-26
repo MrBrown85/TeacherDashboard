@@ -62,17 +62,29 @@ window.ReportBlocks = (function() {
         '<div class="report-overall-word">' + overallDisplay + '</div>' +
       '</div>' +
       '<div class="report-overall-sections">';
-    sections.forEach(function(sec) {
+    var _rbGrouped = getGroupedSections(cid);
+    var _rbChip = function(sec) {
       var sp = getSectionProficiency(cid, student.id, sec.id);
       var sr = Math.round(sp);
       var slabel = sp > 0 ? PROF_LABELS[sr] : 'No Evidence';
       var scolor = PROF_COLORS[sr] || PROF_COLORS[0];
       var override = getSectionOverride(cid, student.id, sec.id);
-      html += '<div class="report-section-chip">' +
+      return '<div class="report-section-chip">' +
         '<div class="report-section-chip-name">' + esc(sec.shortName || sec.name) + (override ? ' <span style="font-size:0.5rem;color:var(--active);font-style:italic;font-weight:400">override</span>' : '') + '</div>' +
         '<div class="report-section-chip-value" data-prof="' + sr + '" style="color:' + scolor + '">' + slabel + '</div>' +
       '</div>';
-    });
+    };
+    if (_rbGrouped.groups.some(function(gi) { return gi.sections.length > 0; })) {
+      _rbGrouped.groups.forEach(function(gi) {
+        if (gi.sections.length === 0) return;
+        html += '<div style="width:100%;margin-top:6px"><div style="font-size:0.55rem;text-transform:uppercase;letter-spacing:0.5px;color:' + gi.group.color + ';font-weight:600;margin-bottom:2px">' + esc(gi.group.name) + '</div><div style="display:flex;flex-wrap:wrap;gap:4px">';
+        gi.sections.forEach(function(sec) { html += _rbChip(sec); });
+        html += '</div></div>';
+      });
+      _rbGrouped.ungrouped.forEach(function(sec) { html += _rbChip(sec); });
+    } else {
+      sections.forEach(function(sec) { html += _rbChip(sec); });
+    }
     html += '</div></div>';
     return html;
   }

@@ -129,17 +129,29 @@ function renderBlockAcademicSummary(cid, student) {
       <div class="report-overall-word">${overallDisplay}</div>
     </div>
     <div class="report-overall-sections">`;
-  sections.forEach(sec => {
+  const _rptGrouped = getGroupedSections(cid);
+  const _renderReportChip = (sec) => {
     const sp = getSectionProficiency(cid, student.id, sec.id);
     const sr = Math.round(sp);
     const slabel = sp > 0 ? PROF_LABELS[sr] : 'No Evidence';
     const scolor = PROF_COLORS[sr] || PROF_COLORS[0];
     const override = getSectionOverride(cid, student.id, sec.id);
-    html += `<div class="report-section-chip">
+    return `<div class="report-section-chip">
       <div class="report-section-chip-name">${esc(sec.shortName || sec.name)}${override ? ' <span style="font-size:0.5rem;color:var(--active);font-style:italic;font-weight:400">override</span>' : ''}</div>
       <div class="report-section-chip-value" data-prof="${sr}" style="color:${scolor}">${slabel}</div>
     </div>`;
-  });
+  };
+  if (_rptGrouped.groups.some(gi => gi.sections.length > 0)) {
+    _rptGrouped.groups.forEach(gi => {
+      if (gi.sections.length === 0) return;
+      html += `<div style="width:100%;margin-top:6px"><div style="font-size:0.55rem;text-transform:uppercase;letter-spacing:0.5px;color:${gi.group.color};font-weight:600;margin-bottom:2px">${esc(gi.group.name)}</div><div style="display:flex;flex-wrap:wrap;gap:4px">`;
+      gi.sections.forEach(sec => { html += _renderReportChip(sec); });
+      html += `</div></div>`;
+    });
+    _rptGrouped.ungrouped.forEach(sec => { html += _renderReportChip(sec); });
+  } else {
+    sections.forEach(sec => { html += _renderReportChip(sec); });
+  }
   html += `</div></div>`;
   return html;
 }
