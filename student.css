@@ -32,8 +32,8 @@
 }
 .stu-section-group:last-child { border-right: none; }
 .stu-section-group-label {
-  font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px;
-  font-weight: 700; padding: 6px 12px 0; line-height: 1;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+  font-weight: 600; padding: 8px 16px 0; line-height: 1;
 }
 .stu-section-group-items {
   display: flex; flex: 1;
