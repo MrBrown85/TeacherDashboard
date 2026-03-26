@@ -12,8 +12,6 @@ window.PageGradebook = (function() {
   /* ── State variables ────────────────────────────────────── */
   var activeCourse;
   var viewMode = localStorage.getItem('gb_viewMode') || 'detailed';
-  var _scoreDensity = 'comfortable'; // 'compact' or 'comfortable'
-  var _scoreTextSize = 13; // base font size in px for score cells
   var _pinnedCols = { name: true, final: true }; // pinnable: name, categories, final
   var _undoStack = [];
   var _scoreMode = null; // null or { assessmentId, studentIdx }
@@ -1570,10 +1568,6 @@ window.PageGradebook = (function() {
       'clearAllFilters':      function() { clearAllFilters(); },
       'toggleSort':           function() { toggleSort(el.dataset.sortkey); },
       'cycleScore':           function() { cycleScore(el); },
-      'toggleDensity':        function() { _scoreDensity = _scoreDensity === 'compact' ? 'comfortable' : 'compact'; render(); },
-      'increaseTextSize':     function() { _scoreTextSize = Math.min(20, _scoreTextSize + 1); render(); },
-      'decreaseTextSize':     function() { _scoreTextSize = Math.max(9, _scoreTextSize - 1); render(); },
-      'togglePin':            function() { var col = el.dataset.col; _pinnedCols[col] = !_pinnedCols[col]; render(); },
       'editScoreCell':        function() { startCellEdit(el); },
       'startScoreMode':       function() { enterScoreMode(el.dataset.aid); },
       'showAddAssessPopover': function() { showAddAssessPopover(el); },
