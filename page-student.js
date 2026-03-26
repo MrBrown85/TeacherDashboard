@@ -372,17 +372,39 @@ window.PageStudent = (function() {
         '<div class="completion-stat"><strong>' + coveredTags + '/' + allTags.length + '</strong> tags covered</div>' +
       '</div>' +
     '</div>';
-    sections.forEach(function(sec) {
+    var _stGrouped = getGroupedSections(cid);
+    var _renderSecMini = function(sec) {
       var sp = getSectionProficiency(cid, studentId, sec.id);
       var isActive = activeSectionFilters.has(sec.id);
       var isDimmed = activeSectionFilters.size > 0 && !isActive;
-      html += '<div class="section-mini-card' + (isActive ? ' active-filter' : '') + (isDimmed ? ' dimmed' : '') + '" data-action="toggleSectionFilter" data-secid="' + sec.id + '">' +
+      return '<div class="section-mini-card' + (isActive ? ' active-filter' : '') + (isDimmed ? ' dimmed' : '') + '" data-action="toggleSectionFilter" data-secid="' + sec.id + '">' +
         '<div class="section-mini-stripe" style="background:' + sec.color + '"></div>' +
-        '<div class="section-mini-val" style="color:' + (sp > 0 ? sec.color : 'var(--text-3)') + '">' + (sp > 0 ? sp.toFixed(1) : '—') + '</div>' +
+        '<div class="section-mini-val" style="color:' + (sp > 0 ? sec.color : 'var(--text-3)') + '">' + (sp > 0 ? sp.toFixed(1) : '\u2014') + '</div>' +
         '<div class="section-mini-label">' + esc(sec.name) + '</div>' +
       '</div>';
-    });
-    html += '</div>';
+    };
+    html += '<div class="stu-sections-wrap">';
+    if (_stGrouped.groups.length > 0) {
+      _stGrouped.groups.forEach(function(gi) {
+        if (gi.sections.length === 0) return;
+        html += '<div class="stu-section-group">' +
+          '<div class="stu-section-group-label" style="color:' + gi.group.color + '">' + esc(gi.group.name) + '</div>' +
+          '<div class="stu-section-group-items">';
+        gi.sections.forEach(function(sec) { html += _renderSecMini(sec); });
+        html += '</div></div>';
+      });
+      if (_stGrouped.ungrouped.length > 0) {
+        html += '<div class="stu-section-group">' +
+          '<div class="stu-section-group-items">';
+        _stGrouped.ungrouped.forEach(function(sec) { html += _renderSecMini(sec); });
+        html += '</div></div>';
+      }
+    } else {
+      html += '<div class="stu-section-group-items">';
+      sections.forEach(function(sec) { html += _renderSecMini(sec); });
+      html += '</div>';
+    }
+    html += '</div></div>';
 
     // ── Assessment Grades Table ──
     var sortedAssessments = assessments.slice().sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });

@@ -994,6 +994,63 @@ function deleteRubric(cid, rubricId) {
   if (changed) saveAssessments(cid, assessments);
 }
 
+/* ── Competency Groups ─────────────────────────────────────── */
+function getCompetencyGroups(cid) { return getLearningMap(cid).competencyGroups || []; }
+function saveCompetencyGroups(cid, groups) {
+  var map = ensureCustomLearningMap(cid);
+  map.competencyGroups = groups;
+  saveLearningMap(cid, map);
+}
+function getCompetencyGroupById(cid, gid) { return getCompetencyGroups(cid).find(g => g.id === gid); }
+function setSectionGroup(cid, sectionId, groupId) {
+  var map = ensureCustomLearningMap(cid);
+  var sec = (map.sections || []).find(s => s.id === sectionId);
+  if (!sec) return;
+  if (groupId) sec.groupId = groupId; else delete sec.groupId;
+  saveLearningMap(cid, map);
+}
+function getGroupedSections(cid) {
+  var groups = getCompetencyGroups(cid).slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  var sections = getSections(cid);
+  var groupMap = {};
+  groups.forEach(g => { groupMap[g.id] = { group: g, sections: [] }; });
+  var ungrouped = [];
+  sections.forEach(sec => {
+    if (sec.groupId && groupMap[sec.groupId]) groupMap[sec.groupId].sections.push(sec);
+    else ungrouped.push(sec);
+  });
+  return { groups: groups.map(g => groupMap[g.id]), ungrouped: ungrouped };
+}
+function addCustomSection(cid, opts) {
+  var map = ensureCustomLearningMap(cid);
+  var id = 'custom_' + uid();
+  var sub = (map.subjects && map.subjects[0]) ? map.subjects[0].id : '';
+  var color = (map.subjects && map.subjects[0]) ? map.subjects[0].color : '#6366f1';
+  var sec = {
+    id: id, subject: opts.subject || sub, name: opts.label || 'Custom Standard',
+    shortName: opts.label || 'Custom', color: opts.color || color,
+    _custom: true, tags: [{
+      id: id, label: opts.label || 'Custom Standard', text: opts.text || '',
+      color: opts.color || color, subject: opts.subject || sub,
+      name: opts.label || 'Custom Standard', shortName: opts.label || 'Custom',
+      i_can_statements: opts.i_can_statements || []
+    }]
+  };
+  if (opts.groupId) sec.groupId = opts.groupId;
+  if (!map.sections) map.sections = [];
+  map.sections.push(sec);
+  saveLearningMap(cid, map);
+  return sec;
+}
+function removeSection(cid, sectionId) {
+  var map = ensureCustomLearningMap(cid);
+  var sec = (map.sections || []).find(s => s.id === sectionId);
+  if (!sec || !sec._custom) return false;
+  map.sections = map.sections.filter(s => s.id !== sectionId);
+  saveLearningMap(cid, map);
+  return true;
+}
+
 /* ── Helpers: get sections/tags for a course ─────────────────── */
 function getSections(cid) { return getLearningMap(cid).sections || []; }
 function getSubjects(cid) { return getLearningMap(cid).subjects || []; }
@@ -1288,6 +1345,13 @@ window.GB = {
   getModules,
   saveModules,
   getModuleById,
+  getCompetencyGroups,
+  saveCompetencyGroups,
+  getCompetencyGroupById,
+  setSectionGroup,
+  getGroupedSections,
+  addCustomSection,
+  removeSection,
   getAssignmentStatuses,
   saveAssignmentStatuses,
   getAssignmentStatus,

@@ -525,20 +525,59 @@ window.PageAssignments = (function() {
       '</div>' +
     '</div>';
 
-    // Tags
+    // Tags — grouped by competency group
     html += '<div class="af-field">' +
-      '<label class="af-label">Learning Outcomes</label>' +
+      '<label class="af-label">Curricular Competencies</label>' +
       '<div class="af-tags-container">';
-    sections.forEach(function(sec) {
-      var tag = sec.tags[0];
-      if (!tag) return;
-      var checked = selTags.includes(tag.id);
-      html += '<label class="af-tag-item' + (checked?' checked':'') + '" data-section="' + sec.id + '" style="border-left:3px solid ' + sec.color + ';padding-left:8px;margin-bottom:4px">' +
-        '<input type="checkbox" value="' + tag.id + '" class="af-tag-cb" data-section="' + sec.id + '"' + (checked?' checked':'') + ' data-action-change="tagCheckbox">' +
-        '<span class="af-tag-id" style="color:' + sec.color + '">' + esc(tag.id) + '</span>' +
-        '<span class="af-tag-name">' + esc(sec.name) + '</span>' +
-      '</label>';
-    });
+    var lm = getLearningMap(cid);
+    var compGroups = (lm && lm.competencyGroups) || [];
+    if (compGroups.length > 0) {
+      // Build grouped + ungrouped lists
+      var _afGroupMap = {};
+      compGroups.forEach(function(g) { _afGroupMap[g.id] = { group: g, secs: [] }; });
+      var _afUngrouped = [];
+      sections.forEach(function(sec) {
+        if (sec.groupId && _afGroupMap[sec.groupId]) _afGroupMap[sec.groupId].secs.push(sec);
+        else _afUngrouped.push(sec);
+      });
+      compGroups.forEach(function(g) {
+        var gi = _afGroupMap[g.id];
+        if (gi.secs.length === 0) return;
+        html += '<div style="margin-bottom:8px"><div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">' +
+          '<span style="width:8px;height:8px;border-radius:50%;background:' + g.color + ';flex-shrink:0"></span>' +
+          '<span style="font-size:var(--text-xs);font-weight:600;color:var(--text-2);text-transform:uppercase;letter-spacing:var(--tracking-wide)">' + esc(g.name) + '</span></div>';
+        gi.secs.forEach(function(sec) {
+          var tag = sec.tags[0]; if (!tag) return;
+          var checked = selTags.includes(tag.id);
+          html += '<label class="af-tag-item' + (checked?' checked':'') + '" data-section="' + sec.id + '" style="border-left:3px solid ' + sec.color + ';padding-left:8px;margin-bottom:4px">' +
+            '<input type="checkbox" value="' + tag.id + '" class="af-tag-cb" data-section="' + sec.id + '"' + (checked?' checked':'') + ' data-action-change="tagCheckbox">' +
+            '<span class="af-tag-id" style="color:' + sec.color + '">' + esc(tag.id) + '</span>' +
+            '<span class="af-tag-name">' + esc(sec.name) + '</span>' +
+          '</label>';
+        });
+        html += '</div>';
+      });
+      _afUngrouped.forEach(function(sec) {
+        var tag = sec.tags[0]; if (!tag) return;
+        var checked = selTags.includes(tag.id);
+        html += '<label class="af-tag-item' + (checked?' checked':'') + '" data-section="' + sec.id + '" style="border-left:3px solid ' + sec.color + ';padding-left:8px;margin-bottom:4px">' +
+          '<input type="checkbox" value="' + tag.id + '" class="af-tag-cb" data-section="' + sec.id + '"' + (checked?' checked':'') + ' data-action-change="tagCheckbox">' +
+          '<span class="af-tag-id" style="color:' + sec.color + '">' + esc(tag.id) + '</span>' +
+          '<span class="af-tag-name">' + esc(sec.name) + '</span>' +
+        '</label>';
+      });
+    } else {
+      // No groups — flat list
+      sections.forEach(function(sec) {
+        var tag = sec.tags[0]; if (!tag) return;
+        var checked = selTags.includes(tag.id);
+        html += '<label class="af-tag-item' + (checked?' checked':'') + '" data-section="' + sec.id + '" style="border-left:3px solid ' + sec.color + ';padding-left:8px;margin-bottom:4px">' +
+          '<input type="checkbox" value="' + tag.id + '" class="af-tag-cb" data-section="' + sec.id + '"' + (checked?' checked':'') + ' data-action-change="tagCheckbox">' +
+          '<span class="af-tag-id" style="color:' + sec.color + '">' + esc(tag.id) + '</span>' +
+          '<span class="af-tag-name">' + esc(sec.name) + '</span>' +
+        '</label>';
+      });
+    }
     html += '</div></div>';
 
     // Core Competencies

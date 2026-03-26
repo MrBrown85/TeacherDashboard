@@ -50,6 +50,197 @@ window.PageDashboard = (function() {
   var cmRelinkCid = null;
   var cmRelinkStep = 0;
 
+  // Standard folder collapse state
+  var _cmCollapsedStdFolders = {};
+  var _cmOpenStdCards = {};
+
+  // Render a compact standard card (mirrors .assess-card pattern)
+  function _cmRenderStdCard(sec, lm, compGroups) {
+    var tag = sec.tags[0] || {};
+    var sub = (lm.subjects||[]).find(function(s) { return s.id === sec.subject; });
+    var subName = sub ? sub.name : '';
+    var subColor = sub ? sub.color : 'var(--text-3)';
+    var isOpen = _cmOpenStdCards[sec.id];
+    var html = '<div class="cm-std-card' + (isOpen ? ' open' : '') + '" draggable="true" data-std-drag="' + sec.id + '" id="cm-std-' + sec.id + '">' +
+      '<div class="cm-std-header" data-action="cmToggleStdCard" data-secid="' + sec.id + '">' +
+        '<div class="cm-std-color-bar" style="background:' + sec.color + '"></div>' +
+        '<span class="cm-std-tag">' + esc(tag.id) + '</span>' +
+        '<span class="cm-std-label">' + esc(tag.label || sec.shortName || sec.name) + '</span>' +
+        '<span class="cm-std-subject"><span class="cm-std-subject-dot" style="background:' + subColor + '"></span>' + esc(subName) + '</span>' +
+        '<span class="cm-std-chevron">\u25B8</span>' +
+      '</div>' +
+      '<div class="cm-std-body">' +
+        '<div class="cm-std-edit-row-wide">' +
+          '<div style="flex:1"><label class="cm-label">Standard Name</label>' +
+            '<input class="cm-input" value="' + esc(sec.name) + '" style="font-weight:600;font-size:0.82rem" data-stop-prop="true" data-action-blur="cmStdName" data-secid="' + sec.id + '"></div>' +
+          '<div style="min-width:100px"><label class="cm-label">Subject</label>' +
+            '<select class="cm-input" style="font-size:0.78rem" data-stop-prop="true" data-action-change="cmStdSubject" data-secid="' + sec.id + '">' +
+              (lm.subjects||[]).map(function(s) { return '<option value="' + s.id + '"' + (s.id===sec.subject?' selected':'') + '>' + esc(s.name) + '</option>'; }).join('') +
+            '</select></div>' +
+          (compGroups.length > 0 ? '<div style="min-width:90px"><label class="cm-label">Group</label>' +
+            '<select class="cm-input" style="font-size:0.78rem" data-stop-prop="true" data-action-change="cmStdGroup" data-secid="' + sec.id + '">' +
+              '<option value="">None</option>' +
+              compGroups.map(function(g) { return '<option value="' + g.id + '"' + (sec.groupId===g.id?' selected':'') + '>' + esc(g.name) + '</option>'; }).join('') +
+            '</select></div>' : '') +
+          '<div><label class="cm-label">Color</label>' +
+            '<div style="background:' + sec.color + ';width:32px;height:32px;border-radius:8px;margin-top:2px;position:relative">' +
+              '<div class="cm-color-swatch-selected" style="background:' + sec.color + '" data-action="cmToggleColorPalette" data-target="section" data-secid="' + sec.id + '"></div>' +
+              '<div class="cm-color-palette" id="cm-palette-section-' + sec.id + '"></div>' +
+            '</div></div>' +
+          '<button class="cm-delete-mini" data-action="cmDeleteStd" data-stop-prop="true" data-secid="' + sec.id + '" title="Delete standard" style="width:32px;height:32px;align-self:flex-end">\u2715</button>' +
+        '</div>' +
+        '<div style="display:flex;gap:12px;align-items:flex-end;margin-bottom:8px">' +
+          '<div style="flex:0 0 120px"><label class="cm-label">Tag Code</label>' +
+            '<input class="cm-input" value="' + esc(tag.id) + '" placeholder="e.g. RD1" maxlength="10" style="padding:5px 8px;font-size:0.82rem;font-weight:600;font-family:monospace;text-transform:uppercase" data-stop-prop="true" data-action-blur="cmStdCode" data-secid="' + sec.id + '"></div>' +
+          '<div style="flex:1"><label class="cm-label">Short Label</label>' +
+            '<input class="cm-input" value="' + esc(tag.label) + '" placeholder="Short label" style="padding:5px 8px;font-size:0.82rem;font-weight:500" data-action-blur="cmStdLabel" data-secid="' + sec.id + '"></div>' +
+        '</div>' +
+        '<label class="cm-label">I can\u2026 Statement</label>' +
+        '<textarea class="cm-textarea" placeholder="I can\u2026 statement" style="min-height:34px;padding:5px 8px;font-size:0.78rem" data-action-blur="cmStdText" data-secid="' + sec.id + '">' + esc(tag.text||'') + '</textarea>' +
+      '</div></div>';
+    return html;
+  }
+
+  function cmToggleStdCard(secId) {
+    _cmOpenStdCards[secId] = !_cmOpenStdCards[secId];
+    var card = document.getElementById('cm-std-' + secId);
+    if (card) card.classList.toggle('open', _cmOpenStdCards[secId]);
+  }
+
+  function cmToggleStdFolder(uid) {
+    _cmCollapsedStdFolders[uid] = !_cmCollapsedStdFolders[uid];
+    var folder = document.querySelector('.mod-folder[data-module-id="' + uid + '"]');
+    if (folder) folder.classList.toggle('open', !_cmCollapsedStdFolders[uid]);
+  }
+
+  // Drag-and-drop for standards between group folders
+  var _cmDragStdId = null;
+  var _cmMergeTargetId = null;
+  var _cmMergeHoverTimer = null;
+  var _cmMergeAnimating = false;
+  var CM_GROUP_COLORS = ['#6366f1','#06b6d4','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#64748b'];
+
+  function _cmClearMerge() {
+    if (_cmMergeHoverTimer) { clearTimeout(_cmMergeHoverTimer); _cmMergeHoverTimer = null; }
+    if (_cmMergeTargetId) { var el = document.getElementById('cm-std-' + _cmMergeTargetId); if (el) el.classList.remove('merge-target'); }
+    _cmMergeTargetId = null; _cmMergeAnimating = false;
+  }
+
+  function _cmMergeToNewGroup(draggedId, targetId) {
+    if (!cmSelectedCourse) return;
+    var map = ensureCustomLearningMap(cmSelectedCourse);
+    if (!map.competencyGroups) map.competencyGroups = [];
+    var idx = map.competencyGroups.length;
+    var grp = {
+      id: 'grp_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+      name: 'Group ' + (idx + 1),
+      color: CM_GROUP_COLORS[idx % CM_GROUP_COLORS.length],
+      sortOrder: idx
+    };
+    map.competencyGroups.push(grp);
+    [draggedId, targetId].forEach(function(sid) {
+      var sec = (map.sections || []).find(function(s) { return s.id === sid; });
+      if (sec) sec.groupId = grp.id;
+    });
+    saveLearningMap(cmSelectedCourse, map);
+    renderClassManager();
+    setTimeout(function() {
+      var input = document.querySelector('.mod-folder[data-module-id="' + grp.id + '"] .mod-folder-name-input');
+      if (input) { input.focus(); input.select(); }
+    }, 50);
+  }
+
+  (function initCmStdDrag() {
+    document.addEventListener('dragstart', function(e) {
+      var card = e.target.closest && e.target.closest('.cm-std-card[data-std-drag]');
+      if (!card) return;
+      _cmDragStdId = card.dataset.stdDrag;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', _cmDragStdId);
+    });
+    document.addEventListener('dragover', function(e) {
+      if (!_cmDragStdId) return;
+      // Card-on-card merge: hover over another ungrouped card to create a new group
+      var targetCard = e.target.closest && e.target.closest('.cm-std-card[data-std-drag]');
+      if (targetCard) {
+        var targetId = targetCard.dataset.stdDrag;
+        if (targetId !== _cmDragStdId) {
+          // Check target is ungrouped
+          var map = cmSelectedCourse ? getLearningMap(cmSelectedCourse) : null;
+          var targetSec = map && (map.sections || []).find(function(s) { return s.id === targetId; });
+          if (targetSec && !targetSec.groupId) {
+            e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+            if (_cmMergeTargetId === targetId) return;
+            _cmClearMerge(); _cmMergeTargetId = targetId;
+            _cmMergeHoverTimer = setTimeout(function() {
+              _cmMergeAnimating = true;
+              var el = document.getElementById('cm-std-' + targetId);
+              if (el) el.classList.add('merge-target');
+            }, 300);
+            return;
+          }
+        }
+      } else {
+        if (_cmMergeTargetId) _cmClearMerge();
+      }
+      // Folder drop
+      var folder = e.target.closest && e.target.closest('.mod-folder[data-folder-drop]');
+      if (!folder) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      document.querySelectorAll('.mod-folder.drag-over').forEach(function(f) { f.classList.remove('drag-over'); });
+      folder.classList.add('drag-over');
+      if (!folder.classList.contains('open')) folder.classList.add('open');
+    });
+    document.addEventListener('dragleave', function(e) {
+      if (!_cmDragStdId) return;
+      var targetCard = e.target.closest && e.target.closest('.cm-std-card[data-std-drag]');
+      if (targetCard && !targetCard.contains(e.relatedTarget)) {
+        if (_cmMergeTargetId === targetCard.dataset.stdDrag) _cmClearMerge();
+        return;
+      }
+      var folder = e.target.closest && e.target.closest('.mod-folder[data-folder-drop]');
+      if (folder && !folder.contains(e.relatedTarget)) folder.classList.remove('drag-over');
+    });
+    document.addEventListener('drop', function(e) {
+      if (!_cmDragStdId) return;
+      // Card-on-card merge drop
+      var targetCard = e.target.closest && e.target.closest('.cm-std-card[data-std-drag]');
+      if (targetCard && _cmMergeAnimating && _cmMergeTargetId === targetCard.dataset.stdDrag) {
+        e.preventDefault(); e.stopPropagation();
+        _cmMergeToNewGroup(_cmDragStdId, targetCard.dataset.stdDrag);
+        _cmClearMerge(); _cmDragStdId = null;
+        document.querySelectorAll('.cm-std-card.dragging').forEach(function(c) { c.classList.remove('dragging'); });
+        return;
+      }
+      // Folder drop
+      var folder = e.target.closest && e.target.closest('.mod-folder[data-folder-drop]');
+      if (!folder) return;
+      e.preventDefault();
+      var targetGroupId = folder.dataset.folderDrop;
+      if (targetGroupId === '__none__') targetGroupId = '';
+      if (cmSelectedCourse) {
+        var map = ensureCustomLearningMap(cmSelectedCourse);
+        var sec = (map.sections || []).find(function(s) { return s.id === _cmDragStdId; });
+        if (sec) {
+          if (targetGroupId) sec.groupId = targetGroupId;
+          else delete sec.groupId;
+          saveLearningMap(cmSelectedCourse, map);
+          renderClassManager();
+        }
+      }
+      _cmDragStdId = null;
+      document.querySelectorAll('.mod-folder.drag-over').forEach(function(f) { f.classList.remove('drag-over'); });
+      document.querySelectorAll('.cm-std-card.dragging').forEach(function(c) { c.classList.remove('dragging'); });
+    });
+    document.addEventListener('dragend', function() {
+      _cmDragStdId = null; _cmClearMerge();
+      document.querySelectorAll('.mod-folder.drag-over').forEach(function(f) { f.classList.remove('drag-over'); });
+      document.querySelectorAll('.cm-std-card.dragging').forEach(function(c) { c.classList.remove('dragging'); });
+    });
+  })();
+
   // Step 2 stash
   var cwStep2Name = '', cwStep2Grade = '', cwStep2Desc = '';
   var cwStep2Grading = 'proficiency', cwStep2Calc = 'mostRecent', cwStep2Decay = '65';
@@ -125,7 +316,7 @@ window.PageDashboard = (function() {
     html += '<div class="dash-section">';
     html += '<div class="dash-overview">';
 
-    // COLUMN 1: Class Distribution + Learning Outcomes
+    // COLUMN 1: Class Distribution + Curricular Competencies
     html += '<div class="dash-overview-section">';
 
     // Class Distribution
@@ -179,7 +370,7 @@ window.PageDashboard = (function() {
       '</div>';
     }
 
-    html += '<div style="margin-top:14px"><div class="dash-section-title">Learning Outcomes' +
+    html += '<div style="margin-top:14px"><div class="dash-section-title">Curricular Competencies' +
         '<a href="#/gradebook?course=' + cid + '">View Gradebook \u2192</a>' +
       '</div></div>';
 
@@ -414,17 +605,53 @@ window.PageDashboard = (function() {
           (missingCount > 0 ? '<span class="dash-card-missing" title="' + missingCount + ' past-due unscored">\u26A0' + missingCount + '</span>' : '') +
         '</div>';
 
-        // Section strip
+        // Section strip (with optional competency groups)
         html += '<div class="dash-card-sections">';
-        sections.forEach(function(sec) {
-          var secVal = getSectionProficiency(cid, st.id, sec.id);
-          var sr = Math.round(secVal);
-          html += '<div class="dash-section-mini" style="background:' + PROF_TINT[sr] + '">' +
-            '<div style="position:absolute;top:0;left:4px;right:4px;height:3px;border-radius:2px;background:' + sec.color + '"></div>' +
-            '<div class="dash-section-name">' + esc(sec.shortName || sec.name) + '</div>' +
-            '<div class="dash-section-val" style="color:' + PROF_COLORS[sr] + '">' + (secVal > 0 ? secVal.toFixed(1) : '\u2014') + '</div>' +
-          '</div>';
-        });
+        var _grouped = getGroupedSections(cid);
+        if (_grouped.groups.length > 0) {
+          _grouped.groups.forEach(function(gi) {
+            if (gi.sections.length === 0) return;
+            html += '<div class="dash-section-group">' +
+              '<div class="dash-section-group-label" style="color:' + gi.group.color + '">' + esc(gi.group.name) + '</div>' +
+              '<div class="dash-section-group-items">';
+            gi.sections.forEach(function(sec) {
+              var secVal = getSectionProficiency(cid, st.id, sec.id);
+              var sr = Math.round(secVal);
+              html += '<div class="dash-section-mini" style="background:' + PROF_TINT[sr] + '">' +
+                '<div style="position:absolute;top:0;left:4px;right:4px;height:3px;border-radius:2px;background:' + sec.color + '"></div>' +
+                '<div class="dash-section-name">' + esc(sec.shortName || sec.name) + '</div>' +
+                '<div class="dash-section-val" style="color:' + PROF_COLORS[sr] + '">' + (secVal > 0 ? secVal.toFixed(1) : '\u2014') + '</div>' +
+              '</div>';
+            });
+            html += '</div></div>';
+          });
+          if (_grouped.ungrouped.length > 0) {
+            html += '<div class="dash-section-group" style="background:transparent">' +
+              '<div class="dash-section-group-items">';
+            _grouped.ungrouped.forEach(function(sec) {
+              var secVal = getSectionProficiency(cid, st.id, sec.id);
+              var sr = Math.round(secVal);
+              html += '<div class="dash-section-mini" style="background:' + PROF_TINT[sr] + '">' +
+                '<div style="position:absolute;top:0;left:4px;right:4px;height:3px;border-radius:2px;background:' + sec.color + '"></div>' +
+                '<div class="dash-section-name">' + esc(sec.shortName || sec.name) + '</div>' +
+                '<div class="dash-section-val" style="color:' + PROF_COLORS[sr] + '">' + (secVal > 0 ? secVal.toFixed(1) : '\u2014') + '</div>' +
+              '</div>';
+            });
+            html += '</div></div>';
+          }
+        } else {
+          html += '<div class="dash-section-group-items">';
+          sections.forEach(function(sec) {
+            var secVal = getSectionProficiency(cid, st.id, sec.id);
+            var sr = Math.round(secVal);
+            html += '<div class="dash-section-mini" style="background:' + PROF_TINT[sr] + '">' +
+              '<div style="position:absolute;top:0;left:4px;right:4px;height:3px;border-radius:2px;background:' + sec.color + '"></div>' +
+              '<div class="dash-section-name">' + esc(sec.shortName || sec.name) + '</div>' +
+              '<div class="dash-section-val" style="color:' + PROF_COLORS[sr] + '">' + (secVal > 0 ? secVal.toFixed(1) : '\u2014') + '</div>' +
+            '</div>';
+          });
+          html += '</div>';
+        }
         html += '</div>';
 
         // Footer
@@ -911,7 +1138,14 @@ window.PageDashboard = (function() {
     }
 
     html += '</div></div>';
+    // Preserve scroll position of the detail pane across re-renders
+    var detailEl = document.querySelector('.cm-detail');
+    var scrollTop = detailEl ? detailEl.scrollTop : 0;
     document.getElementById('main').innerHTML = html;
+    if (scrollTop > 0) {
+      var newDetail = document.querySelector('.cm-detail');
+      if (newDetail) newDetail.scrollTop = scrollTop;
+    }
   }
 
   function renderCmSidebar(courseIds) {
@@ -1092,12 +1326,7 @@ window.PageDashboard = (function() {
     '<div id="cm-import-preview"></div>' +
     '</div>';
 
-    html += '</div>'; // close left column
-
-    // RIGHT COLUMN: Grading + Curriculum
-    html += '<div class="cm-col">';
-
-    // Section 3: Grading & Calculation
+    // Section 3: Grading & Calculation (still in left column)
     var gs = course.gradingSystem || 'proficiency';
     html += '<div class="cm-section">' +
       '<div class="cm-section-title">Grading &amp; Calculation</div>' +
@@ -1157,7 +1386,12 @@ window.PageDashboard = (function() {
       '</div>' +
     '</div>';
 
-    // Section 3: Curriculum -- Subjects
+    html += '</div>'; // close left column
+
+    // RIGHT COLUMN: Curriculum
+    html += '<div class="cm-col-curriculum">';
+
+    // Curriculum -- Subjects
     html += '<div class="cm-section">' +
       '<div class="cm-section-title">Curriculum</div>' +
       '<div class="cm-field">' +
@@ -1174,73 +1408,77 @@ window.PageDashboard = (function() {
     });
     html += '<button class="cm-add-link" data-action="cmAddSubject">+ Add Subject</button></div>';
 
-    // Learning Standards (flat format)
-    html += '<div class="cm-field">' +
-      '<label class="cm-label">Learning Standards</label>';
-    if ((lm.sections||[]).length === 0) {
+    // Learning Standards — folder-based UI (mirrors assignments page)
+    var compGroups = lm.competencyGroups || [];
+    var _cmGrouped = { groups: [], ungrouped: [] };
+    var _cmGroupMap = {};
+    compGroups.forEach(function(g) { _cmGroupMap[g.id] = { group: g, sections: [] }; });
+    (lm.sections || []).forEach(function(sec) {
+      if (sec.groupId && _cmGroupMap[sec.groupId]) _cmGroupMap[sec.groupId].sections.push(sec);
+      else _cmGrouped.ungrouped.push(sec);
+    });
+    _cmGrouped.groups = compGroups.map(function(g) { return _cmGroupMap[g.id]; });
+
+    html += '<div class="cm-field"><label class="cm-label">Learning Standards</label>';
+
+    if ((lm.sections||[]).length === 0 && compGroups.length === 0) {
       html += '<div class="cm-curriculum-empty">' +
         '<div class="cm-curriculum-empty-icon">\uD83D\uDCD0</div>' +
         '<div class="cm-curriculum-empty-text">No learning standards yet. Add a standard to start defining your curriculum.</div>' +
       '</div>';
     }
-    (lm.sections||[]).forEach(function(sec) {
-      var tag = sec.tags[0] || {};
-      var sub = (lm.subjects||[]).find(function(s) { return s.id === sec.subject; });
-      var subName = sub ? sub.name : '';
-      var subColor = sub ? sub.color : 'var(--text-3)';
-      html += '<div class="cm-sec-group open" id="cm-sec-' + sec.id + '">' +
-        '<div class="cm-sec-header">' +
-          '<div class="cm-sec-header-top">' +
-            '<div class="cm-sec-color-bar" style="background:' + sec.color + '"></div>' +
-            '<span class="cm-sec-name-display">' + esc(sec.name) + '</span>' +
-            '<span class="cm-tag-id" style="color:' + sec.color + ';font-size:0.7rem;margin-left:8px">' + esc(tag.id) + '</span>' +
-          '</div>' +
-          '<div class="cm-sec-header-meta">' +
-            '<span class="cm-sec-subject-badge"><span class="cm-sec-subject-dot" style="background:' + subColor + '"></span>' + esc(subName) + '</span>' +
+
+    // Render group folders (reuses .mod-folder pattern from assignments page)
+    _cmGrouped.groups.forEach(function(gi) {
+      var grp = gi.group;
+      var secs = gi.sections;
+      var isOpen = !_cmCollapsedStdFolders[grp.id];
+      html += '<div class="mod-folder' + (isOpen ? ' open' : '') + '" data-module-id="' + grp.id + '" data-folder-drop="' + grp.id + '">' +
+        '<div class="mod-folder-header" data-action="cmToggleStdFolder" data-uid="' + grp.id + '">' +
+          '<span class="mod-folder-grip">\u2807</span>' +
+          '<span class="mod-folder-chevron">\u25B6</span>' +
+          '<span class="mod-folder-color" style="background:' + grp.color + '" title="Change color" data-action="openColorPicker" data-stop-prop="true">' +
+            '<input type="color" value="' + grp.color + '" data-action-change="cmCompGroupColor" data-grpid="' + grp.id + '">' +
+          '</span>' +
+          '<input class="mod-folder-name-input" value="' + esc(grp.name) + '" draggable="false" data-stop-prop="true" data-action-blur="cmCompGroupName" data-grpid="' + grp.id + '">' +
+          '<span class="mod-folder-meta">' + secs.length + ' standard' + (secs.length !== 1 ? 's' : '') + '</span>' +
+          '<div class="mod-folder-actions" data-stop-prop="true">' +
+            '<button class="mod-folder-action delete" data-action="cmDeleteCompGroup" data-grpid="' + grp.id + '" data-count="' + secs.length + '" title="Delete group">\u2715</button>' +
           '</div>' +
         '</div>' +
-        '<div class="cm-sec-body">' +
-          '<div class="cm-sec-edit-row">' +
-            '<div class="cm-sec-edit-name">' +
-              '<label class="cm-label">Standard Name</label>' +
-              '<input class="cm-input" value="' + esc(sec.name) + '" style="font-weight:600;font-size:0.82rem" data-stop-prop="true" data-action-blur="cmStdName" data-secid="' + sec.id + '">' +
-            '</div>' +
-            '<div class="cm-sec-edit-subject">' +
-              '<label class="cm-label">Subject</label>' +
-              '<select class="cm-input" style="font-size:0.78rem" data-stop-prop="true" data-action-change="cmStdSubject" data-secid="' + sec.id + '">' +
-                (lm.subjects||[]).map(function(s) { return '<option value="' + s.id + '"' + (s.id===sec.subject?' selected':'') + '>' + esc(s.name) + '</option>'; }).join('') +
-              '</select>' +
-            '</div>' +
-            '<div style="display:flex;gap:6px;align-items:flex-end">' +
-              '<div>' +
-                '<label class="cm-label">Color</label>' +
-                '<div class="cm-sec-color-dot" style="background:' + sec.color + ';width:32px;height:32px;border-radius:8px;margin-top:2px">' +
-                  '<div class="cm-color-swatch-selected" style="background:' + sec.color + '" data-action="cmToggleColorPalette" data-target="section" data-secid="' + sec.id + '"></div>' +
-                  '<div class="cm-color-palette" id="cm-palette-section-' + sec.id + '"></div>' +
-                '</div>' +
-              '</div>' +
-              '<button class="cm-delete-mini" data-action="cmDeleteStd" data-stop-prop="true" data-secid="' + sec.id + '" title="Delete standard" style="width:32px;height:32px;margin-bottom:2px">\u2715</button>' +
-            '</div>' +
-          '</div>' +
-          '<div class="cm-tag-row" style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">' +
-            '<div class="cm-tag-fields" style="flex:1">' +
-              '<div style="display:flex;gap:12px;align-items:flex-end">' +
-                '<div style="flex:0 0 120px">' +
-                  '<label class="cm-label">Tag Code</label>' +
-                  '<input class="cm-input" value="' + esc(tag.id) + '" placeholder="e.g. RD1" maxlength="10" style="padding:5px 8px;font-size:0.82rem;font-weight:600;font-family:monospace;text-transform:uppercase" data-stop-prop="true" data-action-blur="cmStdCode" data-secid="' + sec.id + '">' +
-                '</div>' +
-                '<div style="flex:1">' +
-                  '<label class="cm-label">Short Label</label>' +
-                  '<input class="cm-input" value="' + esc(tag.label) + '" placeholder="Short label" style="padding:5px 8px;font-size:0.82rem;font-weight:500" data-action-blur="cmStdLabel" data-secid="' + sec.id + '">' +
-                '</div>' +
-              '</div>' +
-              '<label class="cm-label" style="margin-top:6px">I can\u2026 Statement</label>' +
-              '<textarea class="cm-textarea" placeholder="I can\u2026 statement" style="min-height:34px;padding:5px 8px;font-size:0.78rem" data-action-blur="cmStdText" data-secid="' + sec.id + '">' + esc(tag.text||'') + '</textarea>' +
-            '</div>' +
-          '</div>' +
-        '</div></div>';
+        '<div class="mod-folder-body">';
+      if (secs.length === 0) {
+        html += '<div class="mod-folder-empty">Drag standards here or use the group dropdown when editing a standard</div>';
+      }
+      secs.forEach(function(sec) { html += _cmRenderStdCard(sec, lm, compGroups); });
+      html += '</div></div>';
     });
-    html += '<button class="cm-add-link" data-action="cmAddStd">+ Add Standard</button></div></div>';
+
+    // Ungrouped standards
+    if (_cmGrouped.ungrouped.length > 0 || compGroups.length > 0) {
+      var ungOpen = !_cmCollapsedStdFolders['__none__'];
+      html += '<div class="mod-folder no-module' + (ungOpen ? ' open' : '') + '" data-module-id="__none__" data-folder-drop="__none__">' +
+        '<div class="mod-folder-header" data-action="cmToggleStdFolder" data-uid="__none__">' +
+          '<span class="mod-folder-chevron">\u25B6</span>' +
+          '<span style="font-size:0.88rem;color:var(--text-3)">\uD83D\uDCC1</span>' +
+          '<span class="mod-folder-name" style="font-size:0.95rem;font-weight:500;color:var(--text-3)">Ungrouped</span>' +
+          '<span class="mod-folder-meta">' + _cmGrouped.ungrouped.length + ' standard' + (_cmGrouped.ungrouped.length !== 1 ? 's' : '') + '</span>' +
+        '</div>' +
+        '<div class="mod-folder-body">';
+      _cmGrouped.ungrouped.forEach(function(sec) { html += _cmRenderStdCard(sec, lm, compGroups); });
+      if (_cmGrouped.ungrouped.length === 0) {
+        html += '<div class="mod-folder-empty">All standards are grouped</div>';
+      }
+      html += '</div></div>';
+    } else {
+      // No groups at all — render flat
+      (lm.sections || []).forEach(function(sec) { html += _cmRenderStdCard(sec, lm, compGroups); });
+    }
+
+    // Add buttons
+    html += '<button class="add-module-btn" data-action="cmAddCompGroup">+ Add Group</button>';
+    html += '<button class="cm-add-link" data-action="cmAddStd">+ Add Standard</button>';
+    html += '</div></div>';
 
     // Section 4: BC Curriculum Link
     var linkedTags = course.curriculumTags || [];
@@ -1262,7 +1500,7 @@ window.PageDashboard = (function() {
     }
     html += '</div>';
 
-    html += '</div>'; // close right column
+    html += '</div>'; // close right column (cm-col-curriculum)
 
     // Actions row
     var isArchived = cc.archived || false;
@@ -1621,7 +1859,7 @@ window.PageDashboard = (function() {
   function cmSetGradingSystem(val) {
     if (!cmSelectedCourse) return;
     updateCourse(cmSelectedCourse, { gradingSystem: val });
-    render();
+    renderClassManager();
   }
 
   function cmSetCalcMethod(val) {
@@ -1630,7 +1868,7 @@ window.PageDashboard = (function() {
     cc.calcMethod = val;
     saveCourseConfig(cmSelectedCourse, cc);
     updateCourse(cmSelectedCourse, { calcMethod: val });
-    render();
+    renderClassManager();
   }
 
   function cmUpdateDecay(val) {
@@ -1972,6 +2210,75 @@ window.PageDashboard = (function() {
     }
   }
 
+  // ── Competency Group CRUD ──────────────────────────────────
+  function cmAddCompGroup() {
+    if (!cmSelectedCourse) return;
+    var map = ensureCustomLearningMap(cmSelectedCourse);
+    if (!map.competencyGroups) map.competencyGroups = [];
+    var idx = map.competencyGroups.length;
+    var colors = ['#6366f1','#06b6d4','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#64748b'];
+    map.competencyGroups.push({
+      id: 'grp_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5),
+      name: 'Group ' + (idx + 1),
+      color: colors[idx % colors.length],
+      sortOrder: idx
+    });
+    saveLearningMap(cmSelectedCourse, map);
+    renderClassManager();
+  }
+
+  function cmUpdateCompGroupName(grpId, val) {
+    if (!cmSelectedCourse) return;
+    var map = ensureCustomLearningMap(cmSelectedCourse);
+    var g = (map.competencyGroups || []).find(function(x) { return x.id === grpId; });
+    if (g && val.trim()) { g.name = val.trim(); saveLearningMap(cmSelectedCourse, map); }
+  }
+
+  function cmUpdateCompGroupColor(grpId, color) {
+    if (!cmSelectedCourse) return;
+    var map = ensureCustomLearningMap(cmSelectedCourse);
+    var g = (map.competencyGroups || []).find(function(x) { return x.id === grpId; });
+    if (g) { g.color = color; saveLearningMap(cmSelectedCourse, map); _cmRenderWithScroll(); }
+  }
+
+  function cmDeleteCompGroup(grpId) {
+    if (!cmSelectedCourse) return;
+    var map = ensureCustomLearningMap(cmSelectedCourse);
+    var count = (map.sections || []).filter(function(s) { return s.groupId === grpId; }).length;
+    var doDelete = function() {
+      map.competencyGroups = (map.competencyGroups || []).filter(function(g) { return g.id !== grpId; });
+      (map.sections || []).forEach(function(s) { if (s.groupId === grpId) delete s.groupId; });
+      saveLearningMap(cmSelectedCourse, map);
+      _cmRenderWithScroll();
+    };
+    if (count > 0) {
+      showConfirm('Delete Group', count + ' standard(s) will become ungrouped. Delete anyway?', 'Delete', 'danger', doDelete);
+    } else {
+      doDelete();
+    }
+  }
+
+  function cmUpdateStdGroup(secId, groupId) {
+    if (!cmSelectedCourse) return;
+    var map = ensureCustomLearningMap(cmSelectedCourse);
+    var sec = (map.sections || []).find(function(s) { return s.id === secId; });
+    if (!sec) return;
+    if (groupId) sec.groupId = groupId; else delete sec.groupId;
+    saveLearningMap(cmSelectedCourse, map);
+    _cmRenderWithScroll();
+  }
+
+  // Re-render class manager preserving scroll position
+  function _cmRenderWithScroll() {
+    var container = document.querySelector('.cm-detail');
+    var scrollY = container ? container.scrollTop : window.scrollY;
+    renderClassManager();
+    requestAnimationFrame(function() {
+      var c = document.querySelector('.cm-detail');
+      if (c) c.scrollTop = scrollY; else window.scrollTo(0, scrollY);
+    });
+  }
+
   // ── Flat Learning Standard CRUD ──────────────────────────────
   function cmAddStd() {
     if (!cmSelectedCourse) return;
@@ -2155,8 +2462,19 @@ window.PageDashboard = (function() {
       'cwSkipToCustom':       function() { cwSkipToCustom(); },
       'cwGoToStep2':          function() { cwGoToStep2(); },
       'cwGoToStep3':          function() { cwGoToStep3(); },
+      'cwGoToStep4':          function() { DashCurriculumWizard.cwGoToStep4(); },
       'cwGoBack':             function() { cwGoBack(); },
       'cwFinishCreate':       function() { cwFinishCreate(); },
+      'cwAddGroup':           function() { DashCurriculumWizard.cwAddGroup(); },
+      'cwDeleteGroup':        function() { DashCurriculumWizard.cwDeleteGroup(el.dataset.gid); },
+      'cwToggleGroup':        function() { DashCurriculumWizard.cwToggleGroup(el.dataset.gid); },
+      'cwAddCustomComp':      function() { DashCurriculumWizard.cwAddCustomComp(); },
+      'cwRemoveCustomComp':   function() { DashCurriculumWizard.cwRemoveCustomComp(el.dataset.secid); },
+      'cmAddCompGroup':       function() { cmAddCompGroup(); },
+      'cmDeleteCompGroup':    function() { cmDeleteCompGroup(el.dataset.grpid); },
+      'cmToggleStdCard':      function() { cmToggleStdCard(el.dataset.secid); },
+      'cmToggleStdFolder':    function() { cmToggleStdFolder(el.dataset.uid); },
+      'openColorPicker':      function() { var inp = el.querySelector('input[type="color"]'); if (inp) inp.click(); },
       'cmCreateToggle':       function() { cmCreateToggle(el, el.dataset.group); var dp = document.getElementById('cm-cg-decay'); if (dp) dp.style.display = 'none'; },
       'cmCreateToggleDecay':  function() { cmCreateToggle(el, el.dataset.group); document.getElementById('cm-cg-decay').style.display = el.classList.contains('active') && el.dataset.val === 'decayingAvg' ? '' : 'none'; },
       'cmRelinkCancel':       function() { cmRelinkCancel(); },
@@ -2239,6 +2557,26 @@ window.PageDashboard = (function() {
       cmUpdateStdColor(el.dataset.secid, el.value);
       return;
     }
+    // Wizard: competency group color
+    if (el.dataset.actionChange === 'cwGroupColor') {
+      DashCurriculumWizard.cwUpdateGroupColor(el.dataset.gid, el.value);
+      return;
+    }
+    // Class manager: competency group color
+    if (el.dataset.actionChange === 'cmCompGroupColor') {
+      cmUpdateCompGroupColor(el.dataset.grpid, el.value);
+      return;
+    }
+    // Class manager: standard group assignment
+    if (el.dataset.actionChange === 'cmStdGroup') {
+      cmUpdateStdGroup(el.dataset.secid, el.value);
+      return;
+    }
+    // Wizard: competency group assignment dropdown
+    if (el.dataset.actionChange === 'cwCompGroupChange') {
+      DashCurriculumWizard.cwCompGroupChange(el.dataset.secid, el.value);
+      return;
+    }
     // Legacy: Section subject/color
     if (el.dataset.actionChange === 'cmSecSubject') {
       cmUpdateSecSubject(el.dataset.secid, el.value);
@@ -2268,6 +2606,14 @@ window.PageDashboard = (function() {
     }
     if (el.dataset.actionBlur === 'cmUpdateDesc') {
       cmUpdateField('description', el.value);
+      return;
+    }
+    if (el.dataset.actionBlur === 'cwGroupName') {
+      DashCurriculumWizard.cwUpdateGroupName(el.dataset.gid, el.value);
+      return;
+    }
+    if (el.dataset.actionBlur === 'cmCompGroupName') {
+      cmUpdateCompGroupName(el.dataset.grpid, el.value);
       return;
     }
     if (el.dataset.actionBlur === 'cmSubjectName') {
