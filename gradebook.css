@@ -389,7 +389,7 @@ th.gb-group-alt { background-color: rgba(0,0,0,0.03); }
 .gb-grid-colheads {
   grid-row:1; grid-column:2;
   overflow:hidden; border-bottom:2px solid var(--border);
-  background:var(--bg);
+  background:var(--bg); position:relative;
 }
 .gb-grid-colheads-inner { display:flex; position:relative; }
 .gb-grid-colhead {
@@ -423,13 +423,13 @@ th.gb-group-alt { background-color: rgba(0,0,0,0.03); }
   opacity:0.07; pointer-events:none;
   transform-origin:bottom right; transform:skewX(-45deg);
 }
-/* Column resize handle */
-.gb-colhead-resize {
-  position:absolute; top:0; right:-3px; bottom:0; width:6px;
-  cursor:col-resize; z-index:5;
+/* Header row resize handle (bottom edge of colheads) */
+.gb-header-resize-handle {
+  position:absolute; bottom:-3px; left:0; right:0; height:6px;
+  cursor:row-resize; z-index:10;
 }
-.gb-colhead-resize:hover,
-.gb-colhead-resize:active {
+.gb-header-resize-handle:hover,
+.gb-header-resize-handle:active {
   background:var(--active); opacity:0.3;
 }
 
