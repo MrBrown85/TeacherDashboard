@@ -295,7 +295,7 @@ window.PageGradebook = (function() {
     var sortedStudents = applySorting(cid, students, sections, isLetter);
 
     // 4-quadrant grid layout
-    html += '<div class="gb-grid gb-grid-comp">';
+    var html = '<div class="gb-grid gb-grid-comp">';
 
     // Q1: Corner (Student + Overall labels)
     html += '<div class="gb-grid-corner gb-grid-corner-comp">' +
