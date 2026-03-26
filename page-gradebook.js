@@ -264,46 +264,65 @@ window.PageGradebook = (function() {
     var colGroupMap = cols.map(function(_, i) { return groups.find(function(g) { return i >= g.startIdx && i < g.startIdx + g.count; }); });
     var sortedStudents = applySorting(cid, students, sections, isLetter);
 
-    var html = '<div class="gb-scroll-wrap"><div class="gb-scroll"><table class="gb-table">';
+    // 4-quadrant grid layout
+    html += '<div class="gb-grid gb-grid-comp">';
 
-    // Header row 1
-    html += '<thead><tr>';
-    html += '<th class="gb-corner gb-sortable" rowspan="2" data-action="toggleSort" data-sortkey="name" scope="col">Student' + sortArrow('name') + '</th>';
-    html += renderOverallHeader(2);
+    // Q1: Corner (Student + Overall labels)
+    html += '<div class="gb-grid-corner gb-grid-corner-comp">' +
+      '<div class="gb-grid-corner-row1"><span class="gb-grid-corner-label">Student</span><span class="gb-grid-corner-label">Overall</span></div>' +
+    '</div>';
+
+    // Q2: Column headers — assessment names (row 1) + tag codes (row 2)
+    html += '<div class="gb-grid-colheads" id="gb-colheads"><div class="gb-grid-colheads-inner gb-grid-colheads-comp">';
+    // Row 1: assessment group headers
+    html += '<div class="gb-grid-colheads-row1">';
     groups.forEach(function(g) {
       var a = g.assessment;
       var isPrimary = a.type === 'summative';
       var typeClass = isPrimary ? ' gb-type-summative' : ' gb-type-formative';
-      var startClass = g.groupIdx > 0 ? ' gb-group-start' : '';
       var tagSecs = (a.tagIds||[]).map(function(tid) { return getSectionForTag(cid, tid); }).filter(Boolean);
       var stripeColor = tagSecs.length > 0 ? tagSecs[0].color : 'var(--border)';
-      var badges = [];
-      if (a.scoreMode === 'points') badges.push('<span class="gb-assess-badge">/ ' + (a.maxPoints||100) + '</span>');
-      if (a.weight && a.weight !== 1) badges.push('<span class="gb-assess-badge">' + a.weight + 'x</span>');
-      html += '<th class="gb-assess-head' + typeClass + startClass + '" colspan="' + g.count + '">' +
-        '<div class="gb-assess-head-inner">' +
-          '<a class="gb-assess-title" href="#/assignments?course=' + cid + '&open=' + a.id + '" title="Open in Assignments">' + esc(a.title) + '</a>' +
-          '<div class="gb-assess-meta"><span class="gb-assess-type-pill ' + (isPrimary?'sum':'form') + '">' + (isPrimary?'Summative':'Formative') + '</span><span class="gb-assess-date">' + formatDate(a.date) + '</span>' + badges.join('') + '</div>' +
-        '</div><div class="gb-assess-stripe" style="background:' + stripeColor + '"></div></th>';
+      var badges = '';
+      if (a.scoreMode === 'points') badges += '<span class="gb-assess-badge">/ ' + (a.maxPoints||100) + '</span>';
+      if (a.weight && a.weight !== 1) badges += '<span class="gb-assess-badge">' + a.weight + 'x</span>';
+      html += '<div class="gb-grid-assess-group' + typeClass + '" style="width:' + (g.count * 54) + 'px">' +
+        '<a class="gb-assess-title" href="#/assignments?course=' + cid + '&open=' + a.id + '">' + esc(a.title) + '</a>' +
+        '<div class="gb-assess-meta"><span class="gb-assess-type-pill ' + (isPrimary?'sum':'form') + '">' + (isPrimary?'S':'F') + '</span><span class="gb-assess-date">' + formatDate(a.date) + '</span>' + badges + '</div>' +
+        '<div class="gb-assess-stripe" style="background:' + stripeColor + '"></div>' +
+      '</div>';
     });
-    html += '</tr>';
-
-    // Header row 2: tag codes
-    html += '<tr>';
+    html += '</div>';
+    // Row 2: tag code headers
+    html += '<div class="gb-grid-colheads-row2">';
     cols.forEach(function(col, i) {
       var g = colGroupMap[i];
-      var startClass = (g && g.groupIdx > 0 && g.startIdx === i) ? ' gb-group-start' : '';
       var altClass = (g && g.groupIdx % 2 === 1) ? ' gb-group-alt' : '';
-      html += '<th class="gb-tag-header' + startClass + altClass + '" style="border-bottom-color:' + col.sectionColor + ';color:' + col.sectionColor + '">' + esc(col.tagCode) + (col.tagText ? '<div class="gb-tag-tip">' + esc(col.tagText) + '</div>' : '') + '</th>';
+      html += '<div class="gb-grid-tag-header' + altClass + '" style="border-bottom-color:' + col.sectionColor + ';color:' + col.sectionColor + '" title="' + esc(col.tagText || col.tagCode) + '">' + esc(col.tagCode) + '</div>';
     });
-    html += '</tr></thead>';
+    html += '</div>';
+    html += '</div></div>';
 
-    // Body
-    html += '<tbody>';
+    // Q3: Row headers — student name + overall
+    html += '<div class="gb-grid-rowheads" id="gb-rowheads">';
+    sortedStudents.forEach(function(s, si) {
+      var altClass = si % 2 === 1 ? ' gb-scores-alt' : '';
+      var overall = getOverallProficiency(cid, s.id);
+      var r = Math.round(overall);
+      var color = PROF_COLORS[r] || PROF_COLORS[0];
+      var label = overall > 0 ? PROF_LABELS[r] : '';
+      html += '<div class="gb-grid-rowhead gb-grid-rowhead-comp' + altClass + '">' +
+        '<span class="gb-grid-rowhead-name">' + esc(fullName(s)) + '</span>' +
+        '<span class="gb-grid-rowhead-overall" style="color:' + color + '">' + (overall > 0 ? overall.toFixed(1) : '\u2014') + (label ? '<small>' + label + '</small>' : '') + '</span>' +
+      '</div>';
+    });
+    // Stats row header
+    html += '<div class="gb-grid-rowhead gb-grid-rowhead-comp gb-grid-rowhead-stats">Class Average</div>';
+    html += '</div>';
+
+    // Q4: Data cells — score grid
+    html += '<div class="gb-grid-data" id="gb-data"><table class="gb-table"><tbody>';
     sortedStudents.forEach(function(s) {
       html += '<tr data-sid="' + s.id + '">';
-      html += '<th class="gb-name" scope="row">' + renderNameCell(cid, s, sections, isLetter) + '</th>';
-      html += renderOverallCell(cid, s.id);
       cols.forEach(function(col, i) {
         var g = colGroupMap[i];
         var startClass = (g && g.groupIdx > 0 && g.startIdx === i) ? ' gb-group-start' : '';
@@ -316,20 +335,21 @@ window.PageGradebook = (function() {
           var title = score > 0 ? score + '/' + max + ' (' + pct + '%)' : '';
           var cellContent = score > 0
             ? '<div class="gb-pts-display"><span class="gb-pts-score">' + score + '<span class="gb-pts-max">/' + max + '</span></span><span class="gb-pts-pct">' + pct + '%</span></div>'
-            : '<span class="gb-pts-empty">·</span>';
-          html += '<td class="gb-score gb-score-pts' + startClass + altClass + '" data-aid="' + col.assessmentId + '" data-pts="1" data-sid="' + s.id + '" data-max="' + max + '" data-action="cycleScore" title="' + title + '" role="button" tabindex="0" aria-label="Score for ' + esc(fullName(s)) + ': ' + (title || 'not scored') + '">' + cellContent + '</td>';
+            : '<span class="gb-pts-empty">\u00B7</span>';
+          html += '<td class="gb-score gb-score-pts' + startClass + altClass + '" data-aid="' + col.assessmentId + '" data-pts="1" data-sid="' + s.id + '" data-max="' + max + '" data-action="cycleScore" title="' + title + '">' + cellContent + '</td>';
         } else {
           var studentScores = scores[s.id] || [];
           var entry = studentScores.find(function(e) { return e.assessmentId === col.assessmentId && e.tagId === col.tagId; });
           var score = entry ? entry.score : 0;
           var assigned = assess && (assess.tagIds||[]).includes(col.tagId);
-          var content = score > 0 ? score : (assigned ? '<span class="gb-unscored">·</span>' : '—');
-          html += '<td class="gb-score' + startClass + altClass + '" data-aid="' + col.assessmentId + '" data-tid="' + col.tagId + '" data-sid="' + s.id + '" data-action="cycleScore" role="button" tabindex="0" aria-label="' + esc(fullName(s)) + ' ' + esc(col.tagCode) + ': ' + (score > 0 ? (PROF_LABELS[score] || score) : 'not scored') + '"><span class="gb-score-val s' + score + '">' + content + '</span></td>';
+          var content = score > 0 ? score : (assigned ? '<span class="gb-unscored">\u00B7</span>' : '\u2014');
+          html += '<td class="gb-score' + startClass + altClass + '" data-aid="' + col.assessmentId + '" data-tid="' + col.tagId + '" data-sid="' + s.id + '" data-action="cycleScore"><span class="gb-score-val s' + score + '">' + content + '</span></td>';
         }
       });
       html += '</tr>';
     });
 
+    // Stats row
     html += renderClassStatsRow(cid, sortedStudents, cols, groups, sections, scores);
     html += '</tbody></table></div></div>';
     return html;
