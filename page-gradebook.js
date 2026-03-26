@@ -1467,7 +1467,7 @@ window.PageGradebook = (function() {
   function init(params) {
     activeCourse = params.course || getActiveCourse();
     setActiveCourse(activeCourse);
-    viewMode = 'average';
+    viewMode = localStorage.getItem('gb_viewMode') || 'detailed';
     filterSections = [];
     filterModules = [];
     filterType = 'all';

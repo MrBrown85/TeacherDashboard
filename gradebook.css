@@ -1,7 +1,9 @@
 /* gradebook.css — Gradebook page styles */
 
-/* Force page-main to constrain children so the table fills remaining viewport */
-.page-main { overflow-y: hidden !important; }
+/* Force page-main to constrain children so the grid fills remaining viewport.
+   overflow-y:hidden prevents page-main from becoming a scroll container,
+   forcing flex children to fit within the available space instead. */
+.page-main { overflow-y: hidden !important; min-height: 0 !important; }
 
 /* Sidebar toggle hidden via JS in page-gradebook.js init() */
 
@@ -353,6 +355,7 @@ th.gb-group-alt { background-color: rgba(0,0,0,0.03); }
    ══════════════════════════════════════════════════════════ */
 .gb-scores-toolbar {
   display:flex; gap:8px; padding:8px 0; align-items:center; justify-content:flex-end;
+  flex-shrink:0;
 }
 .gb-scores-toolbar button {
   font-family:var(--font-base); font-size:var(--text-sm); font-weight:500;
@@ -369,7 +372,7 @@ th.gb-group-alt { background-color: rgba(0,0,0,0.03); }
   grid-template-rows:auto 1fr;
   border:1px solid var(--border); border-radius:var(--radius);
   overflow:hidden; background:var(--surface);
-  max-height:calc(100vh - 200px);
+  flex:1; min-height:0;
 }
 /* Q1: Corner — fixed top-left */
 .gb-grid-corner {
