@@ -184,6 +184,8 @@ window.PageGradebook = (function() {
     initScrollShadows();
     initGridScrollSync();
     initGridHoverSync();
+    initColResize();
+    applyColWidths();
   }
 
   /* ── 4-quadrant grid: row hover sync between Q3 and Q4 ───── */
@@ -245,6 +247,76 @@ window.PageGradebook = (function() {
     var overallLeft = nameWidth;
     table.querySelectorAll('th.gb-overall-col-header, td.gb-overall-col').forEach(function(cell) {
       cell.style.left = overallLeft + 'px';
+    });
+  }
+
+  /* ── Column resize (Scores view) ─────────────────────────── */
+  var _colWidths = {}; // assessmentId → px width
+  var _colResizing = null;
+
+  function initColResize() {
+    var colheads = document.getElementById('gb-colheads');
+    if (!colheads) return;
+    colheads.addEventListener('mousedown', function(e) {
+      var handle = e.target.closest('.gb-colhead-resize');
+      if (!handle) return;
+      e.preventDefault();
+      var colhead = handle.closest('.gb-grid-colhead');
+      if (!colhead) return;
+      var aid = colhead.dataset.aid;
+      var startX = e.clientX;
+      var startW = colhead.getBoundingClientRect().width;
+      var minW = 32;
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+
+      function onMove(ev) {
+        var w = Math.max(minW, startW + ev.clientX - startX);
+        _colWidths[aid] = w;
+        applyColWidths();
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  }
+
+  function applyColWidths() {
+    // Sync header widths
+    var colheads = document.querySelectorAll('#gb-colheads .gb-grid-colhead');
+    colheads.forEach(function(el) {
+      var aid = el.dataset.aid;
+      if (_colWidths[aid]) {
+        el.style.flex = '0 0 ' + _colWidths[aid] + 'px';
+        el.style.width = _colWidths[aid] + 'px';
+      }
+    });
+    // Sync data table column widths via colgroup or direct cell widths
+    var table = document.querySelector('.gb-scores-table');
+    if (!table) return;
+    var rows = table.querySelectorAll('tr');
+    if (!rows.length) return;
+    // Get sorted assessment order from colheads
+    var aidOrder = [];
+    colheads.forEach(function(el) { aidOrder.push(el.dataset.aid); });
+    rows.forEach(function(row) {
+      var cells = row.querySelectorAll('td.gb-scores-cell, th');
+      // Match cells to assessments by position
+      var cellIdx = 0;
+      aidOrder.forEach(function(aid, i) {
+        var cell = cells[cellIdx];
+        if (!cell) return;
+        if (_colWidths[aid]) {
+          cell.style.width = _colWidths[aid] + 'px';
+          cell.style.minWidth = _colWidths[aid] + 'px';
+        }
+        cellIdx++;
+      });
     });
   }
 
@@ -530,6 +602,7 @@ window.PageGradebook = (function() {
           '<span class="gb-scores-assess-meta">' + formatDate(a.date) + maxPts + '</span>' +
         '</div>' +
         '<div class="gb-grid-colhead-stripe" style="background:' + stripeBottom + '"></div>' +
+        '<div class="gb-colhead-resize" data-action="colResize"></div>' +
         '<div class="gb-colhead-hover-card">' +
           '<div class="gb-hover-title">' + esc(a.title) + '</div>' +
           '<div class="gb-hover-meta">' +
