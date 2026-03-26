@@ -11,7 +11,11 @@ window.PageGradebook = (function() {
 
   /* ── State variables ────────────────────────────────────── */
   var activeCourse;
-  var viewMode = 'average';
+  var viewMode = 'scores';
+  var _scoreDensity = 'comfortable'; // 'compact' or 'comfortable'
+  var _pinnedCols = { name: true, final: true }; // pinnable: name, categories, final
+  var _undoStack = [];
+  var _scoreMode = null; // null or { assessmentId, studentIdx }
   var filterSections = [];
   var filterModules = [];
   var filterType = 'all';
@@ -113,7 +117,7 @@ window.PageGradebook = (function() {
 
     html += '<div class="gb-seg-control" role="tablist" aria-label="View mode">' +
       '<button class="gb-seg-btn' + (viewMode==='detailed'?' active':'') + '" data-action="setView" data-mode="detailed" role="tab" aria-selected="' + (viewMode==='detailed') + '">Detailed</button>' +
-      '<button class="gb-seg-btn' + (viewMode==='average'?' active':'') + '" data-action="setView" data-mode="average" role="tab" aria-selected="' + (viewMode==='average') + '">Averages</button>' +
+      '<button class="gb-seg-btn' + (viewMode==='scores'?' active':'') + '" data-action="setView" data-mode="scores" role="tab" aria-selected="' + (viewMode==='scores') + '">Scores</button>' +
       '<button class="gb-seg-btn' + (viewMode==='summary'?' active':'') + '" data-action="setView" data-mode="summary" role="tab" aria-selected="' + (viewMode==='summary') + '">Summary</button>' +
     '</div>';
 
@@ -168,8 +172,8 @@ window.PageGradebook = (function() {
         '<div style="font-family:var(--font-base);font-size:0.95rem;margin-bottom:4px">No ' + typeLabel + ' assignments found' + secLabel + '.</div>' +
         '<div style="font-family:var(--font-base);font-size:0.82rem">Try adjusting your filters or <a href="#/assignments?course=' + cid + '" style="color:var(--active)">create a new assessment</a>.</div>' +
       '</div>';
-    } else if (viewMode === 'average') {
-      html += renderAverageTable(cid, students, assessments, sections, isLetter, scores);
+    } else if (viewMode === 'scores') {
+      html += renderScoresTable(cid, students, assessments, sections, isLetter, scores);
     } else {
       html += renderDetailedTable(cid, students, assessments, sections, isLetter, scores);
     }
@@ -381,6 +385,130 @@ window.PageGradebook = (function() {
       else { var avg = vals.reduce(function(a,b){return a+b;},0)/vals.length; var r = Math.round(avg); html += '<td class="gb-avg-cell' + startClass + altClass + '"><span class="gb-avg-val" style="color:' + PROF_COLORS[r] + ';font-weight:700">' + avg.toFixed(1) + '</span><span class="gb-avg-label" style="color:' + PROF_COLORS[r] + '">' + (PROF_LABELS[r]||'') + '</span></td>'; }
     });
     html += '</tr>';
+    html += '</tbody></table></div></div>';
+    return html;
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     SCORES VIEW — Apple Numbers-inspired spreadsheet
+     ══════════════════════════════════════════════════════════ */
+  function renderScoresTable(cid, students, assessments, sections, isLetter, scores) {
+    var sortedStudents = applySorting(cid, students, sections, isLetter);
+    var cc = getCourseConfig(cid);
+    var cw = getCategoryWeights(cid);
+    var isCompact = _scoreDensity === 'compact';
+    var rowH = isCompact ? 'gb-scores-compact' : '';
+
+    // Assignments sorted newest-first (left)
+    var sortedAssess = assessments.slice().sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
+
+    var html = '<div class="gb-scores-toolbar">' +
+      '<div class="gb-scores-pin-toggles">' +
+        '<button class="gb-scores-pin-btn' + (_pinnedCols.categories ? ' active' : '') + '" data-action="togglePin" data-col="categories" title="Toggle category columns">Summ/Form</button>' +
+        '<button class="gb-scores-pin-btn' + (_pinnedCols.final ? ' active' : '') + '" data-action="togglePin" data-col="final" title="Toggle final column">Final</button>' +
+      '</div>' +
+      '<div style="flex:1"></div>' +
+      '<button class="gb-scores-density-btn" data-action="toggleDensity" title="Toggle compact/comfortable">' +
+        (_scoreDensity === 'compact' ? '\u2630' : '\u2261') + '</button>' +
+      '<button class="gb-scores-export-btn" data-action="exportScoresCSV" title="Export CSV">\u2913 Export</button>' +
+      '<button class="gb-scores-add-btn" data-action="showAddAssessPopover" title="New assignment">+ New</button>' +
+    '</div>';
+
+    html += '<div class="gb-scores-wrap"><div class="gb-scores-scroll"><table class="gb-scores-table ' + rowH + '">';
+
+    // Header row — student name + frozen cols + assignment columns
+    html += '<thead><tr>';
+    html += '<th class="gb-scores-corner gb-scores-sticky">Student</th>';
+    if (_pinnedCols.categories) {
+      html += '<th class="gb-scores-frozen">Summ % <span class="gb-pin active" data-action="togglePin" data-col="categories" title="Unpin">\uD83D\uDCCC</span></th>';
+      html += '<th class="gb-scores-frozen">Form %</th>';
+    } else {
+      html += '<th class="gb-scores-frozen" style="display:none"></th>';
+    }
+    if (_pinnedCols.final) {
+      html += '<th class="gb-scores-frozen gb-scores-final">Final <span class="gb-pin active" data-action="togglePin" data-col="final" title="Unpin">\uD83D\uDCCC</span></th>';
+    }
+    sortedAssess.forEach(function(a) {
+      var isPrimary = a.type === 'summative';
+      var typeClass = isPrimary ? ' gb-scores-summ' : ' gb-scores-form';
+      var maxPts = a.scoreMode === 'points' ? ' / ' + (a.maxPoints || 100) : '';
+      html += '<th class="gb-scores-assess-head' + typeClass + '" data-aid="' + a.id + '" data-action-dblclick="startScoreMode" title="Double-click to enter score mode">' +
+        '<div class="gb-scores-assess-name">' + esc(a.title) + '</div>' +
+        '<div class="gb-scores-assess-meta">' + formatDate(a.date) + maxPts + '</div>' +
+      '</th>';
+    });
+    html += '</tr></thead>';
+
+    // Data rows
+    html += '<tbody>';
+    sortedStudents.forEach(function(s, si) {
+      var altClass = si % 2 === 1 ? ' gb-scores-alt' : '';
+      html += '<tr class="gb-scores-row' + altClass + '" data-sid="' + s.id + '">';
+      html += '<td class="gb-scores-name gb-scores-sticky">' + esc(fullName(s)) + '</td>';
+
+      // Frozen summary columns
+      if (_pinnedCols.categories) {
+        // Summative %: average of summative scores only
+        var summScores = (scores[s.id] || []).filter(function(sc) { return sc.type === 'summative' && sc.score > 0; });
+        var summAvg = summScores.length > 0 ? summScores.reduce(function(a, b) { return a + b.score; }, 0) / summScores.length : 0;
+        var summPct = summAvg > 0 ? Math.round(summAvg / 4 * 100) : 0;
+        html += '<td class="gb-scores-frozen">' + (summPct > 0 ? summPct + '%' : '\u2014') + '</td>';
+        // Formative %
+        var formScores = (scores[s.id] || []).filter(function(sc) { return sc.type === 'formative' && sc.score > 0; });
+        var formAvg = formScores.length > 0 ? formScores.reduce(function(a, b) { return a + b.score; }, 0) / formScores.length : 0;
+        var formPct = formAvg > 0 ? Math.round(formAvg / 4 * 100) : 0;
+        html += '<td class="gb-scores-frozen">' + (formPct > 0 ? formPct + '%' : '\u2014') + '</td>';
+      }
+      if (_pinnedCols.final) {
+        var overall = getOverallProficiency(cid, s.id);
+        var finalPct = overall > 0 ? Math.round(overall / 4 * 100) : 0;
+        var fr = Math.round(overall);
+        html += '<td class="gb-scores-frozen gb-scores-final" style="color:' + (overall > 0 ? PROF_COLORS[fr] : 'var(--text-3)') + ';font-weight:700">' + (finalPct > 0 ? finalPct + '%' : '\u2014') + '</td>';
+      }
+
+      // Score cells per assignment
+      sortedAssess.forEach(function(a) {
+        var studentScores = scores[s.id] || [];
+        var tagIds = a.tagIds || [];
+        // Get average score across all tags in this assessment for this student
+        var tagScores = tagIds.map(function(tid) {
+          var entry = studentScores.find(function(e) { return e.assessmentId === a.id && e.tagId === tid; });
+          return entry ? entry.score : 0;
+        }).filter(function(v) { return v > 0; });
+        var val = tagScores.length > 0 ? tagScores.reduce(function(x, y) { return x + y; }, 0) / tagScores.length : 0;
+        var isPoints = a.scoreMode === 'points';
+        var display, cellStyle, cellClass = '';
+        if (val > 0) {
+          var r = Math.round(val);
+          cellStyle = 'background:' + PROF_TINT[r] + ';color:' + PROF_COLORS[r];
+          display = isPoints ? val.toFixed(0) : val.toFixed(1);
+          // Warning for out-of-range (>4 for proficiency, >maxPoints for points)
+          var maxVal = isPoints ? (a.maxPoints || 100) : 4;
+          if (val > maxVal) cellClass = ' gb-scores-warning';
+        } else {
+          // Check zero policy for missing scores
+          var missingPolicy = a.missingPolicy || cc.missingPolicy || 'exclude';
+          var isPastDue = a.dueDate && a.dueDate < new Date().toISOString().slice(0, 10);
+          if (missingPolicy === 'zero' && isPastDue) {
+            cellStyle = 'color:var(--score-1)';
+            display = '<span class="gb-scores-zero">0</span>';
+          } else if (isPastDue) {
+            cellStyle = 'background:rgba(255,149,0,0.06);color:var(--text-3)';
+            display = '<span class="gb-scores-missing">\u2014</span>';
+          } else {
+            cellStyle = 'color:var(--text-3)';
+            display = '\u2014';
+          }
+        }
+        var isScoreModeCell = _scoreMode && _scoreMode.assessmentId === a.id && si === _scoreMode.studentIdx;
+        var isScoreModeCol = _scoreMode && _scoreMode.assessmentId === a.id;
+        html += '<td class="gb-scores-cell' + (isScoreModeCell ? ' gb-scores-focus' : '') + (isScoreModeCol ? ' gb-scores-col-active' : '') + cellClass + '" style="' + cellStyle + '" data-action="editScoreCell" data-aid="' + a.id + '" data-sid="' + s.id + '">' +
+          '<span class="gb-scores-val">' + display + '</span>' +
+        '</td>';
+      });
+
+      html += '</tr>';
+    });
     html += '</tbody></table></div></div>';
     return html;
   }
@@ -654,6 +782,368 @@ window.PageGradebook = (function() {
     });
   }
 
+  /* ── Scores tab: new assignment popover ──────────────────── */
+  function dismissAddAssessPopover() {
+    var existing = document.querySelector('.gb-add-popover');
+    if (existing) existing.remove();
+  }
+
+  function showAddAssessPopover(anchor) {
+    dismissAddAssessPopover();
+    var cid = activeCourse;
+    var sections = getSections(cid);
+    var today = new Date().toISOString().slice(0, 10);
+
+    var pop = document.createElement('div');
+    pop.className = 'gb-add-popover';
+    pop.innerHTML =
+      '<div class="gb-add-popover-title">New Assignment</div>' +
+      '<div class="gb-add-field"><label>Title</label><input type="text" id="gb-new-title" placeholder="e.g. Chapter 3 Quiz" autofocus></div>' +
+      '<div class="gb-add-row">' +
+        '<div class="gb-add-field"><label>Date</label><input type="date" id="gb-new-date" value="' + today + '"></div>' +
+        '<div class="gb-add-field"><label>Type</label><select id="gb-new-type"><option value="summative">Summative</option><option value="formative">Formative</option></select></div>' +
+      '</div>' +
+      '<div class="gb-add-row">' +
+        '<div class="gb-add-field"><label>Score Mode</label><select id="gb-new-scoremode"><option value="proficiency">Proficiency (1-4)</option><option value="points">Points</option></select></div>' +
+        '<div class="gb-add-field" id="gb-new-pts-wrap" style="display:none"><label>Max Points</label><input type="number" id="gb-new-maxpts" value="100" min="1"></div>' +
+      '</div>' +
+      '<div class="gb-add-field"><label>Standards <span style="font-weight:400;color:var(--text-3)">(select at least one)</span></label>' +
+        '<div class="gb-add-tags">' + sections.map(function(sec) {
+          return '<label class="gb-add-tag"><input type="checkbox" value="' + (sec.tags[0] ? sec.tags[0].id : sec.id) + '" checked>' +
+            '<span style="color:' + sec.color + '">' + esc(sec.shortName || sec.name) + '</span></label>';
+        }).join('') + '</div>' +
+      '</div>' +
+      '<div class="gb-add-actions">' +
+        '<button class="gb-add-cancel" data-action="cancelAddAssess">Cancel</button>' +
+        '<button class="gb-add-confirm" data-action="confirmAddAssess">Create</button>' +
+      '</div>';
+    document.body.appendChild(pop);
+
+    // Show/hide points field
+    var smSel = pop.querySelector('#gb-new-scoremode');
+    smSel.addEventListener('change', function() {
+      pop.querySelector('#gb-new-pts-wrap').style.display = smSel.value === 'points' ? '' : 'none';
+    });
+
+    // Position near button
+    var rect = anchor.getBoundingClientRect();
+    pop.style.top = (rect.bottom + 8) + 'px';
+    pop.style.right = (window.innerWidth - rect.right) + 'px';
+
+    // Close on outside click (after a tick)
+    setTimeout(function() {
+      document.addEventListener('mousedown', function handler(ev) {
+        if (!pop.contains(ev.target) && ev.target !== anchor) {
+          dismissAddAssessPopover();
+          document.removeEventListener('mousedown', handler);
+        }
+      });
+    }, 0);
+
+    // Focus title
+    setTimeout(function() { var t = pop.querySelector('#gb-new-title'); if (t) t.focus(); }, 50);
+  }
+
+  function confirmAddAssess() {
+    var cid = activeCourse;
+    var title = (document.getElementById('gb-new-title') || {}).value;
+    if (!title || !title.trim()) {
+      var el = document.getElementById('gb-new-title');
+      if (el) { el.style.border = '2px solid var(--score-1)'; el.focus(); }
+      return;
+    }
+    var date = (document.getElementById('gb-new-date') || {}).value || new Date().toISOString().slice(0, 10);
+    var type = (document.getElementById('gb-new-type') || {}).value || 'summative';
+    var scoreMode = (document.getElementById('gb-new-scoremode') || {}).value || 'proficiency';
+    var maxPoints = parseInt((document.getElementById('gb-new-maxpts') || {}).value, 10) || 100;
+    var tagIds = Array.from(document.querySelectorAll('.gb-add-tag input:checked')).map(function(cb) { return cb.value; });
+    if (tagIds.length === 0) return;
+
+    var assessments = getAssessments(cid);
+    var newAssess = {
+      id: uid(),
+      title: title.trim(),
+      date: date,
+      dateAssigned: date,
+      type: type,
+      tagIds: tagIds,
+      notes: '',
+      created: new Date().toISOString()
+    };
+    if (scoreMode === 'points') { newAssess.scoreMode = 'points'; newAssess.maxPoints = maxPoints; }
+    assessments.push(newAssess);
+    saveAssessments(cid, assessments);
+    dismissAddAssessPopover();
+    render();
+  }
+
+  /* ── Scores tab: CSV export ─────────────────────────────── */
+  function exportScoresCSV() {
+    var cid = activeCourse;
+    var students = sortStudents(getStudents(cid), 'lastName');
+    var assessments = getAssessments(cid).slice().sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
+    var sections = getSections(cid);
+    var scores = getScores(cid);
+    var grouped = getGroupedSections(cid);
+    var hasGroups = grouped.groups.some(function(g) { return g.sections.length > 0; });
+
+    // Build header
+    var headers = ['Student'];
+    if (hasGroups) {
+      grouped.groups.forEach(function(gi) { if (gi.sections.length > 0) headers.push(gi.group.name + ' (Group Avg)'); });
+    }
+    sections.forEach(function(sec) { headers.push(sec.shortName || sec.name); });
+    headers.push('Overall', 'Final %');
+    assessments.forEach(function(a) { headers.push(a.title + ' (' + (a.date || '') + ')'); });
+
+    var rows = [headers];
+    students.forEach(function(s) {
+      var row = [fullName(s)];
+      // Group averages
+      if (hasGroups) {
+        grouped.groups.forEach(function(gi) {
+          if (gi.sections.length === 0) return;
+          var gp = getGroupProficiency(cid, s.id, gi.group.id);
+          row.push(gp > 0 ? gp.toFixed(2) : '');
+        });
+      }
+      // Individual sections
+      sections.forEach(function(sec) {
+        var sp = getSectionProficiency(cid, s.id, sec.id);
+        row.push(sp > 0 ? sp.toFixed(2) : '');
+      });
+      // Overall + final %
+      var overall = getOverallProficiency(cid, s.id);
+      row.push(overall > 0 ? overall.toFixed(2) : '');
+      row.push(overall > 0 ? Math.round(overall / 4 * 100) + '%' : '');
+      // Assessment scores
+      assessments.forEach(function(a) {
+        var ss = scores[s.id] || [];
+        var tagScores = (a.tagIds || []).map(function(tid) {
+          var e = ss.find(function(e) { return e.assessmentId === a.id && e.tagId === tid; });
+          return e ? e.score : 0;
+        }).filter(function(v) { return v > 0; });
+        var avg = tagScores.length > 0 ? tagScores.reduce(function(x, y) { return x + y; }, 0) / tagScores.length : 0;
+        row.push(avg > 0 ? avg.toFixed(1) : '');
+      });
+      rows.push(row);
+    });
+
+    var csv = rows.map(function(r) { return r.map(function(c) { return '"' + String(c).replace(/"/g, '""') + '"'; }).join(','); }).join('\n');
+    var blob = new Blob([csv], { type: 'text/csv' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = (COURSES[cid] ? COURSES[cid].name : 'gradebook') + '_scores.csv';
+    a.click(); URL.revokeObjectURL(url);
+  }
+
+  /* ── Scores tab: context menus ──────────────────────────── */
+  function _dismissContextMenu() {
+    var existing = document.querySelector('.gb-ctx-menu');
+    if (existing) existing.remove();
+  }
+
+  function showScoreContextMenu(e, cell) {
+    _dismissContextMenu();
+    var aid = cell.dataset.aid; var sid = cell.dataset.sid;
+    var menu = document.createElement('div');
+    menu.className = 'gb-ctx-menu';
+    menu.style.left = e.clientX + 'px'; menu.style.top = e.clientY + 'px';
+    menu.innerHTML =
+      '<div class="gb-ctx-item" data-ctx="editCell">Edit Score</div>' +
+      '<div class="gb-ctx-item" data-ctx="clearCell">Clear Score</div>' +
+      '<div class="gb-ctx-divider"></div>' +
+      '<div class="gb-ctx-item" data-ctx="markMissing">Mark Missing</div>' +
+      '<div class="gb-ctx-item" data-ctx="excuseCell">Excuse</div>';
+    document.body.appendChild(menu);
+    menu.addEventListener('click', function(ev) {
+      var item = ev.target.closest('[data-ctx]');
+      if (!item) return;
+      var action = item.dataset.ctx;
+      if (action === 'editCell') startCellEdit(cell);
+      else if (action === 'clearCell') {
+        var cid = activeCourse; var scores = getScores(cid);
+        var assess = getAssessments(cid).find(function(a) { return a.id === aid; });
+        if (assess && scores[sid]) {
+          (assess.tagIds || []).forEach(function(tid) {
+            var idx = scores[sid].findIndex(function(e) { return e.assessmentId === aid && e.tagId === tid; });
+            if (idx >= 0) scores[sid].splice(idx, 1);
+          });
+          saveScores(cid, scores); clearProfCache(); render();
+        }
+      }
+      _dismissContextMenu();
+    });
+    setTimeout(function() { document.addEventListener('click', _dismissContextMenu, { once: true }); }, 0);
+  }
+
+  function showHeaderContextMenu(e, header) {
+    _dismissContextMenu();
+    var aid = header.dataset.aid;
+    var menu = document.createElement('div');
+    menu.className = 'gb-ctx-menu';
+    menu.style.left = e.clientX + 'px'; menu.style.top = e.clientY + 'px';
+    var assess = getAssessments(activeCourse).find(function(a) { return a.id === aid; });
+    var _cc = getCourseConfig(activeCourse);
+    var currentPolicy = (assess && assess.missingPolicy) || _cc.missingPolicy || 'exclude';
+    menu.innerHTML =
+      '<div class="gb-ctx-item" data-ctx="scoreMode">Score This Assignment</div>' +
+      '<div class="gb-ctx-item" data-ctx="editAssess">Edit Assignment Details</div>' +
+      '<div class="gb-ctx-divider"></div>' +
+      '<div class="gb-ctx-item" data-ctx="toggleZeroPolicy">' + (currentPolicy === 'zero' ? '\u2713 ' : '') + 'Count missing as zero</div>' +
+      '<div class="gb-ctx-divider"></div>' +
+      '<div class="gb-ctx-item gb-ctx-danger" data-ctx="deleteAssess">Delete Assignment</div>';
+    document.body.appendChild(menu);
+    menu.addEventListener('click', function(ev) {
+      var item = ev.target.closest('[data-ctx]');
+      if (!item) return;
+      var action = item.dataset.ctx;
+      if (action === 'scoreMode') enterScoreMode(aid);
+      else if (action === 'editAssess') Router.navigate('#/assignments?course=' + activeCourse + '&open=' + aid);
+      else if (action === 'toggleZeroPolicy') {
+        var assessList = getAssessments(activeCourse);
+        var a = assessList.find(function(x) { return x.id === aid; });
+        if (a) {
+          a.missingPolicy = (a.missingPolicy === 'zero') ? 'exclude' : 'zero';
+          saveAssessments(activeCourse, assessList);
+          render();
+        }
+      }
+      else if (action === 'deleteAssess') {
+        if (confirm('Delete this assignment and all its scores?')) {
+          var cid = activeCourse;
+          var assessments = getAssessments(cid).filter(function(a) { return a.id !== aid; });
+          saveAssessments(cid, assessments);
+          var scores = getScores(cid);
+          Object.keys(scores).forEach(function(sid) {
+            scores[sid] = scores[sid].filter(function(e) { return e.assessmentId !== aid; });
+          });
+          saveScores(cid, scores); clearProfCache(); render();
+        }
+      }
+      _dismissContextMenu();
+    });
+    setTimeout(function() { document.addEventListener('click', _dismissContextMenu, { once: true }); }, 0);
+  }
+
+  /* ── Scores tab: column-focus score mode ────────────────── */
+  function enterScoreMode(assessmentId) {
+    _scoreMode = { assessmentId: assessmentId, studentIdx: 0 };
+    render();
+    // After render, auto-focus the first cell in this column
+    setTimeout(function() {
+      var firstCell = document.querySelector('.gb-scores-cell.gb-scores-focus');
+      if (firstCell) startCellEdit(firstCell);
+    }, 50);
+  }
+
+  function advanceScoreMode() {
+    if (!_scoreMode) return;
+    _scoreMode.studentIdx++;
+    // Check if we've passed the last student
+    var sortedStudents = applySorting(activeCourse, sortStudents(getStudents(activeCourse), 'lastName'), getSections(activeCourse), false);
+    if (_scoreMode.studentIdx >= sortedStudents.length) {
+      _scoreMode = null;
+      render();
+      return;
+    }
+    render();
+    setTimeout(function() {
+      // After render, exactly one cell has gb-scores-focus
+      var target = document.querySelector('.gb-scores-cell.gb-scores-focus');
+      if (target) startCellEdit(target);
+      else { _scoreMode = null; render(); }
+    }, 50);
+  }
+
+  /* ── Scores tab: inline cell editing ────────────────────── */
+  function startCellEdit(td) {
+    if (td.querySelector('.gb-scores-input')) return;
+    var cid = activeCourse;
+    var aid = td.dataset.aid; var sid = td.dataset.sid;
+    var assess = getAssessments(cid).find(function(a) { return a.id === aid; });
+    if (!assess) return;
+    var tagIds = assess.tagIds || [];
+    var studentScores = getScores(cid)[sid] || [];
+    // Get current average for display
+    var tagScores = tagIds.map(function(tid) {
+      var e = studentScores.find(function(e) { return e.assessmentId === aid && e.tagId === tid; });
+      return e ? e.score : 0;
+    }).filter(function(v) { return v > 0; });
+    var currentVal = tagScores.length > 0 ? tagScores.reduce(function(a, b) { return a + b; }, 0) / tagScores.length : 0;
+
+    var span = td.querySelector('.gb-scores-val');
+    if (span) span.style.display = 'none';
+    var inp = document.createElement('input');
+    inp.type = 'number'; inp.step = '0.1'; inp.min = '0'; inp.max = '4';
+    inp.className = 'gb-scores-input';
+    inp.value = currentVal > 0 ? currentVal.toFixed(1) : '';
+    td.appendChild(inp);
+    inp.focus(); inp.select();
+
+    function commit(navDir) {
+      var val = parseFloat(inp.value);
+      if (inp.value === '' || isNaN(val)) val = 0;
+      // Save undo
+      // Save full entries for undo (deep copy)
+      var prevEntries = tagIds.map(function(tid) {
+        var e = (getScores(cid)[sid] || []).find(function(e) { return e.assessmentId === aid && e.tagId === tid; });
+        return e ? JSON.parse(JSON.stringify(e)) : null;
+      });
+      _undoStack.push({ cid: cid, sid: sid, aid: aid, tagIds: tagIds, prevEntries: prevEntries });
+      // Apply score to all tags in this assessment
+      var allScores = getScores(cid);
+      if (!allScores[sid]) allScores[sid] = [];
+      tagIds.forEach(function(tid) {
+        var entry = allScores[sid].find(function(e) { return e.assessmentId === aid && e.tagId === tid; });
+        if (entry) { entry.score = val; }
+        else if (val > 0) {
+          allScores[sid].push({ id: uid(), assessmentId: aid, tagId: tid, score: val, date: assess.date || new Date().toISOString().slice(0,10), type: assess.type || 'summative', note: '', created: new Date().toISOString() });
+        }
+      });
+      saveScores(cid, allScores);
+      clearProfCache();
+      inp.remove();
+      if (span) span.style.display = '';
+      if (_scoreMode) { advanceScoreMode(); return; }
+      // Navigate to adjacent cell
+      if (navDir) {
+        // Capture data attributes BEFORE re-render destroys DOM
+        var row = td.closest('tr');
+        var cells = Array.from(row.querySelectorAll('.gb-scores-cell'));
+        var colIdx = cells.indexOf(td);
+        var rows = Array.from(document.querySelectorAll('.gb-scores-row'));
+        var rowIdx = rows.indexOf(row);
+        var targetAid = null, targetSid = null;
+        if (navDir === 'right' && colIdx < cells.length - 1) {
+          targetAid = cells[colIdx + 1].dataset.aid; targetSid = cells[colIdx + 1].dataset.sid;
+        } else if (navDir === 'left' && colIdx > 0) {
+          targetAid = cells[colIdx - 1].dataset.aid; targetSid = cells[colIdx - 1].dataset.sid;
+        } else if (navDir === 'down' && rowIdx < rows.length - 1) {
+          var nextCells = rows[rowIdx + 1].querySelectorAll('.gb-scores-cell');
+          if (nextCells[colIdx]) { targetAid = nextCells[colIdx].dataset.aid; targetSid = nextCells[colIdx].dataset.sid; }
+        }
+        if (targetAid && targetSid) {
+          render();
+          setTimeout(function() {
+            var newCell = document.querySelector('.gb-scores-cell[data-aid="' + targetAid + '"][data-sid="' + targetSid + '"]');
+            if (newCell) startCellEdit(newCell);
+          }, 30);
+          return;
+        }
+      }
+      render();
+    }
+
+    var _navDir = null; // 'down' | 'right' | null
+    inp.addEventListener('blur', function() { commit(_navDir); });
+    inp.addEventListener('keydown', function(ev) {
+      if (ev.key === 'Enter') { ev.preventDefault(); _navDir = 'down'; inp.blur(); }
+      else if (ev.key === 'Tab') { ev.preventDefault(); _navDir = ev.shiftKey ? 'left' : 'right'; inp.blur(); }
+      else if (ev.key === 'Escape') { inp.remove(); if (span) span.style.display = ''; _scoreMode = null; }
+    });
+  }
+
   /* ── Update row summaries ───────────────────────────────── */
   function updateRowSummary(cid, sid, row) {
     var overallTd = row.querySelector('td.gb-overall-col');
@@ -686,6 +1176,26 @@ window.PageGradebook = (function() {
   }
 
   function _handleKeydown(e) {
+    // Cmd+Z undo for scores tab
+    if ((e.metaKey || e.ctrlKey) && e.key === 'z' && viewMode === 'scores' && _undoStack.length > 0) {
+      e.preventDefault();
+      var undo = _undoStack.pop();
+      var scores = getScores(undo.cid);
+      if (!scores[undo.sid]) scores[undo.sid] = [];
+      // Restore previous entries (full objects)
+      (undo.tagIds || []).forEach(function(tid, i) {
+        var prevEntry = undo.prevEntries[i];
+        // Remove current entry for this tag
+        var idx = scores[undo.sid].findIndex(function(e) { return e.assessmentId === undo.aid && e.tagId === tid; });
+        if (idx >= 0) scores[undo.sid].splice(idx, 1);
+        // Restore previous entry if it existed
+        if (prevEntry) scores[undo.sid].push(prevEntry);
+      });
+      saveScores(undo.cid, scores);
+      clearProfCache();
+      render();
+      return;
+    }
     if (viewMode !== 'detailed') return;
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
     var table = document.querySelector('.gb-table'); if (!table) return;
@@ -831,6 +1341,14 @@ window.PageGradebook = (function() {
       'clearAllFilters':      function() { clearAllFilters(); },
       'toggleSort':           function() { toggleSort(el.dataset.sortkey); },
       'cycleScore':           function() { cycleScore(el); },
+      'toggleDensity':        function() { _scoreDensity = _scoreDensity === 'compact' ? 'comfortable' : 'compact'; render(); },
+      'togglePin':            function() { var col = el.dataset.col; _pinnedCols[col] = !_pinnedCols[col]; render(); },
+      'editScoreCell':        function() { startCellEdit(el); },
+      'startScoreMode':       function() { enterScoreMode(el.dataset.aid); },
+      'showAddAssessPopover': function() { showAddAssessPopover(el); },
+      'confirmAddAssess':    function() { confirmAddAssess(); },
+      'cancelAddAssess':     function() { dismissAddAssessPopover(); },
+      'exportScoresCSV':      function() { exportScoresCSV(); },
       'stopPropOnly':         function() { /* just stop propagation */ }
     };
     if (handlers[action]) {
@@ -873,6 +1391,20 @@ window.PageGradebook = (function() {
     window._pageSwitchCourse = switchCourse;
 
     _addDocListener('click', _handleClick);
+    _addDocListener('contextmenu', function(e) {
+      // Scores tab context menus
+      var cell = e.target.closest('.gb-scores-cell');
+      if (cell) { e.preventDefault(); showScoreContextMenu(e, cell); return; }
+      var header = e.target.closest('.gb-scores-assess-head');
+      if (header) { e.preventDefault(); showHeaderContextMenu(e, header); return; }
+    });
+    _addDocListener('dblclick', function(e) {
+      var el = e.target.closest('[data-action-dblclick]');
+      if (!el) return;
+      e.preventDefault();
+      var action = el.dataset.actionDblclick;
+      if (action === 'startScoreMode') enterScoreMode(el.dataset.aid);
+    });
     _addDocListener('input', _handleInput);
     _addDocListener('change', _handleChange);
     _addDocListener('keydown', _handleKeydown);
