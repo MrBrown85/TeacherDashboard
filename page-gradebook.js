@@ -186,15 +186,22 @@ window.PageGradebook = (function() {
   }
 
   /* ── 4-quadrant grid scroll sync ─────────────────────────── */
+  var _gridScrollHandler = null;
   function initGridScrollSync() {
+    // Remove previous listener to prevent stacking
+    if (_gridScrollHandler && _gridScrollHandler.el) {
+      _gridScrollHandler.el.removeEventListener('scroll', _gridScrollHandler.fn);
+    }
     var data = document.getElementById('gb-data');
     var colheads = document.getElementById('gb-colheads');
     var rowheads = document.getElementById('gb-rowheads');
     if (!data || !colheads || !rowheads) return;
-    data.addEventListener('scroll', function() {
+    var fn = function() {
       colheads.scrollLeft = data.scrollLeft;
       rowheads.scrollTop = data.scrollTop;
-    });
+    };
+    data.addEventListener('scroll', fn, { passive: true });
+    _gridScrollHandler = { el: data, fn: fn };
   }
 
   /* ── Sticky left positions ─────────────────────────────── */
@@ -474,31 +481,7 @@ window.PageGradebook = (function() {
     html += '</div>';
 
     // Q4: Data cells (bottom-right, scrolls both ways — drives the others)
-    html += '<div class="gb-grid-data" id="gb-data"><table class="gb-scores-table ' + rowH + '">';
-    html += '<tbody>';
-    sortedAssess.forEach(function(a) {
-      var isPrimary = a.type === 'summative';
-      var typeClass = isPrimary ? ' gb-scores-summ' : ' gb-scores-form';
-      var maxPts = a.scoreMode === 'points' ? ' / ' + (a.maxPoints || 100) : '';
-      // Get section color for tag stripe
-      var tagSecs = (a.tagIds || []).map(function(tid) { return getSectionForTag(cid, tid); }).filter(Boolean);
-      var stripeColor = tagSecs.length > 0 ? tagSecs[0].color : 'var(--border)';
-      html += '<th class="gb-scores-assess-head' + typeClass + '" data-aid="' + a.id + '" data-action-dblclick="startScoreMode" title="' + esc(a.title) + ' — Double-click to score">' +
-        '<div class="gb-scores-assess-outer">' +
-          '<div class="gb-scores-assess-inner">' +
-            '<div class="gb-scores-assess-text">' +
-              '<span class="gb-scores-assess-name">' + esc(a.title) + '</span>' +
-              '<span class="gb-scores-assess-meta">' + formatDate(a.date) + maxPts + '</span>' +
-            '</div>' +
-          '</div>' +
-        '</div>' +
-        '<div class="gb-scores-assess-stripe" style="background:' + stripeColor + '"></div>' +
-      '</th>';
-    });
-    html += '</tr></thead>';
-
-    // Data rows (scores only — student name is in the sidebar)
-    html += '<tbody>';
+    html += '<div class="gb-grid-data" id="gb-data"><table class="gb-scores-table ' + rowH + '"><tbody>';
     sortedStudents.forEach(function(s, si) {
       var altClass = si % 2 === 1 ? ' gb-scores-alt' : '';
       html += '<tr class="gb-scores-row' + altClass + '" data-sid="' + s.id + '">';
@@ -1434,7 +1417,7 @@ window.PageGradebook = (function() {
       // Scores tab context menus
       var cell = e.target.closest('.gb-scores-cell');
       if (cell) { e.preventDefault(); showScoreContextMenu(e, cell); return; }
-      var header = e.target.closest('.gb-scores-assess-head');
+      var header = e.target.closest('.gb-grid-colhead, .gb-scores-assess-head');
       if (header) { e.preventDefault(); showHeaderContextMenu(e, header); return; }
     });
     _addDocListener('dblclick', function(e) {

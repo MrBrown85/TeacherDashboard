@@ -385,7 +385,7 @@ th.gb-group-alt { background-color: rgba(0,0,0,0.03); }
   overflow:hidden; border-bottom:2px solid var(--border);
   background:var(--bg);
 }
-.gb-grid-colheads-inner { display:flex; }
+.gb-grid-colheads-inner { display:flex; position:relative; }
 .gb-grid-colhead {
   flex:0 0 48px; width:48px; height:140px;
   position:relative; display:flex; flex-direction:column;
