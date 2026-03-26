@@ -296,56 +296,60 @@ window.PageGradebook = (function() {
     });
   }
 
-  /* ── Column hover tooltip (appended to body to escape overflow) ── */
+  /* ── Column hover with 45-degree skew-aware hit-testing ── */
+  var _hoveredColIdx = -1;
+
   function initColHoverTooltip() {
     var colheads = document.getElementById('gb-colheads');
     if (!colheads) return;
-    colheads.addEventListener('mouseenter', function(e) {
-      var col = e.target.closest('.gb-grid-colhead');
-      if (!col) return;
-      showColTooltip(col);
-    }, true);
-    colheads.addEventListener('mouseleave', function(e) {
-      var col = e.target.closest('.gb-grid-colhead');
-      if (!col) return;
-      // Only hide if not entering another colhead
-      var related = e.relatedTarget;
-      if (related && related.closest && related.closest('.gb-grid-colhead')) return;
-      hideColTooltip();
-    }, true);
-    colheads.addEventListener('mouseover', function(e) {
-      var col = e.target.closest('.gb-grid-colhead');
-      if (col) showColTooltip(col);
+    // Use mousemove for skew-aware hit-testing instead of DOM hover
+    colheads.addEventListener('mousemove', function(e) {
+      var inner = colheads.querySelector('.gb-grid-colheads-inner');
+      if (!inner) return;
+      var cols = inner.querySelectorAll('.gb-grid-colhead');
+      if (!cols.length) return;
+      var innerRect = inner.getBoundingClientRect();
+      var colW = cols[0].getBoundingClientRect().width;
+      // Account for horizontal scroll offset
+      var scrollLeft = colheads.scrollLeft || 0;
+      var mouseX = e.clientX - innerRect.left + scrollLeft;
+      var mouseY = e.clientY - innerRect.top;
+      var containerH = innerRect.height;
+      // Skew correction: skewX(-45deg) shifts content LEFT as you go up
+      // To undo: add height-from-bottom to mouseX
+      var hFromBottom = containerH - mouseY;
+      var adjustedX = mouseX + hFromBottom;
+      var idx = Math.floor(adjustedX / colW);
+      if (idx < 0 || idx >= cols.length) {
+        if (_hoveredColIdx >= 0) hideColTooltip();
+        return;
+      }
+      if (idx !== _hoveredColIdx) {
+        hideColTooltip();
+        _hoveredColIdx = idx;
+        showColTooltip(cols[idx], idx);
+      }
     });
-    colheads.addEventListener('mouseout', function(e) {
-      var col = e.target.closest('.gb-grid-colhead');
-      if (!col) return;
-      var related = e.relatedTarget;
-      if (related && related.closest && related.closest('.gb-grid-colhead') === col) return;
+    colheads.addEventListener('mouseleave', function() {
       hideColTooltip();
     });
   }
 
-  function showColTooltip(colEl) {
+  function showColTooltip(colEl, colIdx) {
     var aid = colEl.dataset.aid;
     var d = _colHoverData[aid];
     if (!d) return;
-    // Highlight the column header
+    // Highlight the skewed column header
     colEl.classList.add('gb-col-hover');
     // Highlight matching data cells in Q4
     var table = document.querySelector('.gb-scores-table');
     if (table) {
-      var colheads = document.querySelectorAll('#gb-colheads .gb-grid-colhead');
-      var colIdx = -1;
-      colheads.forEach(function(el, i) { if (el.dataset.aid === aid) colIdx = i; });
-      if (colIdx >= 0) {
-        table.querySelectorAll('tbody tr').forEach(function(row) {
-          var cell = row.children[colIdx];
-          if (cell) cell.classList.add('gb-col-hover');
-        });
-      }
+      table.querySelectorAll('tbody tr').forEach(function(row) {
+        var cell = row.children[colIdx];
+        if (cell) cell.classList.add('gb-col-hover');
+      });
     }
-    // Show tooltip
+    // Show tooltip at bottom of header, above Q4
     if (!_colHoverTip) {
       _colHoverTip = document.createElement('div');
       _colHoverTip.className = 'gb-colhead-hover-card';
@@ -362,15 +366,18 @@ window.PageGradebook = (function() {
       (d.tagNames.length && !d.isScoreOnly ? '<div class="gb-hover-tags">' + d.tagNames.map(function(t) { return '<span class="gb-hover-tag">' + esc(t) + '</span>'; }).join('') + '</div>' : '');
     _colHoverTip.innerHTML = html;
     _colHoverTip.style.display = 'block';
+    // Position just above Q4 data area, centered on column
     var rect = colEl.getBoundingClientRect();
+    var colheadsEl = document.getElementById('gb-colheads');
+    var q2Bottom = colheadsEl.getBoundingClientRect().bottom;
     _colHoverTip.style.left = (rect.left + rect.width / 2) + 'px';
-    _colHoverTip.style.top = (rect.bottom - 4) + 'px';
+    _colHoverTip.style.top = (q2Bottom + 2) + 'px';
     _colHoverTip.style.bottom = 'auto';
   }
 
   function hideColTooltip() {
+    _hoveredColIdx = -1;
     if (_colHoverTip) _colHoverTip.style.display = 'none';
-    // Remove all column highlights
     document.querySelectorAll('.gb-col-hover').forEach(function(el) {
       el.classList.remove('gb-col-hover');
     });
