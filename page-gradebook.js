@@ -182,6 +182,19 @@ window.PageGradebook = (function() {
     document.getElementById('main').innerHTML = html;
     applyStickyLeft();
     initScrollShadows();
+    initGridScrollSync();
+  }
+
+  /* ── 4-quadrant grid scroll sync ─────────────────────────── */
+  function initGridScrollSync() {
+    var data = document.getElementById('gb-data');
+    var colheads = document.getElementById('gb-colheads');
+    var rowheads = document.getElementById('gb-rowheads');
+    if (!data || !colheads || !rowheads) return;
+    data.addEventListener('scroll', function() {
+      colheads.scrollLeft = data.scrollLeft;
+      rowheads.scrollTop = data.scrollTop;
+    });
   }
 
   /* ── Sticky left positions ─────────────────────────────── */
@@ -420,27 +433,49 @@ window.PageGradebook = (function() {
       '<button class="gb-scores-add-btn" data-action="showAddAssessPopover" title="New assignment">+ New</button>' +
     '</div>';
 
-    // Student sidebar (fixed, outside the scrolling table)
-    html += '<div class="gb-scores-layout" style="font-size:' + _scoreTextSize + 'px">';
-    html += '<div class="gb-scores-sidebar">';
-    html += '<div class="gb-scores-sidebar-header">Student</div>';
+    var rowPx = isCompact ? 28 : 40;
+
+    // 4-quadrant grid: corner | col-headers / row-headers | data
+    html += '<div class="gb-grid" style="font-size:' + _scoreTextSize + 'px">';
+
+    // Q1: Corner (top-left, fixed)
+    html += '<div class="gb-grid-corner"><div class="gb-grid-corner-inner">Student</div></div>';
+
+    // Q2: Column headers (top-right, scrolls horizontally)
+    html += '<div class="gb-grid-colheads" id="gb-colheads"><div class="gb-grid-colheads-inner">';
+    sortedAssess.forEach(function(a) {
+      var isPrimary = a.type === 'summative';
+      var typeClass = isPrimary ? ' gb-scores-summ' : ' gb-scores-form';
+      var maxPts = a.scoreMode === 'points' ? ' / ' + (a.maxPoints || 100) : '';
+      var tagSecs = (a.tagIds || []).map(function(tid) { return getSectionForTag(cid, tid); }).filter(Boolean);
+      var stripeColor = tagSecs.length > 0 ? tagSecs[0].color : 'var(--border)';
+      html += '<div class="gb-grid-colhead' + typeClass + '" data-aid="' + a.id + '" data-action-dblclick="startScoreMode" title="' + esc(a.title) + '">' +
+        '<div class="gb-grid-colhead-text">' +
+          '<span class="gb-scores-assess-name">' + esc(a.title) + '</span>' +
+          '<span class="gb-scores-assess-meta">' + formatDate(a.date) + maxPts + '</span>' +
+        '</div>' +
+        '<div class="gb-grid-colhead-stripe" style="background:' + stripeColor + '"></div>' +
+      '</div>';
+    });
+    html += '</div></div>';
+
+    // Q3: Row headers (bottom-left, scrolls vertically)
+    html += '<div class="gb-grid-rowheads" id="gb-rowheads">';
     sortedStudents.forEach(function(s, si) {
       var altClass = si % 2 === 1 ? ' gb-scores-alt' : '';
       var overall = getOverallProficiency(cid, s.id);
       var finalPct = overall > 0 ? Math.round(overall / 4 * 100) : 0;
       var fr = Math.round(overall);
-      html += '<div class="gb-scores-sidebar-row' + altClass + '" data-sid="' + s.id + '">' +
-        '<span class="gb-scores-sidebar-name">' + esc(fullName(s)) + '</span>' +
-        '<span class="gb-scores-sidebar-pct" style="color:' + (overall > 0 ? PROF_COLORS[fr] : 'var(--text-3)') + '">' + (finalPct > 0 ? finalPct + '%' : '\u2014') + '</span>' +
+      html += '<div class="gb-grid-rowhead' + altClass + '" style="height:' + rowPx + 'px">' +
+        '<span class="gb-grid-rowhead-name">' + esc(fullName(s)) + '</span>' +
+        '<span class="gb-grid-rowhead-pct" style="color:' + (overall > 0 ? PROF_COLORS[fr] : 'var(--text-3)') + '">' + (finalPct > 0 ? finalPct + '%' : '\u2014') + '</span>' +
       '</div>';
     });
     html += '</div>';
 
-    // Scrolling scores grid
-    html += '<div class="gb-scores-wrap"><div class="gb-scores-scroll"><table class="gb-scores-table ' + rowH + '">';
-
-    // Header row — assignment columns only
-    html += '<thead><tr>';
+    // Q4: Data cells (bottom-right, scrolls both ways — drives the others)
+    html += '<div class="gb-grid-data" id="gb-data"><table class="gb-scores-table ' + rowH + '">';
+    html += '<tbody>';
     sortedAssess.forEach(function(a) {
       var isPrimary = a.type === 'summative';
       var typeClass = isPrimary ? ' gb-scores-summ' : ' gb-scores-form';
@@ -511,7 +546,7 @@ window.PageGradebook = (function() {
 
       html += '</tr>';
     });
-    html += '</tbody></table></div></div></div>'; // close scroll + wrap + layout
+    html += '</tbody></table></div></div>'; // close table + data + grid
     return html;
   }
 
