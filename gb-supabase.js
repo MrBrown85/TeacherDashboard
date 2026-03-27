@@ -3,11 +3,15 @@
 (function() {
   'use strict';
 
+  // Dev mode: bypass all Supabase on localhost with ?dev=1
+  const _isDevMode = location.hostname === 'localhost' && new URLSearchParams(location.search).get('dev') === '1';
+
   const SUPABASE_URL = (window.__ENV && window.__ENV.SUPABASE_URL) || '';
   const SUPABASE_KEY = (window.__ENV && window.__ENV.SUPABASE_KEY) || '';
 
   // Wait for Supabase CDN to be available, then initialize
   function _initClient() {
+    if (_isDevMode) return null;
     if (window._supabase) return window._supabase;
     if (typeof supabase === 'undefined' || !supabase.createClient) {
       console.error('Supabase CDN not loaded. Ensure the CDN script tag appears before gb-supabase.js.');
@@ -144,7 +148,7 @@
    */
   window.requireAuth = async function() {
     // Dev mode: bypass auth on localhost with ?dev=1
-    if (location.hostname === 'localhost' && new URLSearchParams(location.search).get('dev') === '1') {
+    if (_isDevMode) {
       window.getCurrentUser = async () => ({ id: 'dev-user', email: 'dev@localhost', user_metadata: { display_name: 'Dev Teacher' } });
       window.isLoggedIn = async () => true;
       return;
