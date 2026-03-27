@@ -201,7 +201,7 @@ function _initCrossTab() {
 
 function _broadcastChange(cid, field) {
   if (_crossTabChannel) {
-    try { _crossTabChannel.postMessage({ type: 'data-changed', cid: cid, field: field }); } catch (e) {}
+    try { _crossTabChannel.postMessage({ type: 'data-changed', cid: cid, field: field }); } catch (e) { /* fire-and-forget — channel may be closed */ }
   }
 }
 

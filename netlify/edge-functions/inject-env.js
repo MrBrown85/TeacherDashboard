@@ -17,8 +17,8 @@ export default async function handler(request, context) {
   const supabaseUrl = Netlify.env.get('SUPABASE_URL') || '';
   const supabaseKey = Netlify.env.get('SUPABASE_KEY') || '';
 
-  html = html.replace('__SUPABASE_URL__', supabaseUrl);
-  html = html.replace('__SUPABASE_KEY__', supabaseKey);
+  html = html.replaceAll('__SUPABASE_URL__', supabaseUrl);
+  html = html.replaceAll('__SUPABASE_KEY__', supabaseKey);
 
   // Build new headers without Content-Length (it changed after replacement)
   const headers = new Headers(response.headers);

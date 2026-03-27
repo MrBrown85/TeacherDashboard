@@ -123,7 +123,10 @@
     const keysToRemove = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && (key.startsWith('gb-') || key.startsWith('sb-'))) keysToRemove.push(key);
+      // gb- and gb_ prefixes (data layer uses dashes, some UI prefs use underscores)
+    // sb- prefix (Supabase auth tokens)
+    // td- prefix (cross-portal prefs like td-mobile-pref)
+    if (key && (key.startsWith('gb-') || key.startsWith('gb_') || key.startsWith('sb-') || key.startsWith('td-'))) keysToRemove.push(key);
     }
     keysToRemove.forEach(k => localStorage.removeItem(k));
     // Clear session storage and cookies
