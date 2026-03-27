@@ -34,6 +34,8 @@
     }
 
     _hideAuth();
+    // Clear history so browser back gesture can't return to login
+    history.replaceState(null, '', location.pathname);
     await _bootApp();
   }
 
@@ -145,6 +147,8 @@
     try {
       await signIn(email.trim(), password);
       _hideAuth();
+      // Clear history so browser back gesture can't return to login
+      history.replaceState(null, '', location.pathname);
       await _bootApp();
     } catch(err) {
       _authError(err.message || 'Sign in failed. Please try again.');
