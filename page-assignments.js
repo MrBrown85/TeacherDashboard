@@ -131,7 +131,7 @@ window.PageAssignments = (function() {
         '<input class="assess-search-input" type="text" placeholder="Search\u2026" value="' + esc(assessSearch) + '" data-action-input="assessSearch" aria-label="Search assessments">' +
       '</div>' +
       '<div class="assess-seg-control" style="margin-left:4px">' +
-        '<button class="assess-seg-btn' + ((focusStudentId ? (_allExpanded && _collapsedIds.size===0) : false) ? ' active' : '') + '" data-action="expandAllAssess">Expand</button>' +
+        '<button class="assess-seg-btn' + ((focusStudentId ? (_allExpanded && _collapsedIds.size===0) : (openAssessIds.size > 0 && openAssessIds.size >= getAssessments(activeCourse).length)) ? ' active' : '') + '" data-action="expandAllAssess">Expand</button>' +
         '<button class="assess-seg-btn' + ((focusStudentId ? (!_allExpanded && openAssessIds.size===0) : openAssessIds.size===0) ? ' active' : '') + '" data-action="collapseAllAssess">Collapse</button>' +
       '</div>' +
       (focusStudentId ? '<button class="tb-action-btn tb-show-all-btn" data-action="clearFocusStudent">Show All Students</button>' : '') +
@@ -693,7 +693,7 @@ window.PageAssignments = (function() {
             var st = students.find(function(s) { return s.id === sid; });
             if (!st) return;
             html += '<div class="collab-group-member" draggable="true" data-collab-drag-sid="' + sid + '" data-collab-drag-group="' + gi + '">' +
-              '<span class="member-avatar">' + initials(st) + '</span>' +
+              '<span class="member-avatar" style="background:' + _avatarColor(sid) + '">' + initials(st) + '</span>' +
               '<span>' + esc(displayName(st)) + '</span>' +
             '</div>';
           });
@@ -741,7 +741,7 @@ window.PageAssignments = (function() {
             var st = students.find(function(s) { return s.id === sid; });
             if (!st) return;
             html += '<div class="collab-group-member" draggable="true" data-collab-drag-sid="' + sid + '" data-collab-drag-group="' + gi + '">' +
-              '<span class="member-avatar">' + initials(st) + '</span>' +
+              '<span class="member-avatar" style="background:' + _avatarColor(sid) + '">' + initials(st) + '</span>' +
               '<span>' + esc(displayName(st)) + '</span>' +
             '</div>';
           });
@@ -1940,12 +1940,13 @@ window.PageAssignments = (function() {
 
   /* ── Drag event handlers (delegated) ────────────────────── */
   function _handleDragStart(e) {
+    // Collab drag must be checked FIRST — members are nested inside assess cards
+    var collabDrag = e.target.closest('[data-collab-drag-sid]');
+    if (collabDrag) { collabDragStart(e, collabDrag.dataset.collabDragSid, parseInt(collabDrag.dataset.collabDragGroup, 10)); return; }
     var assessDrag = e.target.closest('[data-assess-drag]');
     if (assessDrag) { onAssessDragStart(e, assessDrag.dataset.assessDrag); return; }
     var moduleDrag = e.target.closest('[data-module-drag]');
     if (moduleDrag) { onModuleDragStart(e, moduleDrag.dataset.moduleDrag); return; }
-    var collabDrag = e.target.closest('[data-collab-drag-sid]');
-    if (collabDrag) { collabDragStart(e, collabDrag.dataset.collabDragSid, parseInt(collabDrag.dataset.collabDragGroup, 10)); return; }
   }
   function _handleDragEnd(e) {
     if (_dragAssessId) { onAssessDragEnd(); return; }

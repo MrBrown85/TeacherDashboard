@@ -11,9 +11,7 @@ window.PageGradebook = (function() {
 
   /* ── State variables ────────────────────────────────────── */
   var activeCourse;
-  var viewMode = 'scores';
-  var _scoreDensity = 'comfortable'; // 'compact' or 'comfortable'
-  var _scoreTextSize = 13; // base font size in px for score cells
+  var viewMode = localStorage.getItem('gb_viewMode') || 'detailed';
   var _pinnedCols = { name: true, final: true }; // pinnable: name, categories, final
   var _undoStack = [];
   var _scoreMode = null; // null or { assessmentId, studentIdx }
@@ -23,6 +21,8 @@ window.PageGradebook = (function() {
   var searchQuery = '';
   var sortCol = null;
   var _filterStripOpen = false;
+  var _colHoverData = {}; // assessmentId → { title, isPrimary, date, ... }
+  var _colHoverTip = null; // tooltip DOM element
   var _scrollShadowCleanup = null;
   var _tipSource = null;
 
@@ -52,7 +52,7 @@ window.PageGradebook = (function() {
   }
 
   /* ── View & filter controls ─────────────────────────────── */
-  function setView(mode) { viewMode = mode; render(); }
+  function setView(mode) { viewMode = mode; localStorage.setItem('gb_viewMode', mode); render(); }
   function toggleSectionFilter(secId) {
     var idx = filterSections.indexOf(secId);
     if (idx >= 0) filterSections.splice(idx, 1);
@@ -129,7 +129,8 @@ window.PageGradebook = (function() {
     html += '<div class="gb-search-wrap"><span class="gb-search-icon">🔍</span><input class="gb-search-input" type="text" placeholder="Search…" value="' + esc(searchQuery) + '" data-action-input="gbSearch" aria-label="Search students"></div>';
 
     html += '<div style="margin-left:auto;display:flex;align-items:center;gap:12px">' +
-      '<span class="gb-toolbar-label">' + (assessments.length !== allAssessments.length ? assessments.length + ' of ' + allAssessments.length : allAssessments.length) + ' assignments · ' + students.length + ' students</span>' +
+      '<span class="gb-toolbar-label">' + (assessments.length !== allAssessments.length ? assessments.length + ' OF ' + allAssessments.length : allAssessments.length) + ' ASSIGNMENTS \u00b7 ' + students.length + ' STUDENTS</span>' +
+      (viewMode === 'scores' ? '<button class="tb-toggle-btn" data-action="exportScoresCSV" title="Export CSV">\u2913 Export</button>' : '') +
       '<a class="tb-action-btn" href="#/assignments?course=' + activeCourse + '&new=1">+ New Assessment</a>' +
     '</div>';
     html += '</div>';
@@ -184,6 +185,8 @@ window.PageGradebook = (function() {
     initScrollShadows();
     initGridScrollSync();
     initGridHoverSync();
+    initHeaderResize();
+    initColHoverTooltip();
   }
 
   /* ── 4-quadrant grid: row hover sync between Q3 and Q4 ───── */
@@ -248,6 +251,137 @@ window.PageGradebook = (function() {
     });
   }
 
+  /* ── Header row height resize (Scores view) ─────────────── */
+  var _headerHeight = parseInt(localStorage.getItem('gb_headerHeight') || '200', 10);
+
+  function initHeaderResize() {
+    var colheads = document.getElementById('gb-colheads');
+    if (!colheads) return;
+    // Add resize handle at bottom of colheads container
+    var handle = colheads.querySelector('.gb-header-resize-handle');
+    if (!handle) {
+      handle = document.createElement('div');
+      handle.className = 'gb-header-resize-handle';
+      colheads.appendChild(handle);
+    }
+    handle.addEventListener('mousedown', function(e) {
+      e.preventDefault();
+      var startY = e.clientY;
+      var startH = _headerHeight;
+      document.body.style.cursor = 'row-resize';
+      document.body.style.userSelect = 'none';
+
+      function onMove(ev) {
+        _headerHeight = Math.max(80, Math.min(400, startH + ev.clientY - startY));
+        applyHeaderHeight();
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        localStorage.setItem('gb_headerHeight', _headerHeight);
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+    applyHeaderHeight();
+  }
+
+  function applyHeaderHeight() {
+    var colheads = document.querySelectorAll('#gb-colheads .gb-grid-colhead');
+    colheads.forEach(function(el) {
+      el.style.height = _headerHeight + 'px';
+    });
+  }
+
+  /* ── Column hover with 45-degree skew-aware hit-testing ── */
+  var _hoveredColIdx = -1;
+
+  function initColHoverTooltip() {
+    var colheads = document.getElementById('gb-colheads');
+    if (!colheads) return;
+    // Use mousemove for skew-aware hit-testing instead of DOM hover
+    colheads.addEventListener('mousemove', function(e) {
+      var inner = colheads.querySelector('.gb-grid-colheads-inner');
+      if (!inner) return;
+      var cols = inner.querySelectorAll('.gb-grid-colhead');
+      if (!cols.length) return;
+      var innerRect = inner.getBoundingClientRect();
+      var colW = cols[0].getBoundingClientRect().width;
+      // innerRect.left already accounts for scroll — no scrollLeft needed
+      var mouseX = e.clientX - innerRect.left;
+      var mouseY = e.clientY - innerRect.top;
+      var containerH = innerRect.height;
+      // Skew correction: skewX(-45deg) with transform-origin:bottom-right
+      // shifts fill RIGHT as you go up. At height h from bottom, column i's
+      // fill spans [i*colW + h, (i+1)*colW + h]. To find column index:
+      var hFromBottom = containerH - mouseY;
+      var adjustedX = mouseX - hFromBottom;
+      var idx = Math.floor(adjustedX / colW);
+      if (idx < 0 || idx >= cols.length) {
+        if (_hoveredColIdx >= 0) hideColTooltip();
+        return;
+      }
+      if (idx !== _hoveredColIdx) {
+        hideColTooltip();
+        _hoveredColIdx = idx;
+        showColTooltip(cols[idx], idx);
+      }
+    });
+    colheads.addEventListener('mouseleave', function() {
+      hideColTooltip();
+    });
+  }
+
+  function showColTooltip(colEl, colIdx) {
+    var aid = colEl.dataset.aid;
+    var d = _colHoverData[aid];
+    if (!d) return;
+    // Highlight the skewed column header
+    colEl.classList.add('gb-col-hover');
+    // Highlight matching data cells in Q4
+    var table = document.querySelector('.gb-scores-table');
+    if (table) {
+      table.querySelectorAll('tbody tr').forEach(function(row) {
+        var cell = row.children[colIdx];
+        if (cell) cell.classList.add('gb-col-hover');
+      });
+    }
+    // Show tooltip at bottom of header, above Q4
+    if (!_colHoverTip) {
+      _colHoverTip = document.createElement('div');
+      _colHoverTip.className = 'gb-colhead-hover-card';
+      document.body.appendChild(_colHoverTip);
+    }
+    var html = '<div class="gb-hover-title">' + esc(d.title) + '</div>' +
+      '<div class="gb-hover-meta">' +
+        '<span class="gb-assess-type-pill ' + (d.isPrimary?'sum':'form') + '">' + (d.isPrimary?'Summative':'Formative') + '</span>' +
+        '<span>' + d.date + '</span>' +
+      '</div>' +
+      (d.isScoreOnly ? '<div class="gb-hover-row">Score: / ' + d.maxPoints + '</div>' : '') +
+      (d.weight && d.weight !== 1 ? '<div class="gb-hover-row">Weight: ' + d.weight + 'x</div>' : '') +
+      (d.secNames.length ? '<div class="gb-hover-row">Group: ' + esc(d.secNames.join(', ')) + '</div>' : '') +
+      (d.tagNames.length && !d.isScoreOnly ? '<div class="gb-hover-tags">' + d.tagNames.map(function(t) { return '<span class="gb-hover-tag">' + esc(t) + '</span>'; }).join('') + '</div>' : '');
+    _colHoverTip.innerHTML = html;
+    _colHoverTip.style.display = 'block';
+    // Position just above Q4 data area, centered on column
+    var rect = colEl.getBoundingClientRect();
+    var colheadsEl = document.getElementById('gb-colheads');
+    var q2Bottom = colheadsEl.getBoundingClientRect().bottom;
+    _colHoverTip.style.left = (rect.left + rect.width / 2) + 'px';
+    _colHoverTip.style.top = (q2Bottom + 2) + 'px';
+    _colHoverTip.style.bottom = 'auto';
+  }
+
+  function hideColTooltip() {
+    _hoveredColIdx = -1;
+    if (_colHoverTip) _colHoverTip.style.display = 'none';
+    document.querySelectorAll('.gb-col-hover').forEach(function(el) {
+      el.classList.remove('gb-col-hover');
+    });
+  }
+
   /* ── Scroll shadow indicators ──────────────────────────── */
   function initScrollShadows() {
     if (_scrollShadowCleanup) { _scrollShadowCleanup(); _scrollShadowCleanup = null; }
@@ -289,7 +423,12 @@ window.PageGradebook = (function() {
           cols.push({ assessmentId: a.id, tagId: tagId, tagCode: tag ? tag.id : tagId, sectionColor: sec ? sec.color : 'var(--text-3)', tagText: tag ? tag.text : '' });
         });
       }
-      groups.push({ assessment: a, startIdx: start, count: cols.length - start, groupIdx: groupIdx++ });
+      var colCount = cols.length - start;
+      var groupW = Math.max(120, colCount * 54);
+      var colW = colCount === 1 ? groupW : 54;
+      // Set colWidth on each column in this group
+      for (var ci = start; ci < cols.length; ci++) cols[ci].colWidth = colW;
+      groups.push({ assessment: a, startIdx: start, count: colCount, groupIdx: groupIdx++, groupW: groupW });
     });
     var colGroupMap = cols.map(function(_, i) { return groups.find(function(g) { return i >= g.startIdx && i < g.startIdx + g.count; }); });
     var sortedStudents = applySorting(cid, students, sections, isLetter);
@@ -315,7 +454,7 @@ window.PageGradebook = (function() {
       var badges = '';
       if (a.scoreMode === 'points') badges += '<span class="gb-assess-badge">/ ' + (a.maxPoints||100) + '</span>';
       if (a.weight && a.weight !== 1) badges += '<span class="gb-assess-badge">' + a.weight + 'x</span>';
-      html += '<div class="gb-grid-assess-group' + typeClass + '" style="width:' + (g.count * 54) + 'px" title="' + esc(a.title) + '">' +
+      html += '<div class="gb-grid-assess-group' + typeClass + '" style="width:' + g.groupW + 'px" title="' + esc(a.title) + '">' +
         '<a class="gb-assess-title" href="#/assignments?course=' + cid + '&open=' + a.id + '" title="' + esc(a.title) + '">' + esc(a.title) + '</a>' +
         '<div class="gb-assess-meta"><span class="gb-assess-type-pill ' + (isPrimary?'sum':'form') + '">' + (isPrimary?'S':'F') + '</span><span class="gb-assess-date">' + formatDate(a.date) + '</span>' + badges + '</div>' +
         '<div class="gb-assess-stripe" style="background:' + stripeColor + '"></div>' +
@@ -327,7 +466,8 @@ window.PageGradebook = (function() {
     cols.forEach(function(col, i) {
       var g = colGroupMap[i];
       var altClass = (g && g.groupIdx % 2 === 1) ? ' gb-group-alt' : '';
-      html += '<div class="gb-grid-tag-header' + altClass + '" style="border-bottom-color:' + col.sectionColor + ';color:' + col.sectionColor + '" title="' + esc(col.tagText || col.tagCode) + '">' + esc(col.tagCode) + '</div>';
+      var tagW = col.colWidth || 54;
+      html += '<div class="gb-grid-tag-header' + altClass + '" style="flex:0 0 ' + tagW + 'px;width:' + tagW + 'px;border-bottom-color:' + col.sectionColor + ';color:' + col.sectionColor + '" title="' + esc(col.tagText || col.tagCode) + '">' + esc(col.tagCode) + '</div>';
     });
     html += '</div>';
     html += '</div></div>';
@@ -357,6 +497,8 @@ window.PageGradebook = (function() {
         var g = colGroupMap[i];
         var startClass = (g && g.groupIdx > 0 && g.startIdx === i) ? ' gb-group-start' : '';
         var altClass = (g && g.groupIdx % 2 === 1) ? ' gb-group-alt' : '';
+        var cellW = col.colWidth || 54;
+        var cellStyle = cellW !== 54 ? ' style="min-width:' + cellW + 'px;width:' + cellW + 'px"' : '';
         var assess = assessments.find(function(a) { return a.id === col.assessmentId; });
         if (col.isPointsCol) {
           var max = assess.maxPoints || 100;
@@ -366,14 +508,14 @@ window.PageGradebook = (function() {
           var cellContent = score > 0
             ? '<div class="gb-pts-display"><span class="gb-pts-score">' + score + '<span class="gb-pts-max">/' + max + '</span></span><span class="gb-pts-pct">' + pct + '%</span></div>'
             : '<span class="gb-pts-empty">\u00B7</span>';
-          html += '<td class="gb-score gb-score-pts' + startClass + altClass + '" data-aid="' + col.assessmentId + '" data-pts="1" data-sid="' + s.id + '" data-max="' + max + '" data-action="cycleScore" title="' + title + '">' + cellContent + '</td>';
+          html += '<td class="gb-score gb-score-pts' + startClass + altClass + '"' + cellStyle + ' data-aid="' + col.assessmentId + '" data-pts="1" data-sid="' + s.id + '" data-max="' + max + '" data-action="cycleScore" title="' + title + '">' + cellContent + '</td>';
         } else {
           var studentScores = scores[s.id] || [];
           var entry = studentScores.find(function(e) { return e.assessmentId === col.assessmentId && e.tagId === col.tagId; });
           var score = entry ? entry.score : 0;
           var assigned = assess && (assess.tagIds||[]).includes(col.tagId);
           var content = score > 0 ? score : (assigned ? '<span class="gb-unscored">\u00B7</span>' : '\u2014');
-          html += '<td class="gb-score' + startClass + altClass + '" data-aid="' + col.assessmentId + '" data-tid="' + col.tagId + '" data-sid="' + s.id + '" data-action="cycleScore"><span class="gb-score-val s' + score + '">' + content + '</span></td>';
+          html += '<td class="gb-score' + startClass + altClass + '"' + cellStyle + ' data-aid="' + col.assessmentId + '" data-tid="' + col.tagId + '" data-sid="' + s.id + '" data-action="cycleScore"><span class="gb-score-val s' + score + '">' + content + '</span></td>';
         }
       });
       html += '</tr>';
@@ -386,9 +528,11 @@ window.PageGradebook = (function() {
       var g = _statsColGroupMap[i];
       var startClass = (g && g.groupIdx > 0 && g.startIdx === i) ? ' gb-group-start' : '';
       var altClass = (g && g.groupIdx % 2 === 1) ? ' gb-group-alt' : '';
+      var cellW = col.colWidth || 54;
+      var wStyle = cellW !== 54 ? 'min-width:' + cellW + 'px;width:' + cellW + 'px;' : '';
       var vals = sortedStudents.map(function(s) { var ss = scores[s.id]||[]; var entry = ss.find(function(e) { return e.assessmentId === col.assessmentId && e.tagId === col.tagId; }); return entry && entry.score > 0 ? entry.score : null; }).filter(function(v) { return v !== null; });
-      if (!vals.length) html += '<td class="gb-score' + startClass + altClass + '" style="cursor:default"><span class="gb-score-val s0" style="background:transparent">\u2014</span></td>';
-      else { var avg = vals.reduce(function(a,b){return a+b;},0)/vals.length; var r = Math.round(avg); html += '<td class="gb-score' + startClass + altClass + '" style="cursor:default"><span class="gb-avg-val" style="color:' + PROF_COLORS[r] + ';font-weight:700">' + avg.toFixed(1) + '</span></td>'; }
+      if (!vals.length) html += '<td class="gb-score' + startClass + altClass + '" style="' + wStyle + 'cursor:default"><span class="gb-score-val s0" style="background:transparent">\u2014</span></td>';
+      else { var avg = vals.reduce(function(a,b){return a+b;},0)/vals.length; var r = Math.round(avg); html += '<td class="gb-score' + startClass + altClass + '" style="' + wStyle + 'cursor:default"><span class="gb-avg-val" style="color:' + PROF_COLORS[r] + ';font-weight:700">' + avg.toFixed(1) + '</span></td>'; }
     });
     html += '</tr>';
     html += '</tbody></table></div></div>';
@@ -477,51 +621,48 @@ window.PageGradebook = (function() {
     var sortedStudents = applySorting(cid, students, sections, isLetter);
     var cc = getCourseConfig(cid);
     var cw = getCategoryWeights(cid);
-    var isCompact = _scoreDensity === 'compact';
-    var rowH = isCompact ? 'gb-scores-compact' : '';
+    var rowH = '';
 
     // Assignments sorted newest-first (left)
     var sortedAssess = assessments.slice().sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
 
-    var html = '<div class="gb-scores-toolbar">' +
-      '<div class="gb-scores-pin-toggles">' +
-        '<button class="gb-scores-pin-btn' + (_pinnedCols.categories ? ' active' : '') + '" data-action="togglePin" data-col="categories" title="Toggle category columns">Summ/Form</button>' +
-        '<button class="gb-scores-pin-btn' + (_pinnedCols.final ? ' active' : '') + '" data-action="togglePin" data-col="final" title="Toggle final column">Final</button>' +
-      '</div>' +
-      '<div style="flex:1"></div>' +
-      '<div class="gb-scores-size-controls">' +
-        '<button class="gb-scores-size-btn" data-action="decreaseTextSize" title="Decrease text size">\u2212</button>' +
-        '<span class="gb-scores-size-label">' + _scoreTextSize + 'px</span>' +
-        '<button class="gb-scores-size-btn" data-action="increaseTextSize" title="Increase text size">+</button>' +
-      '</div>' +
-      '<button class="gb-scores-density-btn" data-action="toggleDensity" title="Toggle compact/comfortable">' +
-        (_scoreDensity === 'compact' ? '\u2630' : '\u2261') + '</button>' +
-      '<button class="gb-scores-export-btn" data-action="exportScoresCSV" title="Export CSV">\u2913 Export</button>' +
-      '<button class="gb-scores-add-btn" data-action="showAddAssessPopover" title="New assignment">+ New</button>' +
-    '</div>';
-
-    var rowPx = isCompact ? 28 : 40;
+    var html = '';
+    var rowPx = 40;
 
     // 4-quadrant grid: corner | col-headers / row-headers | data
-    html += '<div class="gb-grid" style="font-size:' + _scoreTextSize + 'px">';
+    html += '<div class="gb-grid">';
 
     // Q1: Corner (top-left, fixed)
     html += '<div class="gb-grid-corner"><div class="gb-grid-corner-inner">Student</div></div>';
 
     // Q2: Column headers (top-right, scrolls horizontally)
     html += '<div class="gb-grid-colheads" id="gb-colheads"><div class="gb-grid-colheads-inner">';
+    // Build hover tooltip data map for JS-driven tooltips
+    _colHoverData = {};
     sortedAssess.forEach(function(a) {
       var isPrimary = a.type === 'summative';
       var typeClass = isPrimary ? ' gb-scores-summ' : ' gb-scores-form';
-      var maxPts = a.scoreMode === 'points' ? ' / ' + (a.maxPoints || 100) : '';
+      var isScoreOnly = a.scoreMode === 'points';
+      var maxPts = isScoreOnly ? ' / ' + (a.maxPoints || 100) : '';
       var tagSecs = (a.tagIds || []).map(function(tid) { return getSectionForTag(cid, tid); }).filter(Boolean);
       var stripeColor = tagSecs.length > 0 ? tagSecs[0].color : 'var(--border)';
-      html += '<div class="gb-grid-colhead' + typeClass + '" data-aid="' + a.id + '" data-action-dblclick="startScoreMode" title="' + esc(a.title) + '">' +
+      var fillColor = isScoreOnly ? 'var(--surface)' : stripeColor;
+      var stripeBottom = isScoreOnly ? 'var(--border)' : stripeColor;
+      var tagNames = (a.tagIds||[]).map(function(tid) { var t = getTagById(cid, tid); return t ? t.text || t.id : tid; });
+      var secNames = tagSecs.map(function(s) { return s.name; }).filter(function(v, i, arr) { return arr.indexOf(v) === i; });
+      // Store hover data for JS tooltip
+      _colHoverData[a.id] = {
+        title: a.title, isPrimary: isPrimary, date: formatDate(a.date),
+        isScoreOnly: isScoreOnly, maxPoints: a.maxPoints || 100,
+        weight: a.weight, secNames: secNames, tagNames: tagNames
+      };
+      html += '<div class="gb-grid-colhead' + typeClass + (isScoreOnly ? ' gb-colhead-score-only' : '') + '" data-aid="' + a.id + '" data-action-dblclick="startScoreMode">' +
         '<div class="gb-grid-colhead-text">' +
+          '<div class="gb-grid-colhead-fill" style="background:' + fillColor + '"></div>' +
           '<span class="gb-scores-assess-name">' + esc(a.title) + '</span>' +
           '<span class="gb-scores-assess-meta">' + formatDate(a.date) + maxPts + '</span>' +
         '</div>' +
-        '<div class="gb-grid-colhead-stripe" style="background:' + stripeColor + '"></div>' +
+        '<div class="gb-grid-colhead-stripe" style="background:' + stripeBottom + '"></div>' +
       '</div>';
     });
     html += '</div></div>';
@@ -533,8 +674,12 @@ window.PageGradebook = (function() {
       var overall = getOverallProficiency(cid, s.id);
       var finalPct = overall > 0 ? Math.round(overall / 4 * 100) : 0;
       var fr = Math.round(overall);
-      html += '<div class="gb-grid-rowhead' + altClass + '" style="height:' + rowPx + 'px">' +
-        '<span class="gb-grid-rowhead-name">' + esc(fullName(s)) + '</span>' +
+      var desTags = (s.designations || []).map(function(code) {
+        var d = BC_DESIGNATIONS[code]; if (!d) return '';
+        return '<span class="gb-des-tag" title="' + esc(code) + ' \u2014 ' + esc(d.name) + (d.iep ? ' \u00b7 IEP' : '') + (d.modified ? ' \u00b7 Modified' : '') + '">' + esc(code) + '</span>';
+      }).join('');
+      html += '<div class="gb-grid-rowhead' + altClass + '" style="min-height:' + rowPx + 'px">' +
+        '<span class="gb-grid-rowhead-name">' + esc(fullName(s)) + desTags + '</span>' +
         '<span class="gb-grid-rowhead-pct" style="color:' + (overall > 0 ? PROF_COLORS[fr] : 'var(--text-3)') + '">' + (finalPct > 0 ? finalPct + '%' : '\u2014') + '</span>' +
       '</div>';
     });
@@ -1432,10 +1577,6 @@ window.PageGradebook = (function() {
       'clearAllFilters':      function() { clearAllFilters(); },
       'toggleSort':           function() { toggleSort(el.dataset.sortkey); },
       'cycleScore':           function() { cycleScore(el); },
-      'toggleDensity':        function() { _scoreDensity = _scoreDensity === 'compact' ? 'comfortable' : 'compact'; render(); },
-      'increaseTextSize':     function() { _scoreTextSize = Math.min(20, _scoreTextSize + 1); render(); },
-      'decreaseTextSize':     function() { _scoreTextSize = Math.max(9, _scoreTextSize - 1); render(); },
-      'togglePin':            function() { var col = el.dataset.col; _pinnedCols[col] = !_pinnedCols[col]; render(); },
       'editScoreCell':        function() { startCellEdit(el); },
       'startScoreMode':       function() { enterScoreMode(el.dataset.aid); },
       'showAddAssessPopover': function() { showAddAssessPopover(el); },
@@ -1466,7 +1607,7 @@ window.PageGradebook = (function() {
   function init(params) {
     activeCourse = params.course || getActiveCourse();
     setActiveCourse(activeCourse);
-    viewMode = 'average';
+    viewMode = localStorage.getItem('gb_viewMode') || 'detailed';
     filterSections = [];
     filterModules = [];
     filterType = 'all';
@@ -1518,6 +1659,7 @@ window.PageGradebook = (function() {
     var gbTip = document.getElementById('gb-tooltip');
     if (gbTip) { gbTip.style.display = 'none'; gbTip.className = ''; }
     _tipSource = null;
+    if (_colHoverTip) { _colHoverTip.remove(); _colHoverTip = null; }
     delete window._pageSwitchCourse;
   }
 
