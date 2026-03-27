@@ -686,7 +686,7 @@ window.PageGradebook = (function() {
     html += '</div>';
 
     // Q4: Data cells (bottom-right, scrolls both ways — drives the others)
-    html += '<div class="gb-grid-data" id="gb-data"><table class="gb-scores-table ' + rowH + '"><tbody>';
+    html += '<div class="gb-grid-data" id="gb-data"><table class="gb-scores-table ' + rowH + '" role="grid"><tbody>';
     sortedStudents.forEach(function(s, si) {
       var altClass = si % 2 === 1 ? ' gb-scores-alt' : '';
       html += '<tr class="gb-scores-row' + altClass + '" data-sid="' + s.id + '">';
@@ -727,7 +727,7 @@ window.PageGradebook = (function() {
         }
         var isScoreModeCell = _scoreMode && _scoreMode.assessmentId === a.id && si === _scoreMode.studentIdx;
         var isScoreModeCol = _scoreMode && _scoreMode.assessmentId === a.id;
-        html += '<td class="gb-scores-cell' + (isScoreModeCell ? ' gb-scores-focus' : '') + (isScoreModeCol ? ' gb-scores-col-active' : '') + cellClass + '" style="' + cellStyle + '" data-action="editScoreCell" data-aid="' + a.id + '" data-sid="' + s.id + '">' +
+        html += '<td class="gb-scores-cell' + (isScoreModeCell ? ' gb-scores-focus' : '') + (isScoreModeCol ? ' gb-scores-col-active' : '') + cellClass + '" style="' + cellStyle + '" role="gridcell" aria-label="' + esc(fullName(s)) + ', ' + esc(a.title) + ': ' + (val > 0 ? display.replace(/<[^>]*>/g, '') : 'no score') + '" data-action="editScoreCell" data-aid="' + a.id + '" data-sid="' + s.id + '">' +
           '<span class="gb-scores-val">' + display + '</span>' +
         '</td>';
       });
@@ -929,10 +929,12 @@ window.PageGradebook = (function() {
     if (assess && assess.scoreMode === 'points') { showPointsInput(td, assess); return; }
     var scores = getScores(cid); if (!scores[sid]) scores[sid] = [];
     var entry = scores[sid].find(function(e) { return e.assessmentId === aid && e.tagId === tid; });
+    var prevEntry = entry ? JSON.parse(JSON.stringify(entry)) : null;
     var current = entry ? entry.score : 0;
     var next = seq[(seq.indexOf(current) + 1) % seq.length];
     if (entry) entry.score = next;
     else { scores[sid].push({ id: uid(), assessmentId: aid, tagId: tid, score: next, date: assess ? assess.date : new Date().toISOString().slice(0,10), type: assess ? assess.type : 'summative', note: '', created: new Date().toISOString() }); }
+    _undoStack.push({ cid: cid, sid: sid, aid: aid, tagIds: [tid], prevEntries: [prevEntry] });
     saveScores(cid, scores);
     var span = td.querySelector('.gb-score-val');
     span.className = 'gb-score-val s' + next;
@@ -976,6 +978,13 @@ window.PageGradebook = (function() {
     function commit() {
       var val = parseInt(inp.value, 10);
       var raw = isNaN(val) ? 0 : Math.max(0, Math.min(max, val));
+      // Snapshot for undo
+      var tagIds = isPtsCol ? (assess.tagIds || []) : [td.dataset.tid];
+      var prevEntries = tagIds.map(function(tid) {
+        var e = (getScores(cid)[sid] || []).find(function(e) { return e.assessmentId === aid && e.tagId === tid; });
+        return e ? JSON.parse(JSON.stringify(e)) : null;
+      });
+      _undoStack.push({ cid: cid, sid: sid, aid: aid, tagIds: tagIds, prevEntries: prevEntries });
       if (isPtsCol) {
         setPointsScore(cid, sid, aid, raw);
       } else {

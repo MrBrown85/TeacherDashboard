@@ -78,8 +78,8 @@ describe('deleteRubric on nonexistent ID', () => {
   });
 });
 
-describe('removing an assessment does not auto-clean scores', () => {
-  it('scores remain after assessment is removed from saveAssessments', () => {
+describe('orphaned score cleanup on assessment removal', () => {
+  it('scores for removed assessments are cleaned up by saveAssessments', () => {
     saveAssessments(CID, [
       { id: 'a1', title: 'Quiz', date: '2025-01-15', type: 'summative', tagIds: ['t1'] },
     ]);
@@ -87,12 +87,33 @@ describe('removing an assessment does not auto-clean scores', () => {
       stu1: [{ id: 'e1', assessmentId: 'a1', tagId: 't1', score: 85, date: '2025-01-15', type: 'summative' }],
     });
 
-    // Remove the assessment but keep scores — documenting this behavior
+    // Remove the assessment — orphaned scores should be cleaned
     saveAssessments(CID, []);
 
     const scores = getScores(CID);
+    expect(scores['stu1']).toHaveLength(0);
+  });
+
+  it('only cleans scores for the removed assessment', () => {
+    saveAssessments(CID, [
+      { id: 'a1', title: 'Quiz 1', date: '2025-01-15', type: 'summative', tagIds: ['t1'] },
+      { id: 'a2', title: 'Quiz 2', date: '2025-01-20', type: 'summative', tagIds: ['t1'] },
+    ]);
+    saveScores(CID, {
+      stu1: [
+        { id: 'e1', assessmentId: 'a1', tagId: 't1', score: 3, date: '2025-01-15', type: 'summative' },
+        { id: 'e2', assessmentId: 'a2', tagId: 't1', score: 4, date: '2025-01-20', type: 'summative' },
+      ],
+    });
+
+    // Remove only a1 — a2 scores should remain
+    saveAssessments(CID, [
+      { id: 'a2', title: 'Quiz 2', date: '2025-01-20', type: 'summative', tagIds: ['t1'] },
+    ]);
+
+    const scores = getScores(CID);
     expect(scores['stu1']).toHaveLength(1);
-    expect(scores['stu1'][0].assessmentId).toBe('a1');
+    expect(scores['stu1'][0].assessmentId).toBe('a2');
   });
 });
 

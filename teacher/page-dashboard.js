@@ -150,8 +150,8 @@ window.PageDashboard = (function() {
     }, 50);
   }
 
-  (function initCmStdDrag() {
-    document.addEventListener('dragstart', function(e) {
+  function _initCmStdDrag() {
+    _addDocListener('dragstart', function(e) {
       var card = e.target.closest && e.target.closest('.cm-std-card[data-std-drag]');
       if (!card) return;
       _cmDragStdId = card.dataset.stdDrag;
@@ -159,14 +159,12 @@ window.PageDashboard = (function() {
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', _cmDragStdId);
     });
-    document.addEventListener('dragover', function(e) {
+    _addDocListener('dragover', function(e) {
       if (!_cmDragStdId) return;
-      // Card-on-card merge: hover over another ungrouped card to create a new group
       var targetCard = e.target.closest && e.target.closest('.cm-std-card[data-std-drag]');
       if (targetCard) {
         var targetId = targetCard.dataset.stdDrag;
         if (targetId !== _cmDragStdId) {
-          // Check target is ungrouped
           var map = cmSelectedCourse ? getLearningMap(cmSelectedCourse) : null;
           var targetSec = map && (map.sections || []).find(function(s) { return s.id === targetId; });
           if (targetSec && !targetSec.groupId) {
@@ -184,7 +182,6 @@ window.PageDashboard = (function() {
       } else {
         if (_cmMergeTargetId) _cmClearMerge();
       }
-      // Folder drop
       var folder = e.target.closest && e.target.closest('.mod-folder[data-folder-drop]');
       if (!folder) return;
       e.preventDefault();
@@ -193,7 +190,7 @@ window.PageDashboard = (function() {
       folder.classList.add('drag-over');
       if (!folder.classList.contains('open')) folder.classList.add('open');
     });
-    document.addEventListener('dragleave', function(e) {
+    _addDocListener('dragleave', function(e) {
       if (!_cmDragStdId) return;
       var targetCard = e.target.closest && e.target.closest('.cm-std-card[data-std-drag]');
       if (targetCard && !targetCard.contains(e.relatedTarget)) {
@@ -203,9 +200,8 @@ window.PageDashboard = (function() {
       var folder = e.target.closest && e.target.closest('.mod-folder[data-folder-drop]');
       if (folder && !folder.contains(e.relatedTarget)) folder.classList.remove('drag-over');
     });
-    document.addEventListener('drop', function(e) {
+    _addDocListener('drop', function(e) {
       if (!_cmDragStdId) return;
-      // Card-on-card merge drop
       var targetCard = e.target.closest && e.target.closest('.cm-std-card[data-std-drag]');
       if (targetCard && _cmMergeAnimating && _cmMergeTargetId === targetCard.dataset.stdDrag) {
         e.preventDefault(); e.stopPropagation();
@@ -214,7 +210,6 @@ window.PageDashboard = (function() {
         document.querySelectorAll('.cm-std-card.dragging').forEach(function(c) { c.classList.remove('dragging'); });
         return;
       }
-      // Folder drop
       var folder = e.target.closest && e.target.closest('.mod-folder[data-folder-drop]');
       if (!folder) return;
       e.preventDefault();
@@ -234,12 +229,12 @@ window.PageDashboard = (function() {
       document.querySelectorAll('.mod-folder.drag-over').forEach(function(f) { f.classList.remove('drag-over'); });
       document.querySelectorAll('.cm-std-card.dragging').forEach(function(c) { c.classList.remove('dragging'); });
     });
-    document.addEventListener('dragend', function() {
+    _addDocListener('dragend', function() {
       _cmDragStdId = null; _cmClearMerge();
       document.querySelectorAll('.mod-folder.drag-over').forEach(function(f) { f.classList.remove('drag-over'); });
       document.querySelectorAll('.cm-std-card.dragging').forEach(function(c) { c.classList.remove('dragging'); });
     });
-  })();
+  }
 
   // Step 2 stash
   var cwStep2Name = '', cwStep2Grade = '', cwStep2Desc = '';
@@ -2701,6 +2696,7 @@ window.PageDashboard = (function() {
     _addDocListener('input', _handleInput);
     _addDocListener('change', _handleChange);
     _addDocListener('blur', _handleBlur, true); // blur doesn't bubble, use capture
+    _initCmStdDrag();
 
     render();
 

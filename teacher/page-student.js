@@ -335,7 +335,15 @@ window.PageStudent = (function() {
     var course = COURSES[cid];
     var students = getStudents(cid);
     var student = students.find(function(s) { return s.id === studentId; });
-    if (!student) { document.getElementById('main').innerHTML = '<p>Student not found.</p>'; return; }
+    if (!student) {
+      document.getElementById('main').innerHTML =
+        '<div style="text-align:center;padding:60px 20px">' +
+        '<div style="font-size:2rem;margin-bottom:12px;opacity:0.5">?</div>' +
+        '<div style="font-weight:600;font-size:1.1rem;margin-bottom:6px">Student not found</div>' +
+        '<div style="color:var(--text-3);margin-bottom:16px">This student may have been removed or the link is outdated.</div>' +
+        '<a href="#/dashboard" class="btn btn-primary">Back to Dashboard</a></div>';
+      return;
+    }
 
     var sections = getSections(cid);
     var allTags = getAllTags(cid);

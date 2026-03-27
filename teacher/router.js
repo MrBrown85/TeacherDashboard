@@ -11,6 +11,15 @@ window.Router = (function() {
     '/reports': window.PageReports
   };
 
+  var _titles = {
+    '/dashboard': 'Dashboard',
+    '/assignments': 'Assignments',
+    '/student': 'Student',
+    '/gradebook': 'Gradebook',
+    '/observations': 'Observations',
+    '/reports': 'Reports'
+  };
+
   /* Map old HTML filenames to hash routes for link interception */
   var _fileToHash = {
     'index.html':        '/dashboard',
@@ -115,6 +124,16 @@ window.Router = (function() {
     if (module && module.init) {
       module.init(params);
     }
+
+    // Update page title for browser tab, history, and screen readers
+    var pageTitle = _titles[path] || 'Dashboard';
+    if (path === '/student' && params.id) {
+      try {
+        var stu = getStudents(getActiveCourse()).find(function(s) { return s.id === params.id; });
+        if (stu) pageTitle = fullName(stu);
+      } catch (e) { /* use default */ }
+    }
+    document.title = 'FullVision \u2014 ' + pageTitle;
   }
 
   /* ── Boot sequence (runs ONCE) ───────────────────────────── */

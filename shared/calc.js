@@ -114,7 +114,7 @@ function _calcGroup(scores, method, decayWeight, assessmentWeights) {
       return modes[0];
     }
     case 'decayingAvg': {
-      const dw = decayWeight || 0.65;
+      const dw = Math.max(0.01, Math.min(1, decayWeight || 0.65));
       let avg = valid[0].score;
       for (let i = 1; i < valid.length; i++) {
         const w = (assessmentWeights && assessmentWeights[valid[i].assessmentId]) || 1;
