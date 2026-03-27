@@ -1000,10 +1000,10 @@ function getLearningMap(cid) {
 function saveLearningMap(cid, map) {
   map._customized = true;
   map._version = (map._version || 0) + 1;
-  _saveCourseField('learningMaps', cid, map);
+  _saveCourseField('learningMaps', cid, map); // derived tag/section caches auto-invalidate via mapRef check
 }
 function resetLearningMap(cid) {
-  _cache.learningMaps[cid] = LEARNING_MAP[cid] || { subjects: [], sections: [] };
+  _cache.learningMaps[cid] = LEARNING_MAP[cid] || { subjects: [], sections: [] }; // ref change auto-busts tag/section caches
   if (_useSupabase) {
     _deleteFromSupabase('course_data', { cid, dataKey: 'learningmap' });
   } else {
@@ -1127,9 +1127,36 @@ function removeSection(cid, sectionId) {
 /* ── Helpers: get sections/tags for a course ─────────────────── */
 function getSections(cid) { return getLearningMap(cid).sections || []; }
 function getSubjects(cid) { return getLearningMap(cid).subjects || []; }
-function getAllTags(cid) { return getSections(cid).flatMap(s => s.tags); }
+
+// Cached flat tag list — keyed by learning map object reference so any direct
+// write to _cache.learningMaps[cid] (including test setup) naturally busts the cache.
+var _allTagsCache = {};    // cid → { mapRef, tags }
+function getAllTags(cid) {
+  const map = getLearningMap(cid);
+  const c = _allTagsCache[cid];
+  if (c && c.mapRef === map) return c.tags;
+  const tags = (map.sections || []).flatMap(s => s.tags);
+  _allTagsCache[cid] = { mapRef: map, tags };
+  return tags;
+}
 function getTagById(cid, tagId) { return getAllTags(cid).find(t => t.id === tagId); }
-function getSectionForTag(cid, tagId) { return getSections(cid).find(s => s.tags.some(t => t.id === tagId)); }
+
+// Cached tag→section index — O(1) lookup vs O(sections × tags) find() per call.
+// getFocusAreas() calls this once per tag; without the index it was O(tags² × sections).
+// Same reference-based invalidation as _allTagsCache.
+var _tagToSectionCache = {};  // cid → { mapRef, index: { tagId: section } }
+function getSectionForTag(cid, tagId) {
+  const map = getLearningMap(cid);
+  const c = _tagToSectionCache[cid];
+  if (!c || c.mapRef !== map) {
+    const index = {};
+    (map.sections || []).forEach(function(s) {
+      s.tags.forEach(function(t) { index[t.id] = s; });
+    });
+    _tagToSectionCache[cid] = { mapRef: map, index };
+  }
+  return _tagToSectionCache[cid].index[tagId];
+}
 
 /* ══════════════════════════════════════════════════════════════════
    Core data accessors — cache-through

@@ -14,12 +14,16 @@
 var _tagScoresCache = {};
 var _tagProfCache = {};
 var _awCache = {};
+var _assessMapCache = {};    // cid → Map<assessmentId, assessment> — avoids O(n) find per score
+var _sectionByIdCache = {};  // cid → Map<sectionId, section>      — avoids repeated getSections().find()
 
 /** Clear all proficiency caches. Call when scores, assessments, overrides, or statuses change. */
 function clearProfCache() {
   _tagScoresCache = {};
   _tagProfCache = {};
   _awCache = {};
+  _assessMapCache = {};
+  _sectionByIdCache = {};
 }
 
 /** Get or build assessment weights map for a course. */
@@ -30,6 +34,22 @@ function _getAW(cid) {
   assessments.forEach(function(a) { aw[a.id] = a.weight || 1; });
   _awCache[cid] = aw;
   return aw;
+}
+
+/** Get or build a Map<assessmentId, assessment> for O(1) lookups instead of O(n) find(). */
+function _getAssessMap(cid) {
+  if (_assessMapCache[cid]) return _assessMapCache[cid];
+  var m = new Map(getAssessments(cid).map(function(a) { return [a.id, a]; }));
+  _assessMapCache[cid] = m;
+  return m;
+}
+
+/** Get a section by id using a cached Map — avoids repeated getSections().find() in hot loops. */
+function _getSectionById(cid, sectionId) {
+  if (!_sectionByIdCache[cid]) {
+    _sectionByIdCache[cid] = new Map(getSections(cid).map(function(s) { return [s.id, s]; }));
+  }
+  return _sectionByIdCache[cid].get(sectionId);
 }
 
 /** Convert a raw point score to a proficiency level using percentage boundaries.
@@ -154,10 +174,11 @@ function getTagScores(cid, studentId, tagId) {
     return true;
   });
   // Convert points-mode scores to proficiency
-  const assessments = getAssessments(cid);
+  // Use Map for O(1) lookup instead of O(n) find() per score entry
+  const assessMap = _getAssessMap(cid);
   const scale = getGradingScale(cid);
   var result = filtered.map(s => {
-    const assess = assessments.find(a => a.id === s.assessmentId);
+    const assess = assessMap.get(s.assessmentId);
     if (assess && assess.scoreMode === 'points' && assess.maxPoints > 0) {
       return { ...s, rawPoints: s.score, score: pointsToProf(s.score, assess.maxPoints, scale) };
     }
@@ -196,7 +217,7 @@ function getTagProficiency(cid, studentId, tagId) {
  * @returns {number} Proficiency level (0-4), or 0 if no evidence
  */
 function getSectionProficiency(cid, studentId, sectionId) {
-  const section = getSections(cid).find(s => s.id === sectionId);
+  const section = _getSectionById(cid, sectionId);
   if (!section) return 0;
   const profs = section.tags.map(t => getTagProficiency(cid, studentId, t.id)).filter(p => p > 0);
   if (profs.length === 0) return 0;
@@ -215,7 +236,7 @@ function getSectionProficiency(cid, studentId, sectionId) {
  * @returns {number} Calculated proficiency level (0-4), or 0 if no evidence
  */
 function getSectionProficiencyRaw(cid, studentId, sectionId) {
-  const section = getSections(cid).find(s => s.id === sectionId);
+  const section = _getSectionById(cid, sectionId);
   if (!section) return 0;
   const profs = section.tags.map(t => getTagProficiency(cid, studentId, t.id)).filter(p => p > 0);
   if (profs.length === 0) return 0;
@@ -324,7 +345,7 @@ function calcLetterGrade(avgProf) {
  * @returns {'up'|'down'|'flat'} Trend direction
  */
 function getSectionTrend(cid, studentId, sectionId) {
-  const section = getSections(cid).find(s => s.id === sectionId);
+  const section = _getSectionById(cid, sectionId);
   if (!section) return 'flat';
   // Collect all summative scores across all tags in this section, sorted by date
   const allScores = [];
@@ -348,7 +369,7 @@ function getSectionTrend(cid, studentId, sectionId) {
  * @returns {number} Total summative evidence count
  */
 function getSectionEvidenceCount(cid, studentId, sectionId) {
-  const section = getSections(cid).find(s => s.id === sectionId);
+  const section = _getSectionById(cid, sectionId);
   if (!section) return 0;
   let count = 0;
   section.tags.forEach(tag => {
@@ -416,7 +437,7 @@ function completionRing(pct, color) {
  * @returns {Array<{date: string, prof: number}>} Chronologically sorted proficiency snapshots
  */
 function getSectionGrowthData(cid, studentId, sectionId) {
-  const section = getSections(cid).find(s => s.id === sectionId);
+  const section = _getSectionById(cid, sectionId);
   if (!section) return [];
   const cc = getCourseConfig(cid);
   const course = COURSES[cid];
@@ -440,15 +461,26 @@ function getSectionGrowthData(cid, studentId, sectionId) {
   const aw = _getAW(cid);
   const opts = { categoryWeights: cw, assessmentWeights: aw };
 
-  // For each date, calculate section proficiency using scores up to that date
+  // Sort allScores once by date, then use a running pointer — O(n) instead of O(n²).
+  // For each date, advance the pointer to include all scores up to that date,
+  // accumulating them into a per-tag Map so grouping is also O(1) per score.
+  allScores.sort((a,b) => (a.date||'').localeCompare(b.date||''));
+  const runningByTag = new Map(section.tags.map(t => [t.id, []]));
+  let ri = 0;
+
   const points = [];
   dates.forEach(date => {
-    const scoresUpToDate = allScores.filter(s => s.date <= date);
-    // Group by tag, calc each tag's proficiency using only scores up to this date
+    // Advance running pointer: include all scores with date <= current date
+    while (ri < allScores.length && allScores[ri].date <= date) {
+      const s = allScores[ri++];
+      const bucket = runningByTag.get(s._tagId);
+      if (bucket) bucket.push(s);
+    }
+    // Calc each tag's proficiency from its accumulated scores
     const tagProfs = [];
     section.tags.forEach(tag => {
-      const tagScores = scoresUpToDate.filter(s => s._tagId === tag.id);
-      if (tagScores.length > 0) {
+      const tagScores = runningByTag.get(tag.id);
+      if (tagScores && tagScores.length > 0) {
         tagProfs.push(calcProficiency(tagScores, method, dw, opts));
       }
     });
