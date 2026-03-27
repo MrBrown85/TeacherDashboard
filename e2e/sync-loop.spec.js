@@ -184,7 +184,7 @@ test.describe('Sync Loop Detection', () => {
   test('rapid saves for same key do not grow without bound', async ({ page }) => {
     // Use slow upserts to simulate real network latency
     await page.addInitScript(() => { window.__syncDelay = 200; });
-    await page.goto('/app.html#/dashboard');
+    await page.goto('/teacher/app.html#/dashboard');
     await page.waitForSelector('#dock-mount nav', { timeout: 10_000 });
     await page.evaluate(() => { window.__syncCalls = []; });
 
@@ -205,7 +205,7 @@ test.describe('Sync Loop Detection', () => {
   });
 
   test('failed upserts do not create unbounded retry loop', async ({ page }) => {
-    await page.goto('/app.html#/dashboard');
+    await page.goto('/teacher/app.html#/dashboard');
     await page.waitForSelector('#dock-mount nav', { timeout: 10_000 });
 
     await page.evaluate(() => {
@@ -227,7 +227,7 @@ test.describe('Sync Loop Detection', () => {
   });
 
   test('retries pause after 3 consecutive failures', async ({ page }) => {
-    await page.goto('/app.html#/dashboard');
+    await page.goto('/teacher/app.html#/dashboard');
     await page.waitForSelector('#dock-mount nav', { timeout: 10_000 });
 
     await page.evaluate(() => {
@@ -255,7 +255,7 @@ test.describe('Sync Loop Detection', () => {
   });
 
   test('different keys are not coalesced — each gets its own sync', async ({ page }) => {
-    await page.goto('/app.html#/dashboard');
+    await page.goto('/teacher/app.html#/dashboard');
     await page.waitForSelector('#dock-mount nav', { timeout: 10_000 });
     await page.evaluate(() => { window.__syncCalls = []; });
 
@@ -272,7 +272,7 @@ test.describe('Sync Loop Detection', () => {
   });
 
   test('no phantom calls after syncs complete', async ({ page }) => {
-    await page.goto('/app.html#/dashboard');
+    await page.goto('/teacher/app.html#/dashboard');
     await page.waitForSelector('#dock-mount nav', { timeout: 10_000 });
     await page.evaluate(() => { window.__syncCalls = []; });
 
@@ -290,7 +290,7 @@ test.describe('Sync Loop Detection', () => {
   });
 
   test('total requests stay under 50 during a 10-second failure storm', async ({ page }) => {
-    await page.goto('/app.html#/dashboard');
+    await page.goto('/teacher/app.html#/dashboard');
     await page.waitForSelector('#dock-mount nav', { timeout: 10_000 });
 
     await page.evaluate(() => {
@@ -317,7 +317,7 @@ test.describe('Sync Loop Detection', () => {
   });
 
   test('sync status shows error state when server fails', async ({ page }) => {
-    await page.goto('/app.html#/dashboard');
+    await page.goto('/teacher/app.html#/dashboard');
     await page.waitForSelector('#dock-mount nav', { timeout: 10_000 });
 
     await page.evaluate(() => { window.__syncFail = true; });

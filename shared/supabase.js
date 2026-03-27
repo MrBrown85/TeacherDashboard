@@ -1,4 +1,17 @@
-/* gb-supabase.js — Supabase authentication layer for FullVision */
+/* shared/supabase.js — Supabase authentication layer for FullVision
+ *
+ * PORTAL CONVENTION
+ * Each interface HTML file sets window.__PORTAL before loading this script:
+ *
+ *   teacher/app.html        → window.__PORTAL = 'teacher'         (default, can omit)
+ *   teacher-mobile/index.html → window.__PORTAL = 'teacher-mobile'
+ *   student/index.html      → window.__PORTAL = 'student'
+ *   parent/index.html       → window.__PORTAL = 'parent'
+ *
+ * This script does NOT redirect to portal-specific URLs — all unauthenticated
+ * users are sent to /login.html. The login page reads user.user_metadata.portal
+ * after sign-in and routes each user to their correct interface.
+ */
 
 (function() {
   'use strict';
@@ -122,7 +135,8 @@
     if ('caches' in window) {
       caches.keys().then(names => names.forEach(name => caches.delete(name)));
     }
-    window.location.href = window.__MOBILE ? 'mobile.html' : 'login.html';
+    // All portals share the same login page — it routes to the right interface after sign-in
+    window.location.href = '/login.html';
   };
 
   /**
@@ -155,7 +169,7 @@
     }
     // Auth check
     const sb = getSupabase();
-    if (!sb) { window.location.href = window.__MOBILE ? 'mobile.html' : 'login.html'; return new Promise(function() {}); }
+    if (!sb) { window.location.href = '/login.html'; return new Promise(function() {}); }
 
     // Fast path: check localStorage for cached session (Supabase stores this automatically)
     const storageKey = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
@@ -177,10 +191,10 @@
     // Slow path: no cached session found, check with Supabase
     try {
       const { data: { session } } = await sb.auth.getSession();
-      if (!session) { window.location.href = window.__MOBILE ? 'mobile.html' : 'login.html'; return new Promise(function() {}); }
+      if (!session) { window.location.href = '/login.html'; return new Promise(function() {}); }
     } catch(e) {
       console.warn('Session check failed:', e);
-      window.location.href = window.__MOBILE ? 'mobile.html' : 'login.html';
+      window.location.href = '/login.html';
       return new Promise(function() {}); // Never resolve — page is redirecting
     }
   };
@@ -206,7 +220,7 @@
   document.addEventListener('click', function(e) {
     var btn = e.target.closest('[data-action="go-login"]');
     if (btn) {
-      window.location.href = window.__MOBILE ? 'mobile.html' : 'login.html';
+      window.location.href = '/login.html';
     }
   });
 

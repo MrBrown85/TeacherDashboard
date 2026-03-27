@@ -76,11 +76,11 @@ function load(file) {
   runInThisContext(code, { filename: file });
 }
 
-load('gb-constants.js');
-load('gb-data.js');
-load('gb-calc.js');
-load('gb-ui.js');
-load('gb-router.js');
+load('shared/constants.js');
+load('shared/data.js');
+load('shared/calc.js');
+load('teacher/ui.js');
+load('teacher/router.js');
 
 // Restore real setTimeout after loading (tests may need it)
 globalThis.setTimeout = _realSetTimeout;

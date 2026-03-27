@@ -7,7 +7,7 @@
 <title>Sign In — FullVision</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#007AFF">
-<link rel="stylesheet" href="gb-styles.css?v=3">
+<link rel="stylesheet" href="teacher/styles.css?v=3">
 <link rel="stylesheet" href="login.css">
 </head>
 <body>
@@ -69,8 +69,37 @@ window.__ENV = {
 };
 </script>
 <script src="vendor/supabase.min.js"></script>
-<script src="gb-supabase.js"></script>
+<script src="shared/supabase.js"></script>
 <script>
+/* ── Portal routing ─────────────────────────────────────────────────────────
+ * After a successful sign-in, route the user to their interface based on the
+ * 'portal' field stored in user_metadata when the account was created.
+ *
+ * How portals are assigned:
+ *   - Teacher accounts: user_metadata.portal = 'teacher' (or absent — defaults to teacher)
+ *   - Teacher mobile:   same teacher account, device detection overrides destination
+ *   - Student accounts: user_metadata.portal = 'student'  ← set by teacher/admin at invite time
+ *   - Parent accounts:  user_metadata.portal = 'parent'   ← set by teacher/admin at invite time
+ *
+ * To add a new portal: create the directory, add its entry in the switch below,
+ * and set the corresponding portal value when creating accounts.
+ * ─────────────────────────────────────────────────────────────────────────── */
+function portalRedirect(user) {
+  const portal = (user && user.user_metadata && user.user_metadata.portal) || 'teacher';
+  // Teachers also respect mobile device preference (students/parents get dedicated mobile UI later)
+  const preferMobile = portal === 'teacher' && window.innerWidth <= 768 && localStorage.getItem('td-mobile-pref') !== 'desktop';
+
+  switch (portal) {
+    case 'student':
+      return window.location.href = '/student/';
+    case 'parent':
+      return window.location.href = '/parent/';
+    case 'teacher':
+    default:
+      return window.location.href = preferMobile ? '/teacher-mobile/' : '/teacher/app.html';
+  }
+}
+
 /* ── Redirect if already logged in ─────────────────────────── */
 (async function() {
   try {
@@ -78,7 +107,7 @@ window.__ENV = {
     if (sb) {
       const { data: { session } } = await sb.auth.getSession();
       if (session) {
-        window.location.href = (window.innerWidth <= 768 && localStorage.getItem('td-mobile-pref') !== 'desktop') ? 'mobile.html' : 'app.html';
+        portalRedirect(session.user);
         return;
       }
     }
@@ -126,8 +155,8 @@ async function handleSignIn(e) {
   try {
     const email = document.getElementById('si-email').value.trim();
     const password = document.getElementById('si-password').value;
-    await signIn(email, password);
-    window.location.href = (window.innerWidth <= 768 && localStorage.getItem('td-mobile-pref') !== 'desktop') ? 'mobile.html' : 'app.html';
+    const { user } = await signIn(email, password);
+    portalRedirect(user);
   } catch(err) {
     showError(err.message || 'Sign in failed. Please try again.');
     btn.disabled = false;

@@ -840,7 +840,7 @@ async function loadCurriculumIndex() {
     return CURRICULUM_INDEX;
   }
   try {
-    const resp = await fetch('curriculum_by_course.json');
+    const resp = await fetch('/curriculum_by_course.json');
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     CURRICULUM_INDEX = await resp.json();
     return CURRICULUM_INDEX;

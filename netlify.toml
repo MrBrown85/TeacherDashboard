@@ -2,26 +2,62 @@
   publish = "."
 
 [[headers]]
-  for = "/*.js"
+  for = "/**/*.js"
   [headers.values]
     Cache-Control = "public, max-age=3600"
 
 [[headers]]
-  for = "/*.css"
+  for = "/**/*.css"
   [headers.values]
     Cache-Control = "public, max-age=3600"
 
 [[headers]]
-  for = "/*.html"
+  for = "/**/*.html"
   [headers.values]
     Cache-Control = "no-cache"
     Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://*.supabase.co https://*.nsvcs.net; worker-src 'self'; form-action 'self'; frame-ancestors 'none'"
 
 [[edge_functions]]
-  path = "/*.html"
+  path = "/**/*.html"
   function = "inject-env"
 
+# Root → login
 [[redirects]]
   from = "/"
   to = "/login.html"
+  status = 200
+
+# Legacy URL redirects
+[[redirects]]
+  from = "/app.html"
+  to = "/teacher/app.html"
+  status = 301
+
+[[redirects]]
+  from = "/app"
+  to = "/teacher/app.html"
+  status = 301
+
+[[redirects]]
+  from = "/mobile.html"
+  to = "/teacher-mobile/"
+  status = 301
+
+[[redirects]]
+  from = "/mobile"
+  to = "/teacher-mobile/"
+  status = 301
+
+# ── Future portals ───────────────────────────────────────────────────────────
+# These redirects are wired up now so the URLs work the moment index.html exists.
+# Do NOT build UI here yet — just reserving the routes.
+
+[[redirects]]
+  from = "/student"
+  to = "/student/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/parent"
+  to = "/parent/index.html"
   status = 200

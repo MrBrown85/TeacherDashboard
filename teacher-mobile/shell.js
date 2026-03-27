@@ -317,7 +317,7 @@
           '<div style="padding:8px 0 16px;text-align:center">' +
             '<div style="font-size:17px;font-weight:600;margin-bottom:4px">Switch to Desktop?</div>' +
             '<div style="font-size:15px;color:var(--text-3);margin-bottom:20px">You can return to mobile anytime.</div>' +
-            '<button class="m-btn-primary" onclick="localStorage.setItem(\'td-mobile-pref\',\'desktop\');window.location.href=\'/app.html\'">Switch to Desktop</button>' +
+            '<button class="m-btn-primary" onclick="localStorage.setItem(\'td-mobile-pref\',\'desktop\');window.location.href=\'/teacher/app.html\'">Switch to Desktop</button>' +
             '<button style="width:100%;padding:14px;border:none;background:none;font-size:17px;color:var(--active);font-family:inherit;cursor:pointer;margin-top:8px" onclick="MC.dismissSheet()">Cancel</button>' +
           '</div>'
         );

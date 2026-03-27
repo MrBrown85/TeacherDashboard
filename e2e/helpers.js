@@ -6,7 +6,7 @@
  *   test.beforeEach(async ({ page }) => {
  *     await mockAuth(page);
  *     await seedCourse(page);
- *     await page.goto('/app.html#/dashboard');
+ *     await page.goto('/teacher/app.html#/dashboard');
  *     await page.waitForSelector('#dock-mount');
  *   });
  */
@@ -280,7 +280,7 @@ export async function seedScores(page, scores) {
 
 /** Navigate to app and wait for the dock to render (app booted). */
 export async function gotoApp(page, hash = '/dashboard') {
-  await page.goto(`/app.html#${hash}`);
+  await page.goto(`/teacher/app.html#${hash}`);
   await page.waitForSelector('#dock-mount nav', { timeout: 10_000 });
 }
 

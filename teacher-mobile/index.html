@@ -7,10 +7,10 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="description" content="TeacherDashboard Mobile — quick student lookup, observations, and grading">
 <title>Teacher Dashboard</title>
-<link rel="manifest" href="manifest.json">
+<link rel="manifest" href="../manifest.json">
 <meta name="theme-color" content="#F2F2F7">
-<link rel="stylesheet" href="gb-styles.css?v=3">
-<link rel="stylesheet" href="mobile.css">
+<link rel="stylesheet" href="../teacher/styles.css?v=3">
+<link rel="stylesheet" href="../teacher-mobile/styles.css">
 </head>
 <body class="mobile-mode">
 
@@ -90,22 +90,22 @@ window.__ENV = {
 };
 window.__MOBILE = true;
 </script>
-<script src="vendor/supabase.min.js"></script>
+<script src="../vendor/supabase.min.js"></script>
 <script>
 if (typeof supabase === 'undefined') {
   document.write('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"><\/script>');
 }
 </script>
-<script src="gb-supabase.js"></script>
-<script src="gb-constants.js"></script>
-<script src="gb-data.js"></script>
-<script src="gb-calc.js"></script>
+<script src="../shared/supabase.js"></script>
+<script src="../shared/constants.js"></script>
+<script src="../shared/data.js"></script>
+<script src="../shared/calc.js"></script>
 <!-- Mobile-specific modules -->
-<script src="m-components.js"></script>
-<script src="m-students.js"></script>
-<script src="m-observe.js"></script>
-<script src="m-grade.js"></script>
-<script src="page-mobile.js"></script>
+<script src="../teacher-mobile/components.js"></script>
+<script src="../teacher-mobile/tab-students.js"></script>
+<script src="../teacher-mobile/tab-observe.js"></script>
+<script src="../teacher-mobile/tab-grade.js"></script>
+<script src="../teacher-mobile/shell.js"></script>
 <script>
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(function(){});

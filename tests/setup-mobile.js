@@ -85,8 +85,8 @@ function _mobileStubElement(id) {
 });
 
 // Load mobile modules in dependency order
-load('m-components.js');
-load('m-students.js');
-load('m-observe.js');
-load('m-grade.js');
-// NOTE: page-mobile.js auto-boots — we test its logic through the modules instead
+load('teacher-mobile/components.js');
+load('teacher-mobile/tab-students.js');
+load('teacher-mobile/tab-observe.js');
+load('teacher-mobile/tab-grade.js');
+// NOTE: shell.js auto-boots — we test its logic through the modules instead
