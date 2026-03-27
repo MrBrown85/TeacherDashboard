@@ -630,6 +630,12 @@ th.gb-group-alt { background-color: rgba(0,0,0,0.03); }
   .gb-scores-scroll { max-height:none; overflow:visible; }
   .gb-scores-wrap { border:none; }
   .gb-scores-table th, .gb-scores-table td { border:1px solid #ccc; }
+  .gb-grid { display:block !important; overflow:visible !important; max-height:none !important; }
+  .gb-grid-data { overflow:visible !important; }
+  .gb-scores-table { font-size:7pt; }
+  .gb-scores-cell { padding:1px 2px !important; min-width:0 !important; }
+  .gb-grid-cols { transform:none !important; }
+  .gb-filter-strip, .gb-undo-hint { display:none !important; }
 }
 
 /* Context menus */

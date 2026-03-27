@@ -204,18 +204,39 @@ window.DashClassManager = (function() {
     if (el) el.click();
   }
 
+  /* RFC 4180-aware CSV line parser — handles quoted fields with commas and escaped quotes */
+  function parseCSVLine(line) {
+    var result = [], current = '', inQuotes = false;
+    for (var i = 0; i < line.length; i++) {
+      var ch = line[i];
+      if (inQuotes) {
+        if (ch === '"' && line[i + 1] === '"') { current += '"'; i++; }
+        else if (ch === '"') { inQuotes = false; }
+        else { current += ch; }
+      } else {
+        if (ch === '"') { inQuotes = true; }
+        else if (ch === ',') { result.push(current.trim()); current = ''; }
+        else { current += ch; }
+      }
+    }
+    result.push(current.trim());
+    return result;
+  }
+
   function cmHandleCSV(input) {
     var file = input.files[0];
     if (!file) return;
     var reader = new FileReader();
     reader.onload = function(e) {
-      var lines = e.target.result.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l; });
+      var text = e.target.result;
+      if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // strip UTF-8 BOM
+      var lines = text.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l; });
       var hdr = (lines[0]||'').toLowerCase();
       var hasHeader = hdr.includes('first') || hdr.includes('name') || hdr.includes('last');
       var start = hasHeader ? 1 : 0;
       var parsed = [];
       for (var i = start; i < lines.length; i++) {
-        var parts = lines[i].split(',').map(function(p) { return p.trim(); });
+        var parts = parseCSVLine(lines[i]);
         if (!parts[0]) continue;
         if (hdr.includes('first') || parts.length >= 4) {
           parsed.push({ firstName: parts[0], lastName: parts[1]||'', preferred: parts[2]||'', pronouns: parts[3]||'', studentNumber: parts[4]||'', dateOfBirth: parts[5]||'', email: parts[6]||'' });
@@ -226,7 +247,7 @@ window.DashClassManager = (function() {
       }
       cmShowImportPreview(parsed);
     };
-    reader.readAsText(file);
+    reader.readAsText(file, 'UTF-8');
     input.value = '';
   }
 

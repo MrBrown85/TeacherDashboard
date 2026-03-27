@@ -51,8 +51,16 @@ window.DashCurriculumWizard = (function() {
     }, 50);
   }
 
-  (function initCwCompDrag() {
-    document.addEventListener('dragstart', function(e) {
+  var _cwDragListeners = [];
+
+  function _cwAddDocListener(type, handler) {
+    document.addEventListener(type, handler);
+    _cwDragListeners.push({ type: type, handler: handler });
+  }
+
+  function initCwDrag() {
+    cleanupCwDrag();
+    _cwAddDocListener('dragstart', function(e) {
       var card = e.target.closest && e.target.closest('.cm-std-card[data-comp-drag]');
       if (!card) return;
       _cwDragCompId = card.dataset.compDrag;
@@ -60,9 +68,8 @@ window.DashCurriculumWizard = (function() {
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', _cwDragCompId);
     });
-    document.addEventListener('dragover', function(e) {
+    _cwAddDocListener('dragover', function(e) {
       if (!_cwDragCompId) return;
-      // Card-on-card merge: hover over another ungrouped card to create a new group
       var targetCard = e.target.closest && e.target.closest('.cm-std-card[data-comp-drag]');
       if (targetCard) {
         var targetId = targetCard.dataset.compDrag;
@@ -78,10 +85,8 @@ window.DashCurriculumWizard = (function() {
           return;
         }
       } else {
-        // Left the card area — clear merge state
         if (_cwMergeTargetId) _cwClearMerge();
       }
-      // Folder drop
       var folder = e.target.closest && e.target.closest('.mod-folder[data-folder-drop]');
       if (!folder) return;
       e.preventDefault();
@@ -90,9 +95,8 @@ window.DashCurriculumWizard = (function() {
       folder.classList.add('drag-over');
       if (!folder.classList.contains('open')) folder.classList.add('open');
     });
-    document.addEventListener('dragleave', function(e) {
+    _cwAddDocListener('dragleave', function(e) {
       if (!_cwDragCompId) return;
-      // Card merge leave
       var targetCard = e.target.closest && e.target.closest('.cm-std-card[data-comp-drag]');
       if (targetCard && !targetCard.contains(e.relatedTarget)) {
         if (_cwMergeTargetId === targetCard.dataset.compDrag) _cwClearMerge();
@@ -101,9 +105,8 @@ window.DashCurriculumWizard = (function() {
       var folder = e.target.closest && e.target.closest('.mod-folder[data-folder-drop]');
       if (folder && !folder.contains(e.relatedTarget)) folder.classList.remove('drag-over');
     });
-    document.addEventListener('drop', function(e) {
+    _cwAddDocListener('drop', function(e) {
       if (!_cwDragCompId) return;
-      // Card-on-card merge drop
       var targetCard = e.target.closest && e.target.closest('.cm-std-card[data-comp-drag]');
       if (targetCard && _cwMergeAnimating && _cwMergeTargetId === targetCard.dataset.compDrag) {
         e.preventDefault(); e.stopPropagation();
@@ -112,7 +115,6 @@ window.DashCurriculumWizard = (function() {
         document.querySelectorAll('.cm-std-card.dragging').forEach(function(c) { c.classList.remove('dragging'); });
         return;
       }
-      // Folder drop
       var folder = e.target.closest && e.target.closest('.mod-folder[data-folder-drop]');
       if (!folder) return;
       e.preventDefault();
@@ -127,12 +129,17 @@ window.DashCurriculumWizard = (function() {
       document.querySelectorAll('.cm-std-card.dragging').forEach(function(c) { c.classList.remove('dragging'); });
       _renderClassManager();
     });
-    document.addEventListener('dragend', function() {
+    _cwAddDocListener('dragend', function() {
       _cwDragCompId = null; _cwClearMerge();
       document.querySelectorAll('.mod-folder.drag-over').forEach(function(f) { f.classList.remove('drag-over'); });
       document.querySelectorAll('.cm-std-card.dragging').forEach(function(c) { c.classList.remove('dragging'); });
     });
-  })();
+  }
+
+  function cleanupCwDrag() {
+    _cwDragListeners.forEach(function(l) { document.removeEventListener(l.type, l.handler); });
+    _cwDragListeners = [];
+  }
 
   /* ── State accessors ─────────────────────────────────────── */
   function getState() {
@@ -740,6 +747,8 @@ window.DashCurriculumWizard = (function() {
     cwUpdateGroupColor: cwUpdateGroupColor,
     cwCompGroupChange: cwCompGroupChange,
     cwAddCustomComp: cwAddCustomComp,
-    cwRemoveCustomComp: cwRemoveCustomComp
+    cwRemoveCustomComp: cwRemoveCustomComp,
+    initCwDrag: initCwDrag,
+    cleanupCwDrag: cleanupCwDrag
   };
 })();

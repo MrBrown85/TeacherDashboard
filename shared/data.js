@@ -211,6 +211,7 @@ function _broadcastChange(cid, field) {
 let _hadSyncError = false;
 let _retryQueue = [];       // { table, key, data }
 let _retryTimer = null;
+let _lsQuotaWarned = false;
 let _retryCount = 0;
 let _consecutiveFailures = 0;
 const _MAX_RETRIES = 6;
@@ -329,6 +330,12 @@ function _addToRetryQueue(table, key, data) {
   while (_retryQueue.length > _MAX_RETRY_QUEUE) {
     _retryQueue.shift();
   }
+  _persistRetryQueue();
+}
+
+/* Persist retry queue to localStorage so pending syncs survive browser close */
+function _persistRetryQueue() {
+  _safeLSSet('gb-retry-queue', JSON.stringify(_retryQueue));
 }
 
 /* Process retry queue sequentially (not all at once) */
@@ -340,10 +347,12 @@ async function _retryFailedSyncs() {
     _retryQueue = [];
     _retryCount = 0;
     _consecutiveFailures = 0;
+    localStorage.removeItem('gb-retry-queue');
     return;
   }
   // Process one at a time to avoid hammering the server
   const queue = _retryQueue.splice(0);
+  if (queue.length === 0) { localStorage.removeItem('gb-retry-queue'); return; }
   for (const item of queue) {
     try {
       await _doSync(item.table, item.key, item.data);
@@ -437,6 +446,22 @@ async function initAllCourses() {
   // Ensure COURSES global is set
   COURSES = _cache.courses;
   if (!localStorage.getItem('gb-courses') && !_useSupabase) saveCourses(COURSES);
+
+  // Restore persisted retry queue from previous session
+  try {
+    var savedQueue = JSON.parse(localStorage.getItem('gb-retry-queue') || '[]');
+    if (savedQueue.length > 0 && _useSupabase) {
+      _retryQueue = savedQueue;
+      setTimeout(_retryFailedSyncs, 2000);
+    } else {
+      localStorage.removeItem('gb-retry-queue');
+    }
+  } catch (e) { localStorage.removeItem('gb-retry-queue'); }
+
+  // Persist retry queue on page unload
+  window.addEventListener('beforeunload', function() {
+    if (_retryQueue.length > 0) _persistRetryQueue();
+  });
 
   // Start cross-tab conflict detection
   _initCrossTab();
@@ -560,6 +585,12 @@ function _safeLSSet(key, value) {
     localStorage.setItem(key, value);
   } catch (e) {
     console.warn('localStorage write failed (' + key + '):', e);
+    if (e.name === 'QuotaExceededError' && !_lsQuotaWarned) {
+      _lsQuotaWarned = true;
+      if (typeof showSyncToast === 'function') {
+        showSyncToast('Local storage full \u2014 ensure you have internet for data safety', 'error');
+      }
+    }
   }
 }
 
@@ -633,6 +664,13 @@ function anonymizeStudents(students) {
 }
 
 /* ── Learning Map Migration — flatten section/tag hierarchy ── */
+function _backupBeforeMigration(cid, field) {
+  var current = _cache[field] && _cache[field][cid];
+  if (current) {
+    _safeLSSet('gb-mig-bak-' + field + '-' + cid, JSON.stringify({ data: current, ts: Date.now() }));
+  }
+}
+
 function migrateLearningMap(map) {
   if (!map || !map.sections || map._flatVersion >= 2) return map;
   // Build sectionId → tagId mapping for override/goal/reflection migration
@@ -733,6 +771,7 @@ function migrateAllStudents() {
   Object.keys(COURSES).forEach(function(cid) {
     var students = getStudents(cid);
     if (students.length && students.some(function(s){ return s.firstName === undefined; })) {
+      _backupBeforeMigration(cid, 'students');
       saveStudents(cid, students.map(migrateStudent));
     }
   });
@@ -747,7 +786,7 @@ function formatDate(ts) {
   if (!ts) return '';
   return new Date(ts).toLocaleDateString('en-CA', { month:'short', day:'numeric', year:'numeric' });
 }
-function uid() { return 's' + Date.now() + Math.random().toString(36).slice(2,6); }
+function uid() { return 's' + Date.now() + Math.random().toString(36).slice(2,10); }
 function getParam(key) { return new URLSearchParams(window.location.search).get(key); }
 
 function getTodayStr() {
@@ -985,6 +1024,7 @@ function getLearningMap(cid) {
         if (sec.tags && sec.tags.length > 0) sectionToTag[sec.id] = sec.tags[0].id;
       });
     }
+    if (!map._flatVersion || map._flatVersion < 2) _backupBeforeMigration(cid, 'learningMaps');
     migrateLearningMap(map);
     _cache.learningMaps[cid] = map;
     if (map._customized) saveLearningMap(cid, map);
@@ -1187,7 +1227,24 @@ function getAssessments(cid) {
   if (_cache.assessments[cid] !== undefined) return _cache.assessments[cid];
   try { return JSON.parse(localStorage.getItem('gb-assessments-'+cid))||[]; } catch (e) { console.warn('Assessments parse fallback:', e); return []; }
 }
-function saveAssessments(cid, arr) { _saveCourseField('assessments', cid, arr); }
+function saveAssessments(cid, arr) {
+  var prev = (_cache.assessments && _cache.assessments[cid]) || [];
+  _saveCourseField('assessments', cid, arr);
+  if (arr.length < prev.length) _cleanOrphanedScores(cid);
+}
+
+function _cleanOrphanedScores(cid) {
+  var assessments = getAssessments(cid);
+  var validIds = new Set(assessments.map(function(a) { return a.id; }));
+  var scores = getScores(cid);
+  var changed = false;
+  Object.keys(scores).forEach(function(sid) {
+    var before = scores[sid].length;
+    scores[sid] = scores[sid].filter(function(e) { return validIds.has(e.assessmentId); });
+    if (scores[sid].length !== before) changed = true;
+  });
+  if (changed) saveScores(cid, scores);
+}
 function getOverrides(cid) {
   if (_cache.overrides[cid] !== undefined) return _cache.overrides[cid];
   try { return JSON.parse(localStorage.getItem('gb-overrides-'+cid))||{}; } catch (e) { console.warn('Overrides parse fallback:', e); return {}; }

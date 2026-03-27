@@ -30,7 +30,7 @@
   --border-2:       #c7c7cc;
   --text:           #1d1d1f;
   --text-2:         #636366;
-  --text-3:         #6E6E73;
+  --text-3:         #58585D;
   --active:         #007AFF;
   --active-light:   rgba(0,122,255,0.08);
   --late:           #FF9500;
@@ -1211,10 +1211,23 @@ body {
 
 /* ── Print ──────────────────────────────────────────────────── */
 @media print {
-  #app-dock, #gb-sidebar, .no-print { display: none !important; }
-  .page-layout { height: auto; }
-  .page-main { overflow: visible; padding: 0; }
-  body { padding-top: 0; background: var(--surface); }
+  /* Hide navigation, sidebars, interactive chrome */
+  #app-dock, #gb-sidebar, .no-print, .tb-sync, .undo-toast, .sync-toast,
+  .tb-user-menu, .sidebar-toggle { display: none !important; }
+
+  /* Layout */
+  .page-layout { height: auto !important; display: block !important; }
+  .page-main { overflow: visible !important; padding: 0 !important; max-width: 100% !important; }
+  body { padding-top: 0; background: white !important; color: black !important;
+         font-size: 10pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  /* Tables: repeat headers, avoid row breaks */
+  thead { display: table-header-group; }
+  tr { page-break-inside: avoid; }
+
+  /* Reports: page breaks between students */
+  .report-student-section { page-break-inside: avoid; page-break-after: always; }
+  .report-student-section:last-child { page-break-after: auto; }
 }
 
 /* ── Responsive: Tablet (≤1200px) ─────────────────────────── */
@@ -1306,7 +1319,7 @@ body {
     --border-2: #3A3A3C;
     --text: #F5F5F7;
     --text-2: #AEAEB2;
-    --text-3: #8E8E93;
+    --text-3: #98989D;
     --active: #0A84FF;
     --active-light: rgba(10,132,255,0.18);
     --priority: #FF453A;

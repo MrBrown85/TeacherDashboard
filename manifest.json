@@ -2,7 +2,7 @@
   "name": "FullVision",
   "short_name": "FV",
   "description": "Learning Profile Builder and Communicator",
-  "start_url": "/app.html",
+  "start_url": "/teacher/app.html",
   "display": "standalone",
   "background_color": "#f5f5f7",
   "theme_color": "#007AFF",
@@ -25,7 +25,7 @@
       "name": "Mobile View",
       "short_name": "Mobile",
       "description": "Quick student lookup, observations, and grading",
-      "url": "/mobile.html"
+      "url": "/teacher-mobile/"
     }
   ]
 }

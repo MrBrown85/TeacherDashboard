@@ -32,7 +32,7 @@
 <!-- curriculum_data.js (971 KB) is lazy-loaded by loadCurriculumIndex() in gb-data.js -->
 <script>
 // Auto-detect mobile viewport and redirect to mobile experience
-if (window.innerWidth <= 768 && localStorage.getItem('td-mobile-pref') !== 'desktop') {
+if (window.innerWidth <= 600 && localStorage.getItem('td-mobile-pref') !== 'desktop') {
   window.location.replace('/teacher-mobile/');
 }
 window.__ENV = {

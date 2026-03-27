@@ -494,6 +494,7 @@ function dismissSyncToast() {
 
 /* ── Confirm Modal ────────────────────────────────────────── */
 function showConfirm(title, message, okLabel, okStyle, onConfirm) {
+  var triggerEl = document.activeElement;
   const overlay = document.createElement('div');
   overlay.className = 'confirm-overlay';
   overlay.setAttribute('role', 'dialog');
@@ -511,7 +512,7 @@ function showConfirm(title, message, okLabel, okStyle, onConfirm) {
   // Focus the cancel button for keyboard users
   overlay.querySelector('#confirm-cancel-btn').focus();
   // Shared cleanup: remove overlay + escHandler + trapHandler in all close paths
-  function closeOverlay() { overlay.remove(); document.removeEventListener('keydown', escHandler); document.removeEventListener('keydown', trapHandler); }
+  function closeOverlay() { overlay.remove(); document.removeEventListener('keydown', escHandler); document.removeEventListener('keydown', trapHandler); try { if (triggerEl && typeof triggerEl.focus === 'function') triggerEl.focus(); } catch (e) { /* trigger may have been removed */ } }
   overlay.querySelector('#confirm-ok-btn').onclick = () => { closeOverlay(); onConfirm(); };
   overlay.querySelector('#confirm-cancel-btn').onclick = () => { closeOverlay(); };
   // Close on backdrop click
