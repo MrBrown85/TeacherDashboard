@@ -32,6 +32,7 @@ const PRECACHE_URLS = [
   '/teacher/page-reports.js',
   '/teacher/report-blocks.js',
   '/teacher/report-questionnaire.js',
+  '/teacher/dash-class-manager.js',
   '/teacher/teams-import.js',
   '/teacher/teams-import.css',
   '/vendor/xlsx.mini.min.js',
