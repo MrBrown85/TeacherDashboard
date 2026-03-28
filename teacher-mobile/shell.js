@@ -49,6 +49,10 @@
     MC.setupOfflineDetection();
     _renderTab('students');
     _bindEvents();
+
+    // Hide loading spinner
+    var loader = document.getElementById('m-loading');
+    if (loader) loader.style.display = 'none';
     _initPullToRefresh();
 
     // Register mobile re-render callback for cross-device sync
@@ -123,6 +127,8 @@
 
   /* ── Auth screen ──────────────────────────────────────────── */
   function _showAuth() {
+    var loader = document.getElementById('m-loading');
+    if (loader) loader.style.display = 'none';
     var auth = document.getElementById('m-auth');
     var app = document.getElementById('m-app');
     if (auth) auth.style.display = '';
@@ -497,6 +503,13 @@
           // Pre-select the student
           MObserve.selectStudent(qcSid);
         }, 400);
+        return;
+      }
+
+      if (action === 'm-obs-delete') {
+        var obId = target.getAttribute('data-obid');
+        var obSid = target.getAttribute('data-sid');
+        if (obId && obSid) MObserve.deleteObservation(_cid, obSid, obId);
         return;
       }
 

@@ -77,6 +77,14 @@
   </nav>
 </div>
 
+<!-- Loading spinner (visible during boot, hidden by shell.js) -->
+<div id="m-loading" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);z-index:9999">
+  <div style="text-align:center">
+    <div style="width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--active);border-radius:50%;animation:m-spin 0.6s linear infinite;margin:0 auto 12px"></div>
+    <div style="font-size:15px;color:var(--text-3);font-weight:500">Loading...</div>
+  </div>
+</div>
+
 <!-- Offline banner -->
 <div id="m-offline-banner" class="m-offline-banner" style="display:none">
   Offline — changes will sync when connected

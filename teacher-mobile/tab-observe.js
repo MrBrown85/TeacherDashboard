@@ -125,6 +125,7 @@ window.MObserve = (function() {
             '</div>' +
           '</div>' +
           '<span class="m-obs-sentiment-icon m-post-sentiment">' + (sentiment.icon || '') + '</span>' +
+          '<button class="m-obs-delete-btn" data-action="m-obs-delete" data-obid="' + ob.id + '" data-sid="' + ob.studentId + '" title="Delete" aria-label="Delete observation">&times;</button>' +
         '</div>' +
         '<div class="m-obs-text m-post-body">' + MC.esc(ob.text) + '</div>' +
         (tagChips ? '<div class="m-obs-tags m-post-tags">' + tagChips + '</div>' : '') +
