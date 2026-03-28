@@ -112,10 +112,13 @@ let _initPromise = null;  // dedup concurrent initData calls
    ══════════════════════════════════════════════════════════════════ */
 let _syncStatus = 'idle';
 let _pendingSyncs = 0;
+let _lastSyncedAt = null;
 
 function getSyncStatus() {
   return { status: _syncStatus, pending: _pendingSyncs };
 }
+
+function getLastSyncedAt() { return _lastSyncedAt; }
 
 /** Returns a promise that resolves when all pending syncs complete (or after timeout). */
 function waitForPendingSyncs(timeoutMs = 5000) {
@@ -307,7 +310,7 @@ async function _doSync(table, key, data) {
     clearTimeout(timeoutId);
     _pendingSyncs--;
     _consecutiveFailures = 0;
-    if (_pendingSyncs <= 0) { _pendingSyncs = 0; _syncStatus = 'idle'; _retryCount = 0; }
+    if (_pendingSyncs <= 0) { _pendingSyncs = 0; _syncStatus = 'idle'; _retryCount = 0; _lastSyncedAt = new Date(); }
     _updateSyncIndicator();
     // Show recovery toast if we previously had an error
     if (_hadSyncError && _syncStatus === 'idle') {
@@ -614,6 +617,7 @@ async function _refreshFromSupabase() {
     if (changed) {
       _invalidateAndRerender();
     }
+    _lastSyncedAt = new Date();
   } catch (e) {
     console.warn('Visibility refresh failed:', e);
   }
@@ -798,9 +802,33 @@ function fullName(st) { return ((st.firstName||'') + ' ' + (st.lastName||'')).tr
 function displayName(st) { return st.preferred || fullName(st); }
 function displayNameFirst(st) { return st.preferred || st.firstName || st.lastName || ''; }
 
-function sortStudents(arr, mode) {
+function sortStudents(arr, mode, cid) {
   var c = arr.slice();
-  if (mode === 'firstName') return c.sort(function(a,b){ return (a.firstName||'').localeCompare(b.firstName||'') || (a.lastName||'').localeCompare(b.lastName||''); });
+  if (mode === 'firstName') {
+    return c.sort(function(a,b){ return (a.firstName||'').localeCompare(b.firstName||'') || (a.lastName||'').localeCompare(b.lastName||''); });
+  }
+  if (mode === 'proficiency' && cid) {
+    var profMap = {};
+    c.forEach(function(st) { profMap[st.id] = getOverallProficiency(cid, st.id) || 0; });
+    return c.sort(function(a,b){ return profMap[b.id] - profMap[a.id]; });
+  }
+  if (mode === 'missing' && cid) {
+    var statuses = getAssignmentStatuses(cid);
+    var assessments = getAssessments(cid);
+    var missingMap = {};
+    c.forEach(function(st) {
+      missingMap[st.id] = assessments.filter(function(a){ return statuses[st.id + ':' + a.id] === 'NS'; }).length;
+    });
+    return c.sort(function(a,b){ return missingMap[b.id] - missingMap[a.id]; });
+  }
+  if (mode === 'lastObserved' && cid) {
+    var lastObsMap = {};
+    c.forEach(function(st) {
+      var obs = getStudentQuickObs(cid, st.id);
+      lastObsMap[st.id] = obs.length ? obs[0].created : '';
+    });
+    return c.sort(function(a,b){ return (lastObsMap[b.id]||'').localeCompare(lastObsMap[a.id]||''); });
+  }
   return c.sort(function(a,b){ return (a.lastName||'').localeCompare(b.lastName||'') || (a.firstName||'').localeCompare(b.firstName||''); });
 }
 
@@ -1629,6 +1657,7 @@ var _mobileRerender = null;
 
 window.GB = {
   getSyncStatus,
+  getLastSyncedAt,
   retrySyncs,
   refreshFromSupabase: _refreshFromSupabase,
   registerMobileRerender: function(fn) { _mobileRerender = fn; },

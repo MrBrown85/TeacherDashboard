@@ -6,6 +6,7 @@ window.MStudents = (function() {
   var MC = window.MComponents;
   var MAX_PROF = 4;
   var _viewMode = 'cards'; // 'cards' or 'list'
+  var _sortMode = 'alpha';  // 'alpha' | 'proficiency' | 'missing' | 'lastObserved'
   var _activeCid = null;
 
   /* ── Shared helpers ──────────────────────────────────────────── */
@@ -31,11 +32,43 @@ window.MStudents = (function() {
     }
   }
 
+  function _buildCells(students, cid, allStatuses, allAssessments) {
+    var html = '';
+    students.forEach(function(st) {
+      var overall = getOverallProficiency(cid, st.id);
+      var rounded = Math.round(overall);
+      var color = MC.avatarColor(st.id);
+      var initials = MC.avatarInitials(st);
+      var name = displayName(st);
+      var subtitle = '';
+      if (st.pronouns) subtitle += MC.esc(st.pronouns);
+
+      var badges = _renderBadges(st);
+
+      var hasMissing = allAssessments.some(function(a) {
+        return allStatuses[st.id + ':' + a.id] === 'NS';
+      });
+      var missingDot = hasMissing ? '<div class="m-missing-dot"></div>' : '';
+
+      html += '<div class="m-cell" role="button" tabindex="0" data-action="m-student-detail" data-sid="' + st.id + '">' +
+        '<div class="m-cell-avatar" style="background:' + color + '">' + initials + missingDot + '</div>' +
+        '<div class="m-cell-body">' +
+          '<div class="m-cell-title">' + MC.esc(name) + badges + '</div>' +
+          (subtitle ? '<div class="m-cell-subtitle">' + subtitle + '</div>' : '') +
+        '</div>' +
+        '<div class="m-cell-accessory">' +
+          '<div class="m-prof-badge" style="background:' + MC.profBg(rounded) + '">' + (overall > 0 ? overall.toFixed(1) : '—') + '</div>' +
+          MC.ICONS.chevronRight +
+        '</div></div>';
+    });
+    return html;
+  }
+
   /* ── Student List Screen ────────────────────────────────────── */
   function renderList(cid) {
     _activeCid = cid;
     var students = getStudents(cid);
-    students = sortStudents(students.slice(), 'alpha');
+    students = sortStudents(students, _sortMode, cid);
 
     var toggleHTML = '<div class="m-view-toggle">' +
       '<button class="m-view-toggle-btn' + (_viewMode === 'cards' ? ' active' : '') + '" data-action="m-set-view" data-mode="cards">Cards</button>' +
@@ -44,6 +77,7 @@ window.MStudents = (function() {
 
     var nav = MC.navBar({ id: 'students-list', title: 'Students', rightHTML:
       toggleHTML +
+      '<button class="m-nav-bar-action" data-action="m-sort" title="Sort">' + MC.ICONS.sort + '</button>' +
       '<button class="m-nav-bar-action" data-action="m-settings" title="Settings">' + MC.ICONS.settings + '</button>'
     });
 
@@ -57,36 +91,7 @@ window.MStudents = (function() {
     if (!students.length) {
       cells = '<div class="m-empty"><div class="m-empty-icon">👤</div><div class="m-empty-title">No Students</div><div class="m-empty-subtitle">Add students on the desktop app</div></div>';
     } else {
-      cells = '<div class="m-list" id="m-student-list">';
-      students.forEach(function(st) {
-        var overall = getOverallProficiency(cid, st.id);
-        var rounded = Math.round(overall);
-        var color = MC.avatarColor(st.id);
-        var initials = MC.avatarInitials(st);
-        var name = displayName(st);
-        var subtitle = '';
-        if (st.pronouns) subtitle += MC.esc(st.pronouns);
-
-        var badges = _renderBadges(st);
-
-        // Missing work check
-        var hasMissing = allAssessments.some(function(a) {
-          return allStatuses[st.id + ':' + a.id] === 'NS';
-        });
-        var missingDot = hasMissing ? '<div class="m-missing-dot"></div>' : '';
-
-        cells += '<div class="m-cell" role="button" tabindex="0" data-action="m-student-detail" data-sid="' + st.id + '">' +
-          '<div class="m-cell-avatar" style="background:' + color + '">' + initials + missingDot + '</div>' +
-          '<div class="m-cell-body">' +
-            '<div class="m-cell-title">' + MC.esc(name) + badges + '</div>' +
-            (subtitle ? '<div class="m-cell-subtitle">' + subtitle + '</div>' : '') +
-          '</div>' +
-          '<div class="m-cell-accessory">' +
-            '<div class="m-prof-badge" style="background:' + MC.profBg(rounded) + '">' + (overall > 0 ? overall.toFixed(1) : '—') + '</div>' +
-            MC.ICONS.chevronRight +
-          '</div></div>';
-      });
-      cells += '</div>';
+      cells = '<div class="m-list" id="m-student-list">' + _buildCells(students, cid, allStatuses, allAssessments) + '</div>';
     }
 
     // Card stack mount (visual, populated by initCardStack after render)
@@ -177,7 +182,7 @@ window.MStudents = (function() {
     if (!container) return;
 
     var students = getStudents(cid);
-    students = sortStudents(students.slice(), 'alpha');
+    students = sortStudents(students, _sortMode, cid);
     if (!students.length) return;
 
     var sections = getSections(cid);
@@ -212,6 +217,34 @@ window.MStudents = (function() {
 
   function destroyCardStack() {
     if (_stackInstance) { _stackInstance.destroy(); _stackInstance = null; }
+  }
+
+  function setSortMode(mode) {
+    _sortMode = mode;
+    MC.dismissSheet();
+    var listEl = document.getElementById('m-student-list');
+    if (listEl) {
+      var students = sortStudents(getStudents(_activeCid), mode, _activeCid);
+      var allStatuses = getAssignmentStatuses(_activeCid);
+      var allAssessments = getAssessments(_activeCid);
+      listEl.innerHTML = _buildCells(students, _activeCid, allStatuses, allAssessments);
+    }
+    if (_viewMode === 'cards') initCardStack(_activeCid);
+  }
+
+  function showSortSheet() {
+    var labels = { alpha: 'Name', proficiency: 'Proficiency', missing: 'Missing Work', lastObserved: 'Last Observed' };
+    var opts = ['alpha', 'proficiency', 'missing', 'lastObserved'].map(function(m) {
+      var check = _sortMode === m ? ' <span style="color:var(--active)">✓</span>' : '';
+      return '<button class="m-sheet-row-btn" data-action="m-set-sort" data-mode="' + m + '">' + labels[m] + check + '</button>';
+    }).join('');
+    MC.presentSheet(
+      '<div style="padding:8px 0 16px">' +
+      '<div style="font-size:17px;font-weight:600;text-align:center;margin-bottom:16px">Sort Students</div>' +
+      opts +
+      '<button class="m-btn-ghost" data-action="m-dismiss-sheet" style="margin-top:8px">Cancel</button>' +
+      '</div>'
+    );
   }
 
   /* ── Student Detail Screen ──────────────────────────────────── */
@@ -501,6 +534,8 @@ window.MStudents = (function() {
     filterList: filterList,
     initCardStack: initCardStack,
     destroyCardStack: destroyCardStack,
-    setViewMode: setViewMode
+    setViewMode: setViewMode,
+    setSortMode: setSortMode,
+    showSortSheet: showSortSheet
   };
 })();

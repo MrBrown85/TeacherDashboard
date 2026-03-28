@@ -1052,6 +1052,37 @@ body.mobile-mode :focus:not(:focus-visible) { outline: none; }
 .m-btn-primary:active:not(:disabled) {
   opacity: 0.8;
 }
+.m-btn-ghost {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  background: none;
+  font-size: 17px;
+  color: var(--active);
+  font-family: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.m-sheet-row-btn {
+  width: 100%;
+  padding: 14px 16px;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 17px;
+  color: var(--text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.m-sheet-row-btn:first-of-type { border-radius: 10px 10px 0 0; border-top: none; }
+.m-sheet-row-btn:last-of-type { border-radius: 0 0 10px 10px; }
+.m-sheet-row-btn:only-of-type { border-radius: 10px; border-top: none; }
+.m-sheet-row-btn:active { background: var(--border); }
 
 /* ── Speed Grader ──────────────────────────────────────────── */
 /* Segmented control */

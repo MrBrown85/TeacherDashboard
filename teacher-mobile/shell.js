@@ -5,10 +5,12 @@
   'use strict';
 
   var MC = window.MComponents;
+  var APP_VERSION = '1.0';
   var _activeTab = 'students';
   var _navStacks = { students: [], observe: [], grade: [] };
   var _cid = null;
   var _searchTimer = null;
+  var _userEmail = '';
 
   /* ── Boot ───────────────────────────────────────────────────── */
   async function boot() {
@@ -19,6 +21,9 @@
       if (sb) {
         var result = await sb.auth.getSession();
         hasSession = !!(result && result.data && result.data.session);
+        if (hasSession && result.data.session.user) {
+          _userEmail = result.data.session.user.email || '';
+        }
       } else {
         // Local dev — no Supabase, skip auth
         hasSession = true;
@@ -116,7 +121,7 @@
       // refreshFromSupabase already re-renders via _mobileRerender if data changed,
       // but we always re-render here to ensure the UI is fresh even if no data changed
       _renderTab(_activeTab);
-      MC.toast('Data refreshed');
+      MC.toast('Synced just now');
     } catch (e) {
       MC.toast('Refresh failed');
     }
@@ -411,15 +416,29 @@
           return '<option value="' + id + '"' + (id === _cid ? ' selected' : '') + '>' + MC.esc(c.name) + '</option>';
         }).join('');
         var hasCourses = Object.keys(COURSES).length > 1;
+        var lastSyncedAt = window.GB ? window.GB.getLastSyncedAt() : null;
+        var syncLine = '<div style="font-size:13px;color:var(--text-3);text-align:center;margin-bottom:16px">' +
+          (lastSyncedAt ? 'Last synced: ' + MC.relativeTime(lastSyncedAt.toISOString()) : 'Not yet synced this session') +
+          '</div>';
+        var cfg = window.GB ? window.GB.getConfig() : {};
+        var teacherName = cfg.name || cfg.teacherName || '';
+        var userBlock = '<div style="padding:4px 16px 12px;text-align:center">' +
+          (teacherName ? '<div style="font-size:15px;font-weight:600;color:var(--text)">' + MC.esc(teacherName) + '</div>' : '') +
+          (_userEmail ? '<div style="font-size:13px;color:var(--text-3);margin-top:2px">' + MC.esc(_userEmail) + '</div>' : '') +
+          '</div>';
+        var versionBlock = '<div style="font-size:12px;color:var(--text-3);text-align:center;padding:12px 0 4px">FullVision v' + APP_VERSION + '</div>';
         MC.presentSheet(
           '<div style="padding:8px 0 16px">' +
-            '<div style="font-size:17px;font-weight:600;text-align:center;margin-bottom:16px">Settings</div>' +
+            '<div style="font-size:17px;font-weight:600;text-align:center;margin-bottom:4px">Settings</div>' +
+            userBlock +
+            syncLine +
             (hasCourses ? '<div style="margin-bottom:16px">' +
               '<div style="font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-3);margin-bottom:6px">Active Class</div>' +
               '<select id="m-course-select" style="width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);font-size:17px;font-family:inherit;background:var(--surface);color:var(--text)">' + courseOpts + '</select>' +
             '</div>' : '') +
             '<button class="m-btn-primary" style="background:var(--surface);color:var(--text);border:1px solid var(--border)" data-action="m-switch-desktop">Switch to Desktop</button>' +
             '<button class="m-btn-primary" style="background:none;color:var(--score-1);border:none;margin-top:4px" data-action="m-sign-out">Sign Out</button>' +
+            versionBlock +
             '<button style="width:100%;padding:14px;border:none;background:none;font-size:17px;color:var(--active);font-family:inherit;cursor:pointer;margin-top:4px" data-action="m-dismiss-sheet">Cancel</button>' +
           '</div>'
         );
@@ -463,6 +482,17 @@
       if (action === 'm-set-view') {
         var mode = target.getAttribute('data-mode');
         if (mode) MStudents.setViewMode(mode);
+        return;
+      }
+
+      if (action === 'm-sort') {
+        MStudents.showSortSheet();
+        return;
+      }
+
+      if (action === 'm-set-sort') {
+        var sortMode = target.getAttribute('data-mode');
+        if (sortMode) MStudents.setSortMode(sortMode);
         return;
       }
 
