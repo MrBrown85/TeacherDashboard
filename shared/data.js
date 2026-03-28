@@ -250,6 +250,10 @@ const _SYNC_TIMEOUT_MS = 10000;
 const _inflightSyncs = new Map();   // syncKey → true (currently in-flight)
 const _pendingWrites = new Map();   // syncKey → { table, key, data } (queued behind in-flight)
 
+function _hasDataChanged(a, b) {
+  return JSON.stringify(a) !== JSON.stringify(b);
+}
+
 function _syncKey(table, key) {
   if (table === 'course_data') return table + ':' + key.cid + ':' + key.dataKey;
   return table + ':' + key;
@@ -393,6 +397,7 @@ async function _retryFailedSyncs() {
 }
 
 function retrySyncs() {
+  if (_retryQueue.length === 0) return;
   clearTimeout(_retryTimer);
   _retryCount = 0;
   _consecutiveFailures = 0;
@@ -532,10 +537,9 @@ function _initRealtimeSync() {
         var field = _getReverseKeys()[dataKey];
         if (!field || !cid) return;
 
-        // Update cache directly from the payload data (no extra fetch needed)
         // Skip re-render if data hasn't changed (handles self-echo from own writes)
         if (payload.new && payload.new.data !== undefined) {
-          if (JSON.stringify(payload.new.data) === JSON.stringify(_cache[field][cid])) return;
+          if (!_hasDataChanged(payload.new.data, _cache[field][cid])) return;
           _cache[field][cid] = payload.new.data;
         }
 
@@ -614,8 +618,7 @@ async function _refreshFromSupabase() {
       if (byKey[dataKey] !== undefined) {
         var newVal = byKey[dataKey];
         var oldVal = _cache[field][cid];
-        // Simple deep comparison via JSON — only update if actually different
-        if (JSON.stringify(newVal) !== JSON.stringify(oldVal)) {
+        if (_hasDataChanged(newVal, oldVal)) {
           _cache[field][cid] = newVal;
           changed = true;
         }
