@@ -338,6 +338,7 @@
         }
         newScreen.classList.remove('m-push-enter-active');
         _navStacks[_activeTab].push('detail');
+        history.pushState({ screen: 'detail' }, '');
 
         // Setup scroll for new screen
         var navBar = newScreen.querySelector('.m-nav-bar');
@@ -613,6 +614,13 @@
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') {
         MC.dismissSheet();
+      }
+    });
+
+    // Android back button — pop screen instead of exiting app
+    window.addEventListener('popstate', function() {
+      if (_navStacks[_activeTab] && _navStacks[_activeTab].length > 1) {
+        _popScreen();
       }
     });
   }
