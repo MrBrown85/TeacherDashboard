@@ -53,10 +53,8 @@ window.MCardStack = (function() {
     function _render() {
       containerEl.innerHTML = '';
       _els = [];
-      // Render 3 cards: depths 2, 1, 0 (0 on top in DOM order = last child)
-      // Depth 1 always shows the "next" card by default; updated to "prev"
-      // when a rightward drag is detected, so the peek always matches the destination.
-      for (var d = 2; d >= 0; d--) {
+      var depth = Math.min(3, _cards.length);
+      for (var d = depth - 1; d >= 0; d--) {
         var el = _buildCard(_mod(_idx + d), d);
         containerEl.appendChild(el);
         _els[d] = el;

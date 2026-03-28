@@ -11,6 +11,7 @@
   var _cid = null;
   var _searchTimer = null;
   var _userEmail = '';
+  var _userName = '';
 
   /* ── Boot ───────────────────────────────────────────────────── */
   async function boot() {
@@ -23,6 +24,7 @@
         hasSession = !!(result && result.data && result.data.session);
         if (hasSession && result.data.session.user) {
           _userEmail = result.data.session.user.email || '';
+          _userName = (result.data.session.user.user_metadata && result.data.session.user.user_metadata.display_name) || '';
         }
       } else {
         // Local dev — no Supabase, skip auth
@@ -421,10 +423,8 @@
         var syncLine = '<div style="font-size:13px;color:var(--text-3);text-align:center;margin-bottom:16px">' +
           (lastSyncedAt ? 'Last synced: ' + MC.relativeTime(lastSyncedAt.toISOString()) : 'Not yet synced this session') +
           '</div>';
-        var cfg = window.GB ? window.GB.getConfig() : {};
-        var teacherName = cfg.name || cfg.teacherName || '';
         var userBlock = '<div style="padding:4px 16px 12px;text-align:center">' +
-          (teacherName ? '<div style="font-size:15px;font-weight:600;color:var(--text)">' + MC.esc(teacherName) + '</div>' : '') +
+          (_userName ? '<div style="font-size:15px;font-weight:600;color:var(--text)">' + MC.esc(_userName) + '</div>' : '') +
           (_userEmail ? '<div style="font-size:13px;color:var(--text-3);margin-top:2px">' + MC.esc(_userEmail) + '</div>' : '') +
           '</div>';
         var versionBlock = '<div style="font-size:12px;color:var(--text-3);text-align:center;padding:12px 0 4px">FullVision v' + APP_VERSION + '</div>';
@@ -440,7 +440,7 @@
             '<button class="m-btn-primary" style="background:var(--surface);color:var(--text);border:1px solid var(--border)" data-action="m-switch-desktop">Switch to Desktop</button>' +
             '<button class="m-btn-primary" style="background:none;color:var(--score-1);border:none;margin-top:4px" data-action="m-sign-out">Sign Out</button>' +
             versionBlock +
-            '<button style="width:100%;padding:14px;border:none;background:none;font-size:17px;color:var(--active);font-family:inherit;cursor:pointer;margin-top:4px" data-action="m-dismiss-sheet">Cancel</button>' +
+            '<button class="m-btn-ghost" style="margin-top:4px" data-action="m-dismiss-sheet">Cancel</button>' +
           '</div>'
         );
         // Wire course select change
