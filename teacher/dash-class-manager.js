@@ -2,6 +2,19 @@
 window.DashClassManager = (function() {
   'use strict';
 
+  /* ── Listener tracking for cleanup ──────────────────────── */
+  var _listeners = [];
+  function _addDocListener(type, handler, options) {
+    document.addEventListener(type, handler, options);
+    _listeners.push({ type: type, handler: handler, options: options });
+  }
+  function _removeAllListeners() {
+    _listeners.forEach(function(l) {
+      document.removeEventListener(l.type, l.handler, l.options);
+    });
+    _listeners = [];
+  }
+
   /* ── Parent state injection ──────────────────────────────── */
   var _activeCourse = null;
   var _onRender = null;
@@ -1921,6 +1934,7 @@ window.DashClassManager = (function() {
     handleChange: handleChange,
     handleBlur: handleBlur,
     initDrag: _initCmStdDrag,
+    destroy: _removeAllListeners,
     resetState: function() {
       classManagerOpen = false;
       cmMode = 'edit';
