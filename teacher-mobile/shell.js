@@ -116,6 +116,8 @@
   }
 
   async function _doRefresh() {
+    // Also flush any pending failed syncs — pull-to-refresh is the mobile recovery trigger
+    if (window.GB && window.GB.retrySyncs) window.GB.retrySyncs();
     try {
       if (window.GB && window.GB.refreshFromSupabase) {
         var timeout = new Promise(function(_, reject) {

@@ -243,7 +243,7 @@ let _beforeUnloadBound = false;
 let _retryCount = 0;
 let _consecutiveFailures = 0;
 const _MAX_RETRIES = 6;
-const _MAX_RETRY_QUEUE = 20;
+const _MAX_RETRY_QUEUE = 100;
 const _SYNC_TIMEOUT_MS = 10000;
 
 /* Track in-flight and pending syncs per key to coalesce rapid saves */
@@ -533,7 +533,9 @@ function _initRealtimeSync() {
         if (!field || !cid) return;
 
         // Update cache directly from the payload data (no extra fetch needed)
+        // Skip re-render if data hasn't changed (handles self-echo from own writes)
         if (payload.new && payload.new.data !== undefined) {
+          if (JSON.stringify(payload.new.data) === JSON.stringify(_cache[field][cid])) return;
           _cache[field][cid] = payload.new.data;
         }
 
@@ -589,11 +591,17 @@ async function _refreshFromSupabase() {
   if (!sb) return;
 
   try {
-    // Re-fetch all course data
-    var result = await sb.from('course_data')
+    // Re-fetch course data — incremental when possible (only rows updated since last sync)
+    var query = sb.from('course_data')
       .select('data_key, data')
       .eq('teacher_id', _teacherId)
       .eq('course_id', cid);
+    if (_lastSyncedAt) {
+      // 30s buffer for clock skew between devices
+      var since = new Date(_lastSyncedAt.getTime() - 30000).toISOString();
+      query = query.gt('updated_at', since);
+    }
+    var result = await query;
 
     if (result.error) { console.warn('Visibility refresh failed:', result.error); return; }
 
