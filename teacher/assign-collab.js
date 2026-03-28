@@ -38,10 +38,6 @@ window.AssignCollab = (function() {
     renderCollabPanel();
   }
 
-  function getCollabStudents() {
-    return sortStudents(getStudents(activeCourse), 'lastName');
-  }
-
   function renderCollabPanel() {
     var mount = document.getElementById('collab-panel-mount');
     if (!mount) return;

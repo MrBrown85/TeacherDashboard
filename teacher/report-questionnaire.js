@@ -17,6 +17,11 @@ window.ReportQuestionnaire = (function() {
   function getActiveCourseLocal() { return _activeCourse; }
   function rerender() { if (_renderReports) _renderReports(); }
 
+  /* ── Imports from sibling modules ──────────────────────── */
+  var getTermId = ReportBlocks.getTermId;
+  var getPronouns = ReportBlocks.getPronouns;
+  var OBS_DESCRIPTORS = ReportBlocks.OBS_DESCRIPTORS;
+
 var tqStudentIndex = 0;
 
 

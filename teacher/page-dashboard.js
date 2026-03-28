@@ -48,13 +48,8 @@ window.PageDashboard = (function() {
     activeCourse = cid;
     setActiveCourse(cid);
     // Reset class manager state for new course
-    cmSelectedCourse = cid;
-    cmEditingStudentId = null;
-    cmBulkMode = false;
-    cmBulkSelected = new Set();
-    cmPendingImport = null;
-    cmRelinkCid = null;
-    cmRelinkStep = 0;
+    CM.configure({ activeCourse: cid, onRender: render, onCourseChange: switchCourse });
+    CM.resetState();
     await initData(cid);
     render();
   }
