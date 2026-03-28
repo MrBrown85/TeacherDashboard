@@ -398,6 +398,12 @@
         return;
       }
 
+      // Navigate to Grade tab from student detail
+      if (action === 'm-student-grade') {
+        _switchTab('grade');
+        return;
+      }
+
       // Settings sheet (course switcher + sign out + switch to desktop)
       if (action === 'm-settings') {
         var courseOpts = Object.keys(COURSES).map(function(id) {

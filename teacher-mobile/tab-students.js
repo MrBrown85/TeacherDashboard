@@ -421,6 +421,10 @@ window.MStudents = (function() {
         focusHTML +
         '<div class="m-list-inset-header">Sections</div>' +
         sectionCards + assessCards + obsCards +
+        '<div class="m-scard-actions" style="padding:0 16px 16px">' +
+          '<button class="m-scard-btn m-scard-btn-observe" data-action="m-obs-quick-menu" data-sid="' + sid + '">Observe</button>' +
+          '<button class="m-scard-btn m-scard-btn-view" data-action="m-student-grade" data-sid="' + sid + '">Grade</button>' +
+        '</div>' +
         '<div style="height:32px"></div>' +
       '</div></div>';
   }
