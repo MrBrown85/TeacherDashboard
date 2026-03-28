@@ -29,11 +29,17 @@ describe('Mobile module API contracts', () => {
     expect(typeof MComponents.avatarInitials).toBe('function');
   });
 
+  it('MCardStack is defined with create method', () => {
+    expect(MCardStack).toBeDefined();
+    expect(typeof MCardStack.create).toBe('function');
+  });
+
   it('MStudents is defined with all required methods', () => {
     expect(MStudents).toBeDefined();
     expect(typeof MStudents.renderList).toBe('function');
     expect(typeof MStudents.renderDetail).toBe('function');
     expect(typeof MStudents.filterList).toBe('function');
+    expect(typeof MStudents.initCardStack).toBe('function');
   });
 
   it('MObserve is defined with all required methods', () => {
@@ -51,6 +57,8 @@ describe('Mobile module API contracts', () => {
     expect(typeof MObserve.updateSubmitState).toBe('function');
     expect(typeof MObserve.saveObservation).toBe('function');
     expect(typeof MObserve.deleteObservation).toBe('function');
+    expect(typeof MObserve.presentQuickMenu).toBe('function');
+    expect(typeof MObserve.quickPost).toBe('function');
   });
 
   it('MGrade is defined with all required methods', () => {

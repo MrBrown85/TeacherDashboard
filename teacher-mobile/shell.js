@@ -233,6 +233,11 @@
       var navBarId = screen.querySelector('.m-nav-bar') ? screen.querySelector('.m-nav-bar').id : null;
       if (navBarId) MC.setupScrollTitle(screen, navBarId);
     }
+
+    // Initialize card stack for students tab
+    if (tab === 'students' && MStudents.initCardStack) {
+      MStudents.initCardStack(_cid);
+    }
   }
 
   /* ── Push/pop screens ───────────────────────────────────────── */
@@ -350,6 +355,31 @@
       if (action === 'm-obs-new') {
         MObserve.resetSheetState();
         MObserve.presentNewObsSheet(_cid);
+        return;
+      }
+
+      if (action === 'm-obs-quick-menu') {
+        var qmSid = target.getAttribute('data-sid');
+        MObserve.presentQuickMenu(_cid, qmSid);
+        return;
+      }
+
+      if (action === 'm-obs-quick-post') {
+        var qpSid = target.getAttribute('data-sid');
+        var tmplKey = target.getAttribute('data-template');
+        MObserve.quickPost(_cid, qpSid, tmplKey);
+        return;
+      }
+
+      if (action === 'm-obs-quick-compose') {
+        var qcSid = target.getAttribute('data-sid');
+        MC.dismissSheet();
+        setTimeout(function() {
+          MObserve.resetSheetState();
+          MObserve.presentNewObsSheet(_cid);
+          // Pre-select the student
+          MObserve.selectStudent(qcSid);
+        }, 400);
         return;
       }
 

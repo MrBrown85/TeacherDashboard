@@ -80,12 +80,13 @@ function _mobileStubElement(id) {
 }
 
 // Provide stub elements that mobile shell expects
-['m-sheet-backdrop', 'm-sheet-container', 'm-toast', 'm-nav-stack', 'm-tab-bar', 'm-offline-banner', 'm-swiper', 'm-thumb-strip'].forEach(id => {
+['m-sheet-backdrop', 'm-sheet-container', 'm-toast', 'm-nav-stack', 'm-tab-bar', 'm-offline-banner', 'm-swiper', 'm-thumb-strip', 'm-student-card-stack', 'm-quick-bar'].forEach(id => {
   _elements[id] = _mobileStubElement(id);
 });
 
 // Load mobile modules in dependency order
 load('teacher-mobile/components.js');
+load('teacher-mobile/card-stack.js');
 load('teacher-mobile/tab-students.js');
 load('teacher-mobile/tab-observe.js');
 load('teacher-mobile/tab-grade.js');

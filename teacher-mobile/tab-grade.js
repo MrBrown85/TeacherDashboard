@@ -222,7 +222,7 @@ window.MGrade = (function() {
     '</div>';
 
     return '<div class="m-swiper-card" data-sid="' + st.id + '">' +
-      header + tagGroups + statusRow + '</div>';
+      '<div class="m-grade-card-surface">' + header + tagGroups + statusRow + '</div></div>';
   }
 
   /* ── Score a student (auto-save) ────────────────────────────── */

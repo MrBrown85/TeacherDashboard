@@ -34,6 +34,19 @@ window.MObserve = (function() {
     });
     filters += '</div>';
 
+    // Quick-post avatar bar
+    var quickBar = '<div class="m-quick-bar" id="m-quick-bar">';
+    students.forEach(function(st) {
+      var color = MC.avatarColor(st.id);
+      var inits = MC.avatarInitials(st);
+      var firstName = MC.esc(st.preferred || st.firstName || displayName(st));
+      quickBar += '<button class="m-quick-avatar" data-action="m-obs-quick-menu" data-sid="' + st.id + '">' +
+        '<div class="m-quick-dot" style="background:' + color + '">' + inits + '</div>' +
+        '<span class="m-quick-name">' + firstName + '</span>' +
+      '</button>';
+    });
+    quickBar += '</div>';
+
     // Render observation cards grouped by date
     var cardHTML = _renderObsCards(cid, allObs, 'all');
 
@@ -44,7 +57,7 @@ window.MObserve = (function() {
       nav +
       '<div class="m-screen-content" id="m-obs-feed-content">' +
         MC.largeTitleHTML('Observations') +
-        filters + '<div id="m-obs-cards">' + cardHTML + '</div>' +
+        quickBar + filters + '<div id="m-obs-cards">' + cardHTML + '</div>' +
         '<div style="height:80px"></div>' +
       '</div>' + fab + '</div>';
   }
@@ -98,15 +111,23 @@ window.MObserve = (function() {
         });
       }
 
-      html += '<div class="m-obs-card" data-sentiment="' + (ob.sentiment || '') + '" data-obid="' + ob.id + '" data-sid="' + ob.studentId + '">' +
-        '<div class="m-obs-header">' +
-          '<span class="m-obs-sentiment-icon">' + (sentiment.icon || '') + '</span>' +
-          '<span class="m-obs-student-name">' + MC.esc(stName) + '</span>' +
-          (context.label ? '<span class="m-obs-context">' + (context.icon || '') + ' ' + context.label + '</span>' : '') +
-          '<span class="m-obs-time">' + MC.relativeTime(ob.created) + '</span>' +
+      var avatarColor = st ? MC.avatarColor(st.id) : '#888';
+      var avatarInitials = st ? MC.avatarInitials(st) : '?';
+
+      html += '<div class="m-obs-card m-post" data-sentiment="' + (ob.sentiment || '') + '" data-obid="' + ob.id + '" data-sid="' + ob.studentId + '">' +
+        '<div class="m-obs-header m-post-header">' +
+          '<div class="m-post-avatar" style="background:' + avatarColor + '">' + avatarInitials + '</div>' +
+          '<div class="m-post-meta">' +
+            '<button class="m-obs-student-name m-post-username" data-action="m-obs-filter" data-filter="student:' + ob.studentId + '">' + MC.esc(stName) + '</button>' +
+            '<div class="m-post-meta-row">' +
+              '<span class="m-obs-time">' + MC.relativeTime(ob.created) + '</span>' +
+              (context.label ? '<span class="m-obs-context">' + (context.icon || '') + ' ' + context.label + '</span>' : '') +
+            '</div>' +
+          '</div>' +
+          '<span class="m-obs-sentiment-icon m-post-sentiment">' + (sentiment.icon || '') + '</span>' +
         '</div>' +
-        '<div class="m-obs-text">' + MC.esc(ob.text) + '</div>' +
-        (tagChips ? '<div class="m-obs-tags">' + tagChips + '</div>' : '') +
+        '<div class="m-obs-text m-post-body">' + MC.esc(ob.text) + '</div>' +
+        (tagChips ? '<div class="m-obs-tags m-post-tags">' + tagChips.replace(/m-obs-tag-chip/g, 'm-obs-tag-chip m-post-tag') + '</div>' : '') +
       '</div>';
     });
 
@@ -326,6 +347,62 @@ window.MObserve = (function() {
     MC.showToast('Observation deleted');
   }
 
+  /* ── Quick-Post Templates ──────────────────────────────────── */
+  var QUICK_TEMPLATES = [
+    { key: 'collab',     icon: '🤝', text: 'Strong collaboration with peers',              sentiment: 'strength', dims: ['collaboration'] },
+    { key: 'question',   icon: '💡', text: 'Asked a great question in class',               sentiment: 'strength', dims: ['curiosity'] },
+    { key: 'focus',      icon: '🎯', text: 'Focused and on-task during independent work',   sentiment: 'strength', dims: ['selfRegulation'] },
+    { key: 'support',    icon: '🔄', text: 'Needed additional support to stay on task',      sentiment: 'growth',   dims: ['selfRegulation'] },
+    { key: 'resilience', icon: '💪', text: 'Showed resilience working through a challenge',  sentiment: 'strength', dims: ['resilience'] },
+    { key: 'respect',    icon: '🙏', text: 'Demonstrated respect for diverse perspectives',  sentiment: 'strength', dims: ['respect'] },
+  ];
+
+  function presentQuickMenu(cid, sid) {
+    var students = getStudents(cid);
+    var st = students.find(function(s) { return s.id === sid; });
+    if (!st) return;
+
+    var color = MC.avatarColor(st.id);
+    var initials = MC.avatarInitials(st);
+    var name = displayName(st);
+
+    var html = '<div class="m-quick-sheet-header">' +
+      '<div class="m-quick-sheet-avatar" style="background:' + color + '">' + initials + '</div>' +
+      '<div class="m-quick-sheet-name">' + MC.esc(name) + '</div>' +
+    '</div>';
+
+    QUICK_TEMPLATES.forEach(function(tmpl) {
+      html += '<button class="m-quick-template" data-action="m-obs-quick-post" data-sid="' + sid + '" data-template="' + tmpl.key + '">' +
+        '<span class="m-quick-template-icon">' + tmpl.icon + '</span>' +
+        '<span>' + MC.esc(tmpl.text) + '</span>' +
+      '</button>';
+    });
+
+    html += '<button class="m-quick-compose" data-action="m-obs-quick-compose" data-sid="' + sid + '">Write full observation\u2026</button>';
+
+    MC.presentSheet(html, { half: true });
+  }
+
+  function quickPost(cid, sid, templateKey) {
+    var tmpl = QUICK_TEMPLATES.find(function(t) { return t.key === templateKey; });
+    if (!tmpl) return;
+
+    addQuickOb(cid, sid, tmpl.text, tmpl.dims, tmpl.sentiment, null);
+    MC.haptic();
+    MC.dismissSheet();
+
+    // Refresh feed
+    var allObs = getAllQuickObs(cid);
+    var container = document.getElementById('m-obs-cards');
+    if (container) {
+      container.innerHTML = _renderObsCards(cid, allObs, _activeFilter);
+      var first = container.querySelector('.m-obs-card');
+      if (first) first.classList.add('m-post-new');
+    }
+
+    MC.showToast('Observation added');
+  }
+
   return {
     renderFeed: renderFeed,
     applyFilter: applyFilter,
@@ -339,6 +416,8 @@ window.MObserve = (function() {
     toggleDim: toggleDim,
     updateSubmitState: _updateSubmitState,
     saveObservation: saveObservation,
-    deleteObservation: deleteObservation
+    deleteObservation: deleteObservation,
+    presentQuickMenu: presentQuickMenu,
+    quickPost: quickPost
   };
 })();

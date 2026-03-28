@@ -64,12 +64,111 @@ window.MStudents = (function() {
       cells += '</div>';
     }
 
+    // Card stack mount (visual, populated by initCardStack after render)
+    var cardStack = students.length
+      ? '<div class="m-card-stack" id="m-student-card-stack"></div>'
+      : '';
+
     return '<div class="m-screen" id="m-screen-students-list">' +
       nav +
       '<div class="m-screen-content">' +
         MC.largeTitleHTML('Students') +
-        search + cells +
+        search + cardStack + cells +
       '</div></div>';
+  }
+
+  /* ── Rich Student Card (for card stack) ───────────────────── */
+  function _renderStudentCard(st, cid, data) {
+    var overall = getOverallProficiency(cid, st.id);
+    var rounded = Math.round(overall);
+    var color = MC.avatarColor(st.id);
+    var initials = MC.avatarInitials(st);
+    var name = displayName(st);
+
+    // Badges
+    var badges = '';
+    if (st.designations && st.designations.length) {
+      st.designations.forEach(function(code) {
+        var des = BC_DESIGNATIONS[code];
+        if (des && des.iep) badges += '<span class="m-badge m-badge-iep">IEP</span> ';
+        if (des && des.modified) badges += '<span class="m-badge m-badge-mod">MOD</span> ';
+      });
+    }
+
+    // Section mini-bars
+    var sections = data.sections;
+    var secBars = '';
+    sections.forEach(function(sec) {
+      var secProf = getSectionProficiency(cid, st.id, sec.id);
+      var pct = Math.min(100, Math.round(secProf / 4 * 100));
+      secBars += '<div class="m-scard-sec-row">' +
+        '<div class="m-scard-sec-dot" style="background:' + (sec.color || '#888') + '"></div>' +
+        '<div class="m-scard-sec-name">' + MC.esc(sec.shortName || sec.name) + '</div>' +
+        '<div class="m-scard-sec-bar"><div class="m-scard-sec-fill" style="width:' + pct + '%;background:' + MC.profBg(Math.round(secProf)) + '"></div></div>' +
+      '</div>';
+    });
+
+    // Latest observation
+    var obs = getStudentQuickObs(cid, st.id);
+    var obsSnippet = '';
+    if (obs.length) {
+      var latest = obs[0];
+      var text = (latest.text || '').substring(0, 80);
+      if (latest.text && latest.text.length > 80) text += '…';
+      obsSnippet = '<div class="m-scard-obs">' +
+        '<span style="color:var(--text-3);font-size:12px">' + MC.relativeTime(latest.created) + '</span> ' +
+        MC.esc(text) +
+      '</div>';
+    } else {
+      obsSnippet = '<div class="m-scard-obs-empty">No observations yet</div>';
+    }
+
+    return '<div class="m-scard">' +
+      '<div class="m-scard-hero">' +
+        '<div class="m-scard-avatar" style="background:' + color + '">' + initials + '</div>' +
+        '<div class="m-scard-info">' +
+          '<div class="m-scard-name">' + MC.esc(name) + '</div>' +
+          (st.pronouns ? '<div class="m-scard-sub">' + MC.esc(st.pronouns) + '</div>' : '') +
+          (badges ? '<div class="m-scard-badges">' + badges + '</div>' : '') +
+        '</div>' +
+        '<div class="m-scard-prof">' +
+          '<div class="m-scard-prof-val" style="color:' + MC.profBg(rounded) + '">' + (overall > 0 ? overall.toFixed(1) : '—') + '</div>' +
+          '<div class="m-scard-prof-label">' + (PROF_LABELS[rounded] || 'No Evidence') + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="m-scard-sections">' + secBars + '</div>' +
+      obsSnippet +
+      '<div class="m-scard-actions">' +
+        '<button class="m-scard-btn m-scard-btn-observe" data-action="m-obs-quick-menu" data-sid="' + st.id + '">Observe</button>' +
+        '<button class="m-scard-btn m-scard-btn-view" data-action="m-student-detail" data-sid="' + st.id + '">View Profile</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  /* ── Init card stack after DOM render ─────────────────────── */
+  var _stackInstance = null;
+
+  function initCardStack(cid) {
+    if (_stackInstance) { _stackInstance.destroy(); _stackInstance = null; }
+    var container = document.getElementById('m-student-card-stack');
+    if (!container) return;
+
+    var students = getStudents(cid);
+    students = sortStudents(students.slice(), 'alpha');
+    if (!students.length) return;
+
+    var sections = getSections(cid);
+    var data = { sections: sections };
+
+    _stackInstance = MCardStack.create(container, students, {
+      renderCard: function(st) { return _renderStudentCard(st, cid, data); },
+      onTap: function() { /* taps handled by data-action delegation */ },
+      onSwipe: function() { /* no-op, browsing only */ }
+    });
+
+    // Hide the list (card stack takes over), show on search
+    var list = document.getElementById('m-student-list');
+    if (list) list.style.display = 'none';
   }
 
   /* ── Student Detail Screen ──────────────────────────────────── */
@@ -310,6 +409,7 @@ window.MStudents = (function() {
   return {
     renderList: renderList,
     renderDetail: renderDetail,
-    filterList: filterList
+    filterList: filterList,
+    initCardStack: initCardStack
   };
 })();
