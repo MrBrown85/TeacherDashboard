@@ -29,6 +29,7 @@ window.MCardStack = (function() {
     // Touch state
     var _startX = 0, _startY = 0, _startTime = 0;
     var _deltaX = 0, _isDragging = false, _committed = false;
+    var _dragDir = null; // 'left' | 'right' — direction locked once per gesture
     var DEAD_ZONE = 10;
     var SWIPE_THRESHOLD = 100;
     var VELOCITY_THRESHOLD = 0.4; // px/ms
@@ -36,8 +37,11 @@ window.MCardStack = (function() {
     // DOM
     var _els = []; // currently rendered card elements (up to 3)
 
+    function _mod(n) {
+      return ((n % _cards.length) + _cards.length) % _cards.length;
+    }
+
     function _buildCard(idx, depth) {
-      if (idx < 0 || idx >= _cards.length) return null;
       var el = document.createElement('div');
       el.className = 'm-card-stack-item';
       el.setAttribute('data-depth', String(depth));
@@ -49,17 +53,25 @@ window.MCardStack = (function() {
     function _render() {
       containerEl.innerHTML = '';
       _els = [];
-      // Render up to 3 cards: depths 2, 1, 0 (0 on top in DOM order = last child)
+      // Render 3 cards: depths 2, 1, 0 (0 on top in DOM order = last child)
+      // Depth 1 always shows the "next" card by default; updated to "prev"
+      // when a rightward drag is detected, so the peek always matches the destination.
       for (var d = 2; d >= 0; d--) {
-        var cardIdx = _idx + d;
-        if (cardIdx >= _cards.length) continue;
-        var el = _buildCard(cardIdx, d);
-        if (el) {
-          containerEl.appendChild(el);
-          _els[d] = el;
-        }
+        var el = _buildCard(_mod(_idx + d), d);
+        containerEl.appendChild(el);
+        _els[d] = el;
       }
       _updateCounter();
+    }
+
+    // Swap depth-1 card to show the destination for the given drag direction.
+    // Called once per gesture when direction is first locked in.
+    function _updateBehindCard(dir) {
+      var behindEl = _els[1];
+      if (!behindEl) return;
+      var behindIdx = dir === 'right' ? _mod(_idx - 1) : _mod(_idx + 1);
+      behindEl.innerHTML = _renderCard(_cards[behindIdx], behindIdx);
+      behindEl.setAttribute('data-idx', String(behindIdx));
     }
 
     function _updateCounter() {
@@ -83,6 +95,7 @@ window.MCardStack = (function() {
       _deltaX = 0;
       _isDragging = false;
       _committed = false;
+      _dragDir = null;
     }
 
     function _onTouchMove(e) {
@@ -106,6 +119,14 @@ window.MCardStack = (function() {
 
       e.preventDefault();
       _deltaX = dx;
+
+      // Lock drag direction on first significant movement and update peek card.
+      var dir = dx < 0 ? 'left' : 'right';
+      if (dir !== _dragDir) {
+        _dragDir = dir;
+        _updateBehindCard(dir);
+      }
+
       var active = _els[0];
       if (active) {
         var rotate = dx * 0.04;
@@ -130,11 +151,9 @@ window.MCardStack = (function() {
       var velocity = Math.abs(_deltaX) / Math.max(elapsed, 1);
       var shouldSwipe = Math.abs(_deltaX) > SWIPE_THRESHOLD || velocity > VELOCITY_THRESHOLD;
 
-      if (shouldSwipe && _deltaX < 0 && _idx < _cards.length - 1) {
-        // Swipe left — advance forward
+      if (shouldSwipe && _deltaX < 0 && _cards.length > 1) {
         _animateExit('left');
-      } else if (shouldSwipe && _deltaX > 0 && _idx > 0) {
-        // Swipe right — go back
+      } else if (shouldSwipe && _deltaX > 0 && _cards.length > 1) {
         _animateExit('right');
       } else {
         // Spring back
@@ -164,12 +183,8 @@ window.MCardStack = (function() {
       var swipedIdx = _idx;
       var swipedData = _cards[_idx];
 
-      // Advance index
-      if (dir === 'left') {
-        _idx = Math.min(_idx + 1, _cards.length - 1);
-      } else {
-        _idx = Math.max(_idx - 1, 0);
-      }
+      // Advance index with wrap
+      _idx = dir === 'left' ? _mod(_idx + 1) : _mod(_idx - 1);
 
       // Haptic
       if (typeof MComponents !== 'undefined' && MComponents.haptic) MComponents.haptic();
