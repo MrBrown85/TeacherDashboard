@@ -125,6 +125,7 @@ window.MObserve = (function() {
             '</div>' +
           '</div>' +
           '<span class="m-obs-sentiment-icon m-post-sentiment">' + (sentiment.icon || '') + '</span>' +
+          '<button class="m-obs-edit-btn" data-action="m-obs-edit" data-obid="' + ob.id + '" data-sid="' + ob.studentId + '" title="Edit" aria-label="Edit observation">&#9998;</button>' +
           '<button class="m-obs-delete-btn" data-action="m-obs-delete" data-obid="' + ob.id + '" data-sid="' + ob.studentId + '" title="Delete" aria-label="Delete observation">&times;</button>' +
         '</div>' +
         '<div class="m-obs-text m-post-body">' + MC.esc(ob.text) + '</div>' +
@@ -217,17 +218,85 @@ window.MObserve = (function() {
     }, 400);
   }
 
+  /* ── Edit Observation Sheet ──────────────────────────────────── */
+  function presentEditObsSheet(cid, sid, obId) {
+    var obs = getStudentQuickObs(cid, sid);
+    var ob = obs.find(function(o) { return o.id === obId; });
+    if (!ob) return;
+
+    // Pre-populate state
+    _editingObId = obId;
+    _editingSid = sid;
+    _selectedStudents = [sid];
+    _selectedSentiment = ob.sentiment || null;
+    _selectedContext = ob.context || null;
+    _selectedDims = (ob.dims || []).slice();
+
+    var student = getStudents(cid).find(function(s) { return s.id === sid; });
+    var studentName = student ? displayName(student) : 'Student';
+
+    var html = '<div id="m-obs-form">' +
+      // Fixed student label (not editable)
+      '<div class="m-sheet-label">Student</div>' +
+      '<div style="padding:8px 12px;background:var(--overlay-hover);border-radius:10px;font-size:15px;font-weight:500;color:var(--text);margin-bottom:12px">' + MC.esc(studentName) + '</div>' +
+
+      // Text
+      '<label class="m-sheet-label" for="m-obs-text">Observation</label>' +
+      '<textarea class="m-sheet-textarea" id="m-obs-text" placeholder="What did you notice?" rows="3">' + MC.esc(ob.text) + '</textarea>' +
+
+      // Sentiment
+      '<div class="m-sheet-label">Type</div>' +
+      '<div class="m-sentiment-row" role="radiogroup" aria-label="Observation type">' +
+        '<button class="m-sentiment-btn' + (_selectedSentiment === 'strength' ? ' active' : '') + '" role="radio" aria-checked="' + (_selectedSentiment === 'strength') + '" data-action="m-obs-sentiment" data-val="strength">✅ Strength</button>' +
+        '<button class="m-sentiment-btn' + (_selectedSentiment === 'growth' ? ' active' : '') + '" role="radio" aria-checked="' + (_selectedSentiment === 'growth') + '" data-action="m-obs-sentiment" data-val="growth">🔄 Growth</button>' +
+        '<button class="m-sentiment-btn' + (_selectedSentiment === 'concern' ? ' active' : '') + '" role="radio" aria-checked="' + (_selectedSentiment === 'concern') + '" data-action="m-obs-sentiment" data-val="concern">⚠️ Concern</button>' +
+      '</div>' +
+
+      // Context
+      '<div class="m-sheet-label">Context</div>' +
+      '<div class="m-context-row" style="flex-wrap:wrap">' +
+        Object.keys(OBS_CONTEXTS).map(function(key) {
+          var ctx = OBS_CONTEXTS[key];
+          return '<button class="m-context-btn' + (_selectedContext === key ? ' active' : '') + '" data-action="m-obs-context" data-val="' + key + '">' + ctx.icon + ' ' + ctx.label + '</button>';
+        }).join('') +
+      '</div>' +
+
+      // Dimension tags
+      '<div class="m-sheet-label">Tags</div>' +
+      '<div class="m-dim-strip">' +
+        OBS_DIMS.map(function(dim) {
+          return '<button class="m-dim-chip' + (_selectedDims.indexOf(dim) >= 0 ? ' active' : '') + '" data-action="m-obs-dim" data-val="' + dim + '">' + (OBS_ICONS[dim] || '') + ' ' + (OBS_LABELS[dim] || dim) + '</button>';
+        }).join('') +
+      '</div>' +
+
+      // Submit
+      '<button class="m-btn-primary" id="m-obs-submit" data-action="m-obs-save">Update Observation</button>' +
+    '</div>';
+
+    MC.presentSheet(html, { onClose: resetSheetState });
+
+    setTimeout(function() {
+      var ta = document.getElementById('m-obs-text');
+      if (ta) ta.focus();
+    }, 400);
+  }
+
   /* ── Sheet state management ─────────────────────────────────── */
   var _selectedStudents = [];
   var _selectedSentiment = null;
   var _selectedContext = null;
   var _selectedDims = [];
 
+  var _editingObId = null;  // non-null = edit mode
+  var _editingSid = null;
+
   function resetSheetState() {
     _selectedStudents = [];
     _selectedSentiment = null;
     _selectedContext = null;
     _selectedDims = [];
+    _editingObId = null;
+    _editingSid = null;
   }
 
   function toggleStudentPicker() {
@@ -313,17 +382,33 @@ window.MObserve = (function() {
 
   function saveObservation(cid) {
     var text = (document.getElementById('m-obs-text') || {}).value || '';
-    if (!text.trim() || !_selectedStudents.length) return;
+    if (!text.trim()) return;
 
-    _selectedStudents.forEach(function(sid) {
-      addQuickOb(cid, sid, text.trim(), _selectedDims, _selectedSentiment, _selectedContext);
-    });
-
-    MC.haptic();
-    MC.dismissSheet();
-    resetSheetState();
-    _refreshFeed(cid, true);
-    MC.showToast('Observation saved');
+    if (_editingObId && _editingSid) {
+      // Edit mode — update existing observation
+      updateQuickOb(cid, _editingSid, _editingObId, {
+        text: text.trim(),
+        dims: _selectedDims,
+        sentiment: _selectedSentiment,
+        context: _selectedContext
+      });
+      MC.haptic();
+      MC.dismissSheet();
+      resetSheetState();
+      _refreshFeed(cid, false);
+      MC.showToast('Observation updated');
+    } else {
+      // Create mode — add new observation(s)
+      if (!_selectedStudents.length) return;
+      _selectedStudents.forEach(function(sid) {
+        addQuickOb(cid, sid, text.trim(), _selectedDims, _selectedSentiment, _selectedContext);
+      });
+      MC.haptic();
+      MC.dismissSheet();
+      resetSheetState();
+      _refreshFeed(cid, true);
+      MC.showToast('Observation saved');
+    }
   }
 
   function deleteObservation(cid, sid, obId) {
@@ -412,6 +497,7 @@ window.MObserve = (function() {
     updateSubmitState: _updateSubmitState,
     saveObservation: saveObservation,
     deleteObservation: deleteObservation,
+    presentEditObsSheet: presentEditObsSheet,
     presentQuickMenu: presentQuickMenu,
     quickPost: quickPost
   };

@@ -514,6 +514,13 @@
         return;
       }
 
+      if (action === 'm-obs-edit') {
+        var editObId = target.getAttribute('data-obid');
+        var editSid = target.getAttribute('data-sid');
+        if (editObId && editSid) MObserve.presentEditObsSheet(_cid, editSid, editObId);
+        return;
+      }
+
       if (action === 'm-obs-delete') {
         var obId = target.getAttribute('data-obid');
         var obSid = target.getAttribute('data-sid');

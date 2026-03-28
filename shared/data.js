@@ -1524,6 +1524,19 @@ function deleteQuickOb(cid, sid, obId) {
   saveQuickObs(cid, all);
 }
 
+function updateQuickOb(cid, sid, obId, updates) {
+  const all = getQuickObs(cid);
+  if (!all[sid]) return;
+  const ob = all[sid].find(o => o.id === obId);
+  if (!ob) return;
+  if (updates.text !== undefined) ob.text = updates.text.trim();
+  if (updates.dims !== undefined) ob.dims = updates.dims;
+  if (updates.sentiment !== undefined) ob.sentiment = updates.sentiment || undefined;
+  if (updates.context !== undefined) ob.context = updates.context || undefined;
+  ob.modified = new Date().toISOString();
+  saveQuickObs(cid, all);
+}
+
 function getQuickObsByDim(cid, sid, dim) {
   return getStudentQuickObs(cid, sid).filter(o => (o.dims || []).includes(dim));
 }
@@ -1710,6 +1723,7 @@ window.GB = {
   getAllQuickObs,
   addQuickOb,
   deleteQuickOb,
+  updateQuickOb,
   getQuickObsByDim,
   getAssignmentObs,
   getStudentAssignmentFeedback,
