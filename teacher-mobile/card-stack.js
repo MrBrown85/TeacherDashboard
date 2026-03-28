@@ -24,6 +24,7 @@ window.MCardStack = (function() {
     var _onSwipe = opts.onSwipe || function() {};
     var _onTap = opts.onTap || function() {};
     var _destroyed = false;
+    var _animating = false;
 
     // Touch state
     var _startX = 0, _startY = 0, _startTime = 0;
@@ -74,7 +75,7 @@ window.MCardStack = (function() {
     // --- Touch handlers ---
 
     function _onTouchStart(e) {
-      if (_destroyed) return;
+      if (_destroyed || _animating) return;
       var touch = e.touches[0];
       _startX = touch.clientX;
       _startY = touch.clientY;
@@ -82,8 +83,6 @@ window.MCardStack = (function() {
       _deltaX = 0;
       _isDragging = false;
       _committed = false;
-      var active = _els[0];
-      if (active) active.classList.add('m-card-dragging');
     }
 
     function _onTouchMove(e) {
@@ -95,12 +94,11 @@ window.MCardStack = (function() {
       if (!_isDragging) {
         if (Math.abs(dx) > DEAD_ZONE && Math.abs(dx) > Math.abs(dy)) {
           _isDragging = true;
+          var active = _els[0];
+          if (active) active.classList.add('m-card-dragging');
           e.preventDefault();
         } else if (Math.abs(dy) > DEAD_ZONE) {
-          // Vertical scroll — bail out
           _committed = true;
-          var active = _els[0];
-          if (active) active.classList.remove('m-card-dragging');
           return;
         }
         return;
@@ -157,6 +155,7 @@ window.MCardStack = (function() {
     function _animateExit(dir) {
       var active = _els[0];
       if (!active) return;
+      _animating = true;
 
       active.classList.remove('m-card-dragging');
       active.classList.add(dir === 'left' ? 'm-card-exit-left' : 'm-card-exit-right');
@@ -174,8 +173,8 @@ window.MCardStack = (function() {
       // Haptic
       if (typeof MComponents !== 'undefined' && MComponents.haptic) MComponents.haptic();
 
-      // After exit animation, re-render the stack at new index
       setTimeout(function() {
+        _animating = false;
         _render();
         _onSwipe(dir, swipedData, swipedIdx);
       }, 300);

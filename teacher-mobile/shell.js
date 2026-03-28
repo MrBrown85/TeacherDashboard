@@ -211,6 +211,9 @@
   }
 
   function _renderTab(tab) {
+    // Clean up previous tab's resources
+    if (MStudents.destroyCardStack) MStudents.destroyCardStack();
+
     var stack = document.getElementById('m-nav-stack');
     stack.innerHTML = '';
     _navStacks[tab] = [];

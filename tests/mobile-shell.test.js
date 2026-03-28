@@ -40,6 +40,7 @@ describe('Mobile module API contracts', () => {
     expect(typeof MStudents.renderDetail).toBe('function');
     expect(typeof MStudents.filterList).toBe('function');
     expect(typeof MStudents.initCardStack).toBe('function');
+    expect(typeof MStudents.destroyCardStack).toBe('function');
   });
 
   it('MObserve is defined with all required methods', () => {

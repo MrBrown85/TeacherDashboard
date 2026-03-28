@@ -4,6 +4,7 @@ window.MStudents = (function() {
   'use strict';
 
   var MC = window.MComponents;
+  var MAX_PROF = 4;
 
   /* ── Student List Screen ────────────────────────────────────── */
   function renderList(cid) {
@@ -100,7 +101,7 @@ window.MStudents = (function() {
     var secBars = '';
     sections.forEach(function(sec) {
       var secProf = getSectionProficiency(cid, st.id, sec.id);
-      var pct = Math.min(100, Math.round(secProf / 4 * 100));
+      var pct = Math.min(100, Math.round(secProf / MAX_PROF * 100));
       secBars += '<div class="m-scard-sec-row">' +
         '<div class="m-scard-sec-dot" style="background:' + (sec.color || '#888') + '"></div>' +
         '<div class="m-scard-sec-name">' + MC.esc(sec.shortName || sec.name) + '</div>' +
@@ -166,9 +167,12 @@ window.MStudents = (function() {
       onSwipe: function() { /* no-op, browsing only */ }
     });
 
-    // Hide the list (card stack takes over), show on search
     var list = document.getElementById('m-student-list');
     if (list) list.style.display = 'none';
+  }
+
+  function destroyCardStack() {
+    if (_stackInstance) { _stackInstance.destroy(); _stackInstance = null; }
   }
 
   /* ── Student Detail Screen ──────────────────────────────────── */
@@ -410,6 +414,7 @@ window.MStudents = (function() {
     renderList: renderList,
     renderDetail: renderDetail,
     filterList: filterList,
-    initCardStack: initCardStack
+    initCardStack: initCardStack,
+    destroyCardStack: destroyCardStack
   };
 })();

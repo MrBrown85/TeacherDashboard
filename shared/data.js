@@ -212,6 +212,7 @@ let _hadSyncError = false;
 let _retryQueue = [];       // { table, key, data }
 let _retryTimer = null;
 let _lsQuotaWarned = false;
+let _beforeUnloadBound = false;
 let _retryCount = 0;
 let _consecutiveFailures = 0;
 const _MAX_RETRIES = 6;
@@ -317,23 +318,20 @@ async function _doSync(table, key, data) {
 }
 
 /* Deduplicated, bounded retry queue — keeps only latest data per key */
-function _addToRetryQueue(table, key, data) {
+function _addToRetryQueue(table, key, data, skipPersist) {
   const sk = _syncKey(table, key);
-  // Replace existing entry for same key (latest data wins)
   const idx = _retryQueue.findIndex(item => _syncKey(item.table, item.key) === sk);
   if (idx !== -1) {
     _retryQueue[idx] = { table, key, data };
   } else {
     _retryQueue.push({ table, key, data });
   }
-  // Cap queue size — drop oldest entries
   while (_retryQueue.length > _MAX_RETRY_QUEUE) {
     _retryQueue.shift();
   }
-  _persistRetryQueue();
+  if (!skipPersist) _persistRetryQueue();
 }
 
-/* Persist retry queue to localStorage so pending syncs survive browser close */
 function _persistRetryQueue() {
   _safeLSSet('gb-retry-queue', JSON.stringify(_retryQueue));
 }
@@ -360,7 +358,8 @@ async function _retryFailedSyncs() {
       // _doSync already re-adds to _retryQueue on failure — stop processing rest
       // Re-add remaining unprocessed items
       const remaining = queue.slice(queue.indexOf(item) + 1);
-      remaining.forEach(r => _addToRetryQueue(r.table, r.key, r.data));
+      remaining.forEach(r => _addToRetryQueue(r.table, r.key, r.data, true));
+      _persistRetryQueue();
       break;
     }
   }
@@ -447,9 +446,9 @@ async function initAllCourses() {
   COURSES = _cache.courses;
   if (!localStorage.getItem('gb-courses') && !_useSupabase) saveCourses(COURSES);
 
-  // Restore persisted retry queue from previous session
   try {
-    var savedQueue = JSON.parse(localStorage.getItem('gb-retry-queue') || '[]');
+    var savedQueue = JSON.parse(localStorage.getItem('gb-retry-queue') || '[]')
+      .filter(function(item) { return item && item.table && item.key; });
     if (savedQueue.length > 0 && _useSupabase) {
       _retryQueue = savedQueue;
       setTimeout(_retryFailedSyncs, 2000);
@@ -458,10 +457,12 @@ async function initAllCourses() {
     }
   } catch (e) { localStorage.removeItem('gb-retry-queue'); }
 
-  // Persist retry queue on page unload
-  window.addEventListener('beforeunload', function() {
-    if (_retryQueue.length > 0) _persistRetryQueue();
-  });
+  if (!_beforeUnloadBound) {
+    _beforeUnloadBound = true;
+    window.addEventListener('beforeunload', function() {
+      if (_retryQueue.length > 0) _persistRetryQueue();
+    });
+  }
 
   // Start cross-tab conflict detection
   _initCrossTab();
@@ -1230,15 +1231,15 @@ function getAssessments(cid) {
 function saveAssessments(cid, arr) {
   var prev = (_cache.assessments && _cache.assessments[cid]) || [];
   _saveCourseField('assessments', cid, arr);
-  if (arr.length < prev.length) _cleanOrphanedScores(cid);
+  if (arr.length < prev.length) _cleanOrphanedScores(cid, arr);
 }
 
-function _cleanOrphanedScores(cid) {
-  var assessments = getAssessments(cid);
-  var validIds = new Set(assessments.map(function(a) { return a.id; }));
+function _cleanOrphanedScores(cid, validArr) {
+  var validIds = new Set(validArr.map(function(a) { return a.id; }));
   var scores = getScores(cid);
   var changed = false;
   Object.keys(scores).forEach(function(sid) {
+    if (!Array.isArray(scores[sid])) return;
     var before = scores[sid].length;
     scores[sid] = scores[sid].filter(function(e) { return validIds.has(e.assessmentId); });
     if (scores[sid].length !== before) changed = true;

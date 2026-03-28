@@ -127,7 +127,7 @@ window.MObserve = (function() {
           '<span class="m-obs-sentiment-icon m-post-sentiment">' + (sentiment.icon || '') + '</span>' +
         '</div>' +
         '<div class="m-obs-text m-post-body">' + MC.esc(ob.text) + '</div>' +
-        (tagChips ? '<div class="m-obs-tags m-post-tags">' + tagChips.replace(/m-obs-tag-chip/g, 'm-obs-tag-chip m-post-tag') + '</div>' : '') +
+        (tagChips ? '<div class="m-obs-tags m-post-tags">' + tagChips + '</div>' : '') +
       '</div>';
     });
 
@@ -321,29 +321,14 @@ window.MObserve = (function() {
     MC.haptic();
     MC.dismissSheet();
     resetSheetState();
-
-    // Refresh feed
-    var allObs = getAllQuickObs(cid);
-    var container = document.getElementById('m-obs-cards');
-    if (container) {
-      container.innerHTML = _renderObsCards(cid, allObs, _activeFilter);
-      // Highlight first new card
-      var first = container.querySelector('.m-obs-card');
-      if (first) first.classList.add('m-highlight');
-    }
-
+    _refreshFeed(cid, true);
     MC.showToast('Observation saved');
   }
 
   function deleteObservation(cid, sid, obId) {
     deleteQuickOb(cid, sid, obId);
     MC.haptic();
-    // Refresh feed
-    var allObs = getAllQuickObs(cid);
-    var container = document.getElementById('m-obs-cards');
-    if (container) {
-      container.innerHTML = _renderObsCards(cid, allObs, _activeFilter);
-    }
+    _refreshFeed(cid, false);
     MC.showToast('Observation deleted');
   }
 
@@ -387,20 +372,29 @@ window.MObserve = (function() {
     var tmpl = QUICK_TEMPLATES.find(function(t) { return t.key === templateKey; });
     if (!tmpl) return;
 
-    addQuickOb(cid, sid, tmpl.text, tmpl.dims, tmpl.sentiment, null);
+    try {
+      addQuickOb(cid, sid, tmpl.text, tmpl.dims, tmpl.sentiment, null);
+    } catch (e) {
+      MC.dismissSheet();
+      MC.showToast('Failed to save \u2014 try again');
+      return;
+    }
     MC.haptic();
     MC.dismissSheet();
+    _refreshFeed(cid, true);
+    MC.showToast('Observation added');
+  }
 
-    // Refresh feed
+  function _refreshFeed(cid, highlightFirst) {
     var allObs = getAllQuickObs(cid);
     var container = document.getElementById('m-obs-cards');
     if (container) {
       container.innerHTML = _renderObsCards(cid, allObs, _activeFilter);
-      var first = container.querySelector('.m-obs-card');
-      if (first) first.classList.add('m-post-new');
+      if (highlightFirst) {
+        var first = container.querySelector('.m-obs-card');
+        if (first) first.classList.add('m-post-new');
+      }
     }
-
-    MC.showToast('Observation added');
   }
 
   return {

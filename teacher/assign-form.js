@@ -604,9 +604,6 @@ window.AssignForm = (function() {
     showConfirm('Delete Assessment', 'Delete this assessment and all its scores?', 'Delete', 'danger', function() {
       var cid = activeCourse;
       saveAssessments(cid, getAssessments(cid).filter(function(a) { return a.id !== aid; }));
-      var scores = getScores(cid);
-      Object.keys(scores).forEach(function(sid) { scores[sid] = (scores[sid]||[]).filter(function(s) { return s.assessmentId !== aid; }); });
-      saveScores(cid, scores);
       var statuses = getAssignmentStatuses(cid); var statusChanged = false;
       Object.keys(statuses).forEach(function(k) { if (k.endsWith(':' + aid)) { delete statuses[k]; statusChanged = true; } });
       if (statusChanged) saveAssignmentStatuses(cid, statuses);
