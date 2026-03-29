@@ -1212,7 +1212,7 @@ function renderTermQuestionnaire(cid) {
       </div>
       <div class="tq-narrative-editor" id="tq-narrative" contenteditable="true"
         data-placeholder="Write about ${esc(name)}'s learning dispositions, work habits, and growth…"
-        oninput="window._tqMarkDirty&&window._tqMarkDirty()">${narrative ? sanitizeHtml(narrative) : ''}</div>
+        oninput="window._tqMarkDirty&&window._tqMarkDirty()">${sanitizeHtml(narrative || '')}</div>
     </div>
   </div>`;
 
