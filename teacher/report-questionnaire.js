@@ -49,7 +49,7 @@ function tqSaveCurrentIfNeeded() {
   const existing = getStudentTermRating(_activeCourse, sid, termId);
   const el = document.getElementById('tq-narrative');
   if (el && existing) {
-    upsertTermRating(_activeCourse, sid, termId, { narrative: el.innerHTML.trim() });
+    upsertTermRating(_activeCourse, sid, termId, { narrative: sanitizeHtml(el.innerHTML.trim()) });
   }
 }
 
@@ -60,7 +60,7 @@ function tqSaveNarrative() {
   const sid = students[tqStudentIndex]?.id;
   if (!sid) return;
   const termId = getTermId();
-  upsertTermRating(_activeCourse, sid, termId, { narrative: el.innerHTML.trim() });
+  upsertTermRating(_activeCourse, sid, termId, { narrative: sanitizeHtml(el.innerHTML.trim()) });
 }
 
 /* ── Rich text toolbar commands ── */
@@ -1212,7 +1212,7 @@ function renderTermQuestionnaire(cid) {
       </div>
       <div class="tq-narrative-editor" id="tq-narrative" contenteditable="true"
         data-placeholder="Write about ${esc(name)}'s learning dispositions, work habits, and growth…"
-        oninput="window._tqMarkDirty&&window._tqMarkDirty()">${narrative || ''}</div>
+        oninput="window._tqMarkDirty&&window._tqMarkDirty()">${narrative ? sanitizeHtml(narrative) : ''}</div>
     </div>
   </div>`;
 
