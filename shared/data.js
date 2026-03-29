@@ -256,6 +256,8 @@ function _hasDataChanged(a, b) {
 
 function _syncKey(table, key) {
   if (table === 'course_data') return table + ':' + key.cid + ':' + key.dataKey;
+  if (table === 'scores') return 'scores:' + key.cid;
+  if (table === 'scores_row') return 'scores_row:' + key.cid + ':' + key.sid + ':' + key.aid + ':' + key.tid;
   return table + ':' + key;
 }
 
@@ -293,7 +295,28 @@ async function _doSync(table, key, data) {
   const timeoutId = setTimeout(() => controller.abort(), _SYNC_TIMEOUT_MS);
 
   try {
-    if (table === 'course_data') {
+    if (table === 'scores') {
+      // Full scores sync: delete all for this course, then bulk insert
+      const rows = _scoreBlobToRows(key.cid, data);
+      const { error: delErr } = await sb.from('scores')
+        .delete()
+        .eq('teacher_id', _teacherId)
+        .eq('course_id', key.cid)
+        .abortSignal(controller.signal);
+      if (delErr) throw delErr;
+      if (rows.length > 0) {
+        const { error: insErr } = await sb.from('scores')
+          .insert(rows)
+          .abortSignal(controller.signal);
+        if (insErr) throw insErr;
+      }
+    } else if (table === 'scores_row') {
+      // Single score upsert — the efficient hot path
+      const { error } = await sb.from('scores').upsert(data, {
+        onConflict: 'teacher_id,course_id,student_id,assessment_id,tag_id'
+      }).abortSignal(controller.signal);
+      if (error) throw error;
+    } else if (table === 'course_data') {
       const { error } = await sb.from('course_data').upsert({
         teacher_id: _teacherId,
         course_id: key.cid,
@@ -545,6 +568,50 @@ function _initRealtimeSync() {
 
         _invalidateAndRerender();
       })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'scores',
+        filter: 'teacher_id=eq.' + _teacherId
+      }, function(payload) {
+        var row = payload.new || payload.old;
+        if (!row) return;
+        var cid = row.course_id;
+        if (!cid || !_cache.scores[cid]) return;
+
+        var sid = row.student_id;
+        var aid = row.assessment_id;
+        var tid = row.tag_id;
+
+        if (payload.eventType === 'DELETE') {
+          // Remove from cache blob
+          if (_cache.scores[cid][sid]) {
+            _cache.scores[cid][sid] = _cache.scores[cid][sid].filter(function(e) {
+              return !(e.assessmentId === aid && e.tagId === tid);
+            });
+          }
+        } else {
+          // INSERT or UPDATE — upsert into cache blob
+          var r = payload.new;
+          if (!_cache.scores[cid][sid]) _cache.scores[cid][sid] = [];
+          var arr = _cache.scores[cid][sid];
+          var idx = arr.findIndex(function(e) { return e.assessmentId === aid && e.tagId === tid; });
+          var entry = {
+            id: sid + ':' + aid + ':' + tid,
+            assessmentId: aid, tagId: tid,
+            score: r.score, date: r.date,
+            type: r.type || 'summative', note: r.note || '',
+            created: r.created_at || new Date().toISOString()
+          };
+
+          // Skip if data matches (self-echo)
+          if (idx !== -1 && arr[idx].score === entry.score && arr[idx].date === entry.date && arr[idx].note === entry.note) return;
+
+          if (idx !== -1) { arr[idx] = entry; } else { arr.push(entry); }
+        }
+
+        _invalidateAndRerender();
+      })
       .subscribe();
   } catch (e) {
     console.warn('Realtime sync not available:', e);
@@ -614,6 +681,7 @@ async function _refreshFromSupabase() {
     (result.data || []).forEach(function(r) { byKey[r.data_key] = r.data; });
 
     for (var field in _DATA_KEYS) {
+      if (field === 'scores') continue; // handled separately below
       var dataKey = _DATA_KEYS[field];
       if (byKey[dataKey] !== undefined) {
         var newVal = byKey[dataKey];
@@ -623,6 +691,34 @@ async function _refreshFromSupabase() {
           changed = true;
         }
       }
+    }
+
+    // Refresh scores from normalized table
+    var scoreQuery = sb.from('scores').select('*')
+      .eq('teacher_id', _teacherId).eq('course_id', cid);
+    if (_lastSyncedAt) {
+      var scoreSince = new Date(_lastSyncedAt.getTime() - 30000).toISOString();
+      scoreQuery = scoreQuery.gt('updated_at', scoreSince);
+    }
+    var scoreResult = await scoreQuery;
+    if (!scoreResult.error && scoreResult.data && scoreResult.data.length > 0) {
+      // Merge updated scores into cache
+      var blob = _cache.scores[cid] || {};
+      scoreResult.data.forEach(function(r) {
+        if (!blob[r.student_id]) blob[r.student_id] = [];
+        var arr = blob[r.student_id];
+        var idx = arr.findIndex(function(e) { return e.assessmentId === r.assessment_id && e.tagId === r.tag_id; });
+        var entry = {
+          id: r.student_id + ':' + r.assessment_id + ':' + r.tag_id,
+          assessmentId: r.assessment_id, tagId: r.tag_id,
+          score: r.score, date: r.date,
+          type: r.type || 'summative', note: r.note || '',
+          created: r.created_at || new Date().toISOString()
+        };
+        if (idx !== -1) { arr[idx] = entry; } else { arr.push(entry); }
+      });
+      _cache.scores[cid] = blob;
+      changed = true;
     }
 
     if (changed) {
@@ -662,9 +758,22 @@ async function _doInitData(cid) {
       const byKey = {};
       (rows || []).forEach(r => { byKey[r.data_key] = r.data; });
 
-      // Populate cache from Supabase rows
+      // Populate cache from Supabase rows (except scores — loaded from normalized table)
       for (const [field, dataKey] of Object.entries(_DATA_KEYS)) {
+        if (field === 'scores') continue; // loaded separately below
         _cache[field][cid] = byKey[dataKey] !== undefined ? byKey[dataKey] : _defaultForField(field);
+      }
+
+      // Load scores from normalized scores table
+      const { data: scoreRows, error: scoreErr } = await sb.from('scores')
+        .select('*')
+        .eq('teacher_id', _teacherId)
+        .eq('course_id', cid);
+      if (scoreErr) {
+        console.warn('Failed to load scores table for', cid, scoreErr);
+        _cache.scores[cid] = {};
+      } else {
+        _cache.scores[cid] = _scoreRowsToBlob(scoreRows);
       }
 
       // If Supabase had no data for this course, use empty defaults
@@ -777,12 +886,93 @@ function _saveCourseField(field, cid, value) {
   _cache[field][cid] = value;
   if (_PROF_FIELDS.includes(field) && typeof clearProfCache === 'function') clearProfCache();
   const dataKey = _DATA_KEYS[field];
-  if (_useSupabase) {
+  if (field === 'scores' && _useSupabase) {
+    // Scores use normalized table — sync per-row instead of blob
+    _syncToSupabase('scores', { cid }, value);
+  } else if (_useSupabase) {
     _syncToSupabase('course_data', { cid, dataKey }, value);
   } else {
     _safeLSSet('gb-' + dataKey + '-' + cid, JSON.stringify(value));
   }
   _broadcastChange(cid, field);
+}
+
+/* Convert scores blob { sid: [...entries] } → flat array of table rows */
+function _scoreBlobToRows(cid, scoresObj) {
+  const rows = [];
+  for (const sid in scoresObj) {
+    (scoresObj[sid] || []).forEach(function(e) {
+      rows.push({
+        teacher_id: _teacherId,
+        course_id: cid,
+        student_id: sid,
+        assessment_id: e.assessmentId,
+        tag_id: e.tagId,
+        score: e.score,
+        date: e.date || null,
+        type: e.type || 'summative',
+        note: e.note || '',
+        updated_at: new Date().toISOString()
+      });
+    });
+  }
+  return rows;
+}
+
+/* Convert flat score rows → blob format { sid: [...entries] } */
+function _scoreRowsToBlob(rows) {
+  const blob = {};
+  (rows || []).forEach(function(r) {
+    if (!blob[r.student_id]) blob[r.student_id] = [];
+    blob[r.student_id].push({
+      id: r.student_id + ':' + r.assessment_id + ':' + r.tag_id,
+      assessmentId: r.assessment_id,
+      tagId: r.tag_id,
+      score: r.score,
+      date: r.date,
+      type: r.type || 'summative',
+      note: r.note || '',
+      created: r.created_at || new Date().toISOString()
+    });
+  });
+  return blob;
+}
+
+/* Efficient single-score write — upserts one row to scores table + updates cache */
+function upsertScore(cid, sid, aid, tid, scoreVal, date, type, note) {
+  // Update cache blob
+  const scores = getScores(cid);
+  if (!scores[sid]) scores[sid] = [];
+  const existing = scores[sid].find(function(e) { return e.assessmentId === aid && e.tagId === tid; });
+  if (existing) {
+    if (existing.score === scoreVal) return; // no change
+    existing.score = scoreVal;
+    if (date) existing.date = date;
+    if (note !== undefined) existing.note = note;
+  } else {
+    scores[sid].push({
+      id: sid + ':' + aid + ':' + tid,
+      assessmentId: aid, tagId: tid, score: scoreVal,
+      date: date || new Date().toISOString().slice(0, 10),
+      type: type || 'summative', note: note || '',
+      created: new Date().toISOString()
+    });
+  }
+  _cache.scores[cid] = scores;
+  if (typeof clearProfCache === 'function') clearProfCache();
+
+  if (_useSupabase) {
+    _syncToSupabase('scores_row', { cid, sid, aid, tid }, {
+      teacher_id: _teacherId, course_id: cid, student_id: sid,
+      assessment_id: aid, tag_id: tid, score: scoreVal,
+      date: date || new Date().toISOString().slice(0, 10),
+      type: type || 'summative', note: note || '',
+      updated_at: new Date().toISOString()
+    });
+  } else {
+    _safeLSSet('gb-scores-' + cid, JSON.stringify(scores));
+  }
+  _broadcastChange(cid, 'scores');
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -1747,7 +1937,7 @@ window.GB = {
   getNotes,
   saveNotes,
   getScores,
-  saveScores,
+  saveScores, upsertScore,
   getPointsScore,
   setPointsScore,
   getActiveCourse,

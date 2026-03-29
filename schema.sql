@@ -58,12 +58,44 @@ CREATE TABLE IF NOT EXISTS profiles (
 
 
 -- ──────────────────────────────────────────────────────────
+-- scores  [NORMALIZED TABLE — Phase 1]
+-- One row per score entry. Replaces the JSONB blob that was
+-- previously stored in course_data with data_key='scores'.
+-- ──────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS scores (
+  teacher_id     UUID        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  course_id      TEXT        NOT NULL,
+  student_id     TEXT        NOT NULL,
+  assessment_id  TEXT        NOT NULL,
+  tag_id         TEXT        NOT NULL,
+  score          SMALLINT    NOT NULL,
+  date           DATE,
+  type           TEXT        NOT NULL DEFAULT 'summative',
+  note           TEXT        DEFAULT '',
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (teacher_id, course_id, student_id, assessment_id, tag_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_scores_student
+  ON scores (teacher_id, course_id, student_id);
+CREATE INDEX IF NOT EXISTS idx_scores_assessment
+  ON scores (teacher_id, course_id, assessment_id);
+
+ALTER TABLE scores ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Teachers access own scores"
+  ON scores FOR ALL
+  USING (auth.uid() = teacher_id)
+  WITH CHECK (auth.uid() = teacher_id);
+
+-- ──────────────────────────────────────────────────────────
 -- course_data  [PRIMARY RUNTIME TABLE]
 -- Generic key-value store scoped to teacher + course.
 -- gb-data.js upserts all per-course data here as JSONB.
+-- Scores have been migrated to the normalized `scores` table.
 --
 -- data_key values (one row per key per course per teacher):
---   students, assessments, scores, learningmap, courseconfig,
+--   students, assessments, learningmap, courseconfig,
 --   modules, rubrics, flags, goals, reflections, overrides,
 --   statuses, quick-obs, term-ratings, custom-tags, notes,
 --   report-config
