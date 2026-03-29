@@ -147,21 +147,21 @@ window.MObserve = (function() {
       '<textarea class="m-sheet-textarea" id="m-obs-text" placeholder="What did you notice?" rows="3">' + (opts.text || '') + '</textarea>' +
       '<div class="m-sheet-label">Type</div>' +
       '<div class="m-sentiment-row" role="radiogroup" aria-label="Observation type">' +
-        '<button class="m-sentiment-btn' + (opts.sentiment === 'strength' ? ' active' : '') + '" role="radio" aria-checked="' + (opts.sentiment === 'strength') + '" data-action="m-obs-sentiment" data-val="strength">✅ Strength</button>' +
-        '<button class="m-sentiment-btn' + (opts.sentiment === 'growth' ? ' active' : '') + '" role="radio" aria-checked="' + (opts.sentiment === 'growth') + '" data-action="m-obs-sentiment" data-val="growth">🔄 Growth</button>' +
-        '<button class="m-sentiment-btn' + (opts.sentiment === 'concern' ? ' active' : '') + '" role="radio" aria-checked="' + (opts.sentiment === 'concern') + '" data-action="m-obs-sentiment" data-val="concern">⚠️ Concern</button>' +
+        '<button class="m-sentiment-btn' + (opts.sentiment === 'strength' ? ' m-selected' : '') + '" role="radio" aria-checked="' + (opts.sentiment === 'strength') + '" data-action="m-obs-sentiment" data-val="strength">✅ Strength</button>' +
+        '<button class="m-sentiment-btn' + (opts.sentiment === 'growth' ? ' m-selected' : '') + '" role="radio" aria-checked="' + (opts.sentiment === 'growth') + '" data-action="m-obs-sentiment" data-val="growth">🔄 Growth</button>' +
+        '<button class="m-sentiment-btn' + (opts.sentiment === 'concern' ? ' m-selected' : '') + '" role="radio" aria-checked="' + (opts.sentiment === 'concern') + '" data-action="m-obs-sentiment" data-val="concern">⚠️ Concern</button>' +
       '</div>' +
       '<div class="m-sheet-label">Context</div>' +
       '<div class="m-context-row" style="flex-wrap:wrap">' +
         Object.keys(OBS_CONTEXTS).map(function(key) {
           var ctx = OBS_CONTEXTS[key];
-          return '<button class="m-context-btn' + (opts.context === key ? ' active' : '') + '" data-action="m-obs-context" data-val="' + key + '">' + ctx.icon + ' ' + ctx.label + '</button>';
+          return '<button class="m-context-btn' + (opts.context === key ? ' m-selected' : '') + '" data-action="m-obs-context" data-val="' + key + '">' + ctx.icon + ' ' + ctx.label + '</button>';
         }).join('') +
       '</div>' +
       '<div class="m-sheet-label">Tags</div>' +
       '<div class="m-dim-strip">' +
         OBS_DIMS.map(function(dim) {
-          return '<button class="m-dim-chip' + ((opts.dims || []).indexOf(dim) >= 0 ? ' active' : '') + '" data-action="m-obs-dim" data-val="' + dim + '">' + (OBS_ICONS[dim] || '') + ' ' + (OBS_LABELS[dim] || dim) + '</button>';
+          return '<button class="m-dim-chip' + ((opts.dims || []).indexOf(dim) >= 0 ? ' m-selected' : '') + '" data-action="m-obs-dim" data-val="' + dim + '">' + (OBS_ICONS[dim] || '') + ' ' + (OBS_LABELS[dim] || dim) + '</button>';
         }).join('') +
       '</div>' +
       '<button class="m-btn-primary" id="m-obs-submit" data-action="m-obs-save"' + (opts.submitDisabled ? ' disabled' : '') + '>' + opts.submitLabel + '</button>' +
