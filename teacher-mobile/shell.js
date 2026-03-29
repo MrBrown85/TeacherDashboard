@@ -131,7 +131,9 @@
       }
       MC.showToast('Synced just now');
     } catch (e) {
-      MC.showToast(e.message === 'timeout' ? 'Sync timed out' : 'Refresh failed');
+      console.warn('Pull-to-refresh error:', e);
+      var msg = e.message === 'timeout' ? 'Sync timed out' : 'Refresh failed — ' + (e.message || 'unknown error');
+      MC.showToast(msg);
     }
     _hidePullIndicator();
   }
