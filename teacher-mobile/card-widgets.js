@@ -308,6 +308,83 @@ window.MCardWidgets = (function() {
     return '<div class="m-wdg-concerns">' + chips + '</div>';
   };
 
+  /* ── workHabits ──────────────────────────────────────────────── */
+  _renderers.workHabits = function(st, cid, data) {
+    var termId = (data && data.termId) || 'term-1';
+    var rating = getStudentTermRating(cid, st.id, termId);
+    if (!rating) return '';
+    var wh = rating.workHabits || 0;
+    var part = rating.participation || 0;
+    if (wh === 0 && part === 0) return '';
+
+    function renderPips(val) {
+      var pips = '';
+      for (var i = 1; i <= 4; i++) {
+        if (i <= val) {
+          pips += '<div class="m-wdg-pip m-wdg-pip-filled" style="background:' + MC.profBg(val) + '"></div>';
+        } else {
+          pips += '<div class="m-wdg-pip" style="background:var(--bg-secondary)"></div>';
+        }
+      }
+      return pips;
+    }
+
+    return '<div class="m-wdg-habits">' +
+      '<div class="m-wdg-habit-col">' +
+        '<div class="m-wdg-pips">' + renderPips(wh) + '</div>' +
+        '<div class="m-wdg-tile-label">Work Habits</div>' +
+      '</div>' +
+      '<div class="m-wdg-habit-col">' +
+        '<div class="m-wdg-pips">' + renderPips(part) + '</div>' +
+        '<div class="m-wdg-tile-label">Participation</div>' +
+      '</div>' +
+    '</div>';
+  };
+
+  /* ── growthAreas ─────────────────────────────────────────────── */
+  _renderers.growthAreas = function(st, cid, data) {
+    var termId = (data && data.termId) || 'term-1';
+    var rating = getStudentTermRating(cid, st.id, termId);
+    if (!rating || !rating.growthAreas || !rating.growthAreas.length) return '';
+    var areas = rating.growthAreas;
+    var sections = getSections(cid);
+    var shown = areas.slice(0, 3);
+    var overflow = areas.length - shown.length;
+    var chips = shown.map(function(tid) {
+      var tag = getTagById(cid, tid);
+      var label = tag ? (tag.shortName || tag.label || tag.name || tid) : tid;
+      var dotColor = '';
+      if (tag && tag.sectionId) {
+        var sec = sections.find(function(s) { return s.id === tag.sectionId; });
+        if (sec) dotColor = sec.color || '';
+      }
+      var dot = dotColor ? '<span class="m-wdg-chip-dot" style="background:' + dotColor + '"></span>' : '';
+      return '<span class="m-wdg-chip m-wdg-chip-neutral">' + dot + MC.esc(label) + '</span>';
+    }).join('');
+    if (overflow > 0) chips += '<span class="m-wdg-chip m-wdg-chip-more">+' + overflow + '</span>';
+    return '<div class="m-wdg-growth-areas">' +
+      '<div class="m-wdg-section-label">Growth Areas</div>' +
+      '<div class="m-wdg-chips">' + chips + '</div>' +
+    '</div>';
+  };
+
+  /* ── narrative ───────────────────────────────────────────────── */
+  _renderers.narrative = function(st, cid, data) {
+    var termId = (data && data.termId) || 'term-1';
+    var rating = getStudentTermRating(cid, st.id, termId);
+    if (!rating || !rating.narrative) return '';
+    var raw = (rating.narrative || '').replace(/<[^>]+>/g, '').trim();
+    if (!raw) return '';
+    if (raw.length > 80) raw = raw.substring(0, 80) + '\u2026';
+    return '<div class="m-wdg-narrative">' +
+      '<div class="m-wdg-section-label">Term Report</div>' +
+      '<div class="m-wdg-narrative-text">' + MC.esc(raw) + '</div>' +
+    '</div>';
+  };
+
+  /* ── flagStatus ──────────────────────────────────────────────── */
+  _renderers.flagStatus = function() { return ''; };
+
   /* ── Public API ──────────────────────────────────────────────── */
   return {
     render: render,

@@ -564,3 +564,154 @@ describe('MCardWidgets.render concerns', () => {
   });
 });
 
+/* ─────────────────────────────────────────────────────────────────
+   Task 5: Remaining Widget Renderers
+   ───────────────────────────────────────────────────────────────── */
+
+/* ── Task 5: workHabits ──────────────────────────────────────────── */
+describe('MCardWidgets.render workHabits', () => {
+  it('renders dual segmented bar with pip rows', () => {
+    mockWidgetDataLayer({
+      getStudentTermRating: () => ({
+        dims: {},
+        socialTraits: [],
+        workHabits: 3,
+        participation: 2,
+        growthAreas: [],
+        narrative: '',
+      }),
+    });
+    const html = MCardWidgets.render('workHabits', STUDENT, CID, DATA);
+    expect(html).toContain('m-wdg-habits');
+    expect(html).toContain('m-wdg-habit-col');
+    expect(html).toContain('m-wdg-pips');
+    expect(html).toContain('m-wdg-pip');
+    expect(html).toContain('Work Habits');
+    expect(html).toContain('Participation');
+  });
+
+  it('returns empty when no term rating', () => {
+    mockWidgetDataLayer({ getStudentTermRating: () => null });
+    const html = MCardWidgets.render('workHabits', STUDENT, CID, DATA);
+    expect(html).toBe('');
+  });
+
+  it('returns empty when both workHabits and participation are 0', () => {
+    mockWidgetDataLayer({
+      getStudentTermRating: () => ({
+        dims: {},
+        socialTraits: [],
+        workHabits: 0,
+        participation: 0,
+        growthAreas: [],
+        narrative: '',
+      }),
+    });
+    const html = MCardWidgets.render('workHabits', STUDENT, CID, DATA);
+    expect(html).toBe('');
+  });
+});
+
+/* ── Task 5: growthAreas ─────────────────────────────────────────── */
+describe('MCardWidgets.render growthAreas', () => {
+  it('renders tag chips with section color dots', () => {
+    mockWidgetDataLayer({
+      getStudentTermRating: () => ({
+        dims: {},
+        socialTraits: [],
+        workHabits: 2,
+        participation: 2,
+        growthAreas: ['tag1', 'tag2'],
+        narrative: '',
+      }),
+      getTagById: (cid, tid) => {
+        if (tid === 'tag1') return { id: 'tag1', name: 'Critical Thinking', shortName: 'Crit Think', sectionId: 's1' };
+        if (tid === 'tag2') return { id: 'tag2', name: 'Communication', shortName: 'Comm', sectionId: 's2' };
+        return null;
+      },
+      getSections: () => [
+        { id: 's1', name: 'Questioning', color: '#2196F3' },
+        { id: 's2', name: 'Planning', color: '#4CAF50' },
+      ],
+    });
+    const html = MCardWidgets.render('growthAreas', STUDENT, CID, DATA);
+    expect(html).toContain('m-wdg-growth-areas');
+    expect(html).toContain('m-wdg-section-label');
+    expect(html).toContain('Growth Areas');
+    expect(html).toContain('m-wdg-chip-neutral');
+    expect(html).toContain('Crit Think');
+    expect(html).toContain('m-wdg-chip-dot');
+  });
+
+  it('returns empty when no growth areas', () => {
+    mockWidgetDataLayer({
+      getStudentTermRating: () => ({
+        dims: {},
+        socialTraits: [],
+        workHabits: 2,
+        participation: 2,
+        growthAreas: [],
+        narrative: '',
+      }),
+      getTagById: () => null,
+      getSections: () => [],
+    });
+    const html = MCardWidgets.render('growthAreas', STUDENT, CID, DATA);
+    expect(html).toBe('');
+  });
+});
+
+/* ── Task 5: narrative ───────────────────────────────────────────── */
+describe('MCardWidgets.render narrative', () => {
+  it('renders truncated excerpt with shadow card and header', () => {
+    mockWidgetDataLayer({
+      getStudentTermRating: () => ({
+        dims: {},
+        socialTraits: [],
+        workHabits: 2,
+        participation: 2,
+        growthAreas: [],
+        narrative: '<p>This student has shown tremendous growth this term and demonstrates strong skills in collaborative problem solving.</p>',
+      }),
+    });
+    const html = MCardWidgets.render('narrative', STUDENT, CID, DATA);
+    expect(html).toContain('m-wdg-narrative');
+    expect(html).toContain('m-wdg-section-label');
+    expect(html).toContain('Term Report');
+    expect(html).toContain('m-wdg-narrative-text');
+    // HTML tags should be stripped
+    expect(html).not.toContain('<p>');
+    // Text is truncated at 80 chars
+    expect(html).toContain('\u2026');
+  });
+
+  it('returns empty when no narrative', () => {
+    mockWidgetDataLayer({
+      getStudentTermRating: () => ({
+        dims: {},
+        socialTraits: [],
+        workHabits: 2,
+        participation: 2,
+        growthAreas: [],
+        narrative: '',
+      }),
+    });
+    const html = MCardWidgets.render('narrative', STUDENT, CID, DATA);
+    expect(html).toBe('');
+  });
+
+  it('returns empty when no term rating', () => {
+    mockWidgetDataLayer({ getStudentTermRating: () => null });
+    const html = MCardWidgets.render('narrative', STUDENT, CID, DATA);
+    expect(html).toBe('');
+  });
+});
+
+/* ── Task 5: flagStatus ──────────────────────────────────────────── */
+describe('MCardWidgets.render flagStatus', () => {
+  it('is not a standalone renderer (returns empty string)', () => {
+    mockWidgetDataLayer({});
+    const html = MCardWidgets.render('flagStatus', STUDENT, CID, DATA);
+    expect(html).toBe('');
+  });
+});
