@@ -146,7 +146,6 @@ window.Router = (function() {
     var cid = getActiveCourse();
     await initData(cid);
     // Seed demo data if no courses/students exist — lazy-loads seed-data.js on demand
-    // Must await so cache is populated before first render (was fire-and-forget → empty dashboard)
     await loadSeedIfNeeded();
     migrateAllStudents();
 

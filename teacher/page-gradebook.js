@@ -504,7 +504,7 @@ window.PageGradebook = (function() {
         if (col.isPointsCol) {
           var max = assess.maxPoints || 100;
           var score = getPointsScore(cid, s.id, col.assessmentId);
-          var pct = score > 0 ? Math.round(score / max * 100) : 0;
+          var pct = score > 0 ? (score / max * 100).toFixed(1) : '0.0';
           var title = score > 0 ? score + '/' + max + ' (' + pct + '%)' : '';
           var cellContent = score > 0
             ? '<div class="gb-pts-display"><span class="gb-pts-score">' + score + '<span class="gb-pts-max">/' + max + '</span></span><span class="gb-pts-pct">' + pct + '%</span></div>'
@@ -598,7 +598,7 @@ window.PageGradebook = (function() {
     sortedStudents.forEach(function(s, si) {
       var altClass = si % 2 === 1 ? ' gb-scores-alt' : '';
       var overall = getOverallProficiency(cid, s.id);
-      var finalPct = overall > 0 ? Math.round(overall / 4 * 100) : 0;
+      var finalPct = overall > 0 ? overall / 4 * 100 : 0;
       var fr = Math.round(overall);
       var desTags = (s.designations || []).map(function(code) {
         var d = BC_DESIGNATIONS[code]; if (!d) return '';
@@ -606,7 +606,7 @@ window.PageGradebook = (function() {
       }).join('');
       html += '<div class="gb-grid-rowhead' + altClass + '" style="min-height:' + rowPx + 'px">' +
         '<span class="gb-grid-rowhead-name">' + esc(fullName(s)) + desTags + '</span>' +
-        '<span class="gb-grid-rowhead-pct" style="color:' + (overall > 0 ? PROF_COLORS[fr] : 'var(--text-3)') + '">' + (finalPct > 0 ? finalPct + '%' : '\u2014') + '</span>' +
+        '<span class="gb-grid-rowhead-pct" style="color:' + (overall > 0 ? PROF_COLORS[fr] : 'var(--text-3)') + '">' + (finalPct > 0 ? finalPct.toFixed(1) + '%' : '\u2014') + '</span>' +
       '</div>';
     });
     html += '</div>';
@@ -893,14 +893,14 @@ window.PageGradebook = (function() {
     inp.className = 'gb-pts-input';
     var pctLabel = document.createElement('span');
     pctLabel.className = 'gb-pts-live-pct';
-    pctLabel.textContent = current > 0 ? Math.round(current / max * 100) + '%' : '';
+    pctLabel.textContent = current > 0 ? (current / max * 100).toFixed(1) + '%' : '';
     wrap.appendChild(inp);
     wrap.appendChild(pctLabel);
     td.appendChild(wrap);
     inp.focus(); inp.select();
     inp.addEventListener('input', function() {
       var v = parseInt(inp.value, 10);
-      pctLabel.textContent = (!isNaN(v) && v >= 0) ? Math.round(Math.min(v, max) / max * 100) + '%' : '';
+      pctLabel.textContent = (!isNaN(v) && v >= 0) ? (Math.min(v, max) / max * 100).toFixed(1) + '%' : '';
     });
     function commit() {
       var val = parseInt(inp.value, 10);
@@ -926,7 +926,7 @@ window.PageGradebook = (function() {
       wrap.remove();
       if (existing) existing.remove();
       if (raw > 0) {
-        var pctV = Math.round(raw / max * 100);
+        var pctV = (raw / max * 100).toFixed(1);
         td.innerHTML = '<div class="gb-pts-display"><span class="gb-pts-score">' + raw + '<span class="gb-pts-max">/' + max + '</span></span><span class="gb-pts-pct">' + pctV + '%</span></div>';
         td.title = raw + '/' + max + ' (' + pctV + '%)';
       } else {
