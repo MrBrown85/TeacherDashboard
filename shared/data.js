@@ -263,6 +263,13 @@ function _syncKey(table, key) {
   if (table === 'obs_delete') return 'obs_delete:' + key.cid + ':' + key.obId;
   if (table === 'assessments') return 'assessments:' + key.cid;
   if (table === 'students_table') return 'students_table:' + key.cid;
+  if (table === 'goals') return 'goals:' + key.cid;
+  if (table === 'reflections') return 'reflections:' + key.cid;
+  if (table === 'overrides') return 'overrides:' + key.cid;
+  if (table === 'statuses') return 'statuses:' + key.cid;
+  if (table === 'student_notes') return 'student_notes:' + key.cid;
+  if (table === 'student_flags') return 'student_flags:' + key.cid;
+  if (table === 'term_ratings') return 'term_ratings:' + key.cid;
   return table + ':' + key;
 }
 
@@ -378,6 +385,23 @@ async function _doSync(table, key, data) {
       if (sRows.length > 0) {
         const { error: insErr } = await sb.from('students')
           .insert(sRows)
+          .abortSignal(controller.signal);
+        if (insErr) throw insErr;
+      }
+    } else if (_BULK_SYNC_CONVERTERS[table]) {
+      // Generic delete-all + bulk-insert for medium-frequency normalized tables
+      const convFn = _BULK_SYNC_CONVERTERS[table];
+      const tableName = table;
+      const bulkRows = convFn(key.cid, data);
+      const { error: delErr } = await sb.from(tableName)
+        .delete()
+        .eq('teacher_id', _teacherId)
+        .eq('course_id', key.cid)
+        .abortSignal(controller.signal);
+      if (delErr) throw delErr;
+      if (bulkRows.length > 0) {
+        const { error: insErr } = await sb.from(tableName)
+          .insert(bulkRows)
           .abortSignal(controller.signal);
         if (insErr) throw insErr;
       }
@@ -768,8 +792,42 @@ function _initRealtimeSync() {
           if (idx !== -1) { arr[idx] = entry; } else { arr.push(migrateStudent(entry)); }
         }
         _invalidateAndRerender();
-      })
-      .subscribe();
+      });
+
+    // Medium-frequency tables: on any change, re-fetch full table for course
+    var _medTables = Object.values(_MEDIUM_FREQ_TABLES);
+    _medTables.forEach(function(tblName) {
+      _realtimeChannel = _realtimeChannel.on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: tblName,
+        filter: 'teacher_id=eq.' + _teacherId
+      }, function(payload) {
+        var row = payload.new || payload.old;
+        if (!row || !row.course_id) return;
+        var cid = row.course_id;
+        // Find the cache field for this table
+        var cacheField = null;
+        for (var f in _MEDIUM_FREQ_TABLES) {
+          if (_MEDIUM_FREQ_TABLES[f] === tblName) { cacheField = f; break; }
+        }
+        if (!cacheField) return;
+        // Re-fetch entire table for this course (medium-freq = small data, simple approach)
+        var sb2 = getSupabase();
+        if (!sb2) return;
+        sb2.from(tblName).select('*').eq('teacher_id', _teacherId).eq('course_id', cid).then(function(res) {
+          if (res.error || !res.data) return;
+          var conv = _BULK_LOAD_CONVERTERS[tblName];
+          if (!conv) return;
+          var newBlob = conv(res.data);
+          if (!_hasDataChanged(newBlob, _cache[cacheField][cid])) return;
+          _cache[cacheField][cid] = newBlob;
+          _invalidateAndRerender();
+        });
+      });
+    });
+
+    _realtimeChannel.subscribe();
   } catch (e) {
     console.warn('Realtime sync not available:', e);
   }
@@ -838,7 +896,7 @@ async function _refreshFromSupabase() {
     (result.data || []).forEach(function(r) { byKey[r.data_key] = r.data; });
 
     for (var field in _DATA_KEYS) {
-      if (field === 'scores' || field === 'observations' || field === 'assessments' || field === 'students') continue;
+      if (_NORMALIZED_TABLES[field]) continue;
       var dataKey = _DATA_KEYS[field];
       if (byKey[dataKey] !== undefined) {
         var newVal = byKey[dataKey];
@@ -857,9 +915,14 @@ async function _refreshFromSupabase() {
       if (since) q = q.gt(tsCol, since);
       return q;
     }
-    var [scoreResult, obsResult, assessResult, studResult] = await Promise.all([
+    var [scoreResult, obsResult, assessResult, studResult,
+         goalsRefRes, reflRefRes, overRefRes, statusRefRes, notesRefRes, flagsRefRes, trRefRes] = await Promise.all([
       _rq('scores', 'updated_at'), _rq('observations', 'modified_at'),
-      _rq('assessments', 'updated_at'), _rq('students', 'updated_at')
+      _rq('assessments', 'updated_at'), _rq('students', 'updated_at'),
+      _rq('goals', 'updated_at'), _rq('reflections', 'updated_at'),
+      _rq('overrides', 'updated_at'), _rq('statuses', 'updated_at'),
+      _rq('student_notes', 'updated_at'), _rq('student_flags', 'updated_at'),
+      _rq('term_ratings', 'updated_at')
     ]);
 
     if (!scoreResult.error && scoreResult.data && scoreResult.data.length > 0) {
@@ -920,6 +983,20 @@ async function _refreshFromSupabase() {
       changed = true;
     }
 
+    // Refresh medium-frequency normalized tables (full replace on visibility change)
+    var _medRefResults = { goals: goalsRefRes, reflections: reflRefRes, overrides: overRefRes, statuses: statusRefRes, notes: notesRefRes, flags: flagsRefRes, termRatings: trRefRes };
+    for (var _mrf in _MEDIUM_FREQ_TABLES) {
+      var _mrTbl = _MEDIUM_FREQ_TABLES[_mrf];
+      var _mrRes = _medRefResults[_mrf];
+      if (!_mrRes.error && _mrRes.data && _mrRes.data.length > 0) {
+        var newBlob = _BULK_LOAD_CONVERTERS[_mrTbl](_mrRes.data);
+        if (_hasDataChanged(newBlob, _cache[_mrf][cid])) {
+          _cache[_mrf][cid] = newBlob;
+          changed = true;
+        }
+      }
+    }
+
     if (changed) {
       _invalidateAndRerender();
     }
@@ -958,15 +1035,18 @@ async function _doInitData(cid) {
       (rows || []).forEach(r => { byKey[r.data_key] = r.data; });
 
       // Populate cache from Supabase rows (except normalized tables)
+      // Populate cache from course_data rows (only non-normalized fields)
       for (const [field, dataKey] of Object.entries(_DATA_KEYS)) {
-        if (field === 'scores' || field === 'observations' || field === 'assessments' || field === 'students') continue;
+        if (_NORMALIZED_TABLES[field]) continue;
         _cache[field][cid] = byKey[dataKey] !== undefined ? byKey[dataKey] : _defaultForField(field);
       }
 
       // Load all normalized tables in parallel
       const _q = (tbl) => sb.from(tbl).select('*').eq('teacher_id', _teacherId).eq('course_id', cid);
-      const [scoreRes, obsRes, assessRes, studentRes] = await Promise.all([
-        _q('scores'), _q('observations'), _q('assessments'), _q('students')
+      const [scoreRes, obsRes, assessRes, studentRes, goalsRes, reflRes, overRes, statusRes, notesRes, flagsRes, trRes] = await Promise.all([
+        _q('scores'), _q('observations'), _q('assessments'), _q('students'),
+        _q('goals'), _q('reflections'), _q('overrides'), _q('statuses'),
+        _q('student_notes'), _q('student_flags'), _q('term_ratings')
       ]);
 
       _cache.scores[cid] = scoreRes.error
@@ -981,6 +1061,19 @@ async function _doInitData(cid) {
       _cache.students[cid] = studentRes.error
         ? (console.warn('Failed to load students for', cid, studentRes.error), [])
         : _studentRowsToBlob(studentRes.data).map(migrateStudent);
+
+      // Medium-frequency tables
+      var _medResults = { goals: goalsRes, reflections: reflRes, overrides: overRes, statuses: statusRes, notes: notesRes, flags: flagsRes, termRatings: trRes };
+      for (var _mf in _MEDIUM_FREQ_TABLES) {
+        var _tbl = _MEDIUM_FREQ_TABLES[_mf];
+        var _res = _medResults[_mf];
+        if (_res.error) {
+          console.warn('Failed to load ' + _tbl + ' for', cid, _res.error);
+          _cache[_mf][cid] = _defaultForField(_mf);
+        } else {
+          _cache[_mf][cid] = _BULK_LOAD_CONVERTERS[_tbl](_res.data);
+        }
+      }
 
       // If Supabase had no data for this course, use empty defaults
       // (seedIfNeeded will populate demo data if appropriate)
@@ -1090,12 +1183,52 @@ function _loadCoursesFromLS() {
 /* Fields that affect proficiency calculations */
 const _PROF_FIELDS = ['scores', 'assessments', 'overrides', 'statuses', 'courseConfigs', 'learningMaps'];
 
+/* Blob→rows converters for generic bulk sync (delete-all + insert pattern) */
+const _BULK_SYNC_CONVERTERS = {
+  goals: _goalsBlobToRows,
+  reflections: _reflectionsBlobToRows,
+  overrides: _overridesBlobToRows,
+  statuses: _statusesBlobToRows,
+  student_notes: _notesBlobToRows,
+  student_flags: _flagsBlobToRows,
+  term_ratings: _termRatingsBlobToRows
+};
+
+/* Rows→blob converters for loading from normalized tables */
+const _BULK_LOAD_CONVERTERS = {
+  goals: _goalsRowsToBlob,
+  reflections: _reflectionsRowsToBlob,
+  overrides: _overridesRowsToBlob,
+  statuses: _statusesRowsToBlob,
+  student_notes: _notesRowsToBlob,
+  student_flags: _flagsRowsToBlob,
+  term_ratings: _termRatingsRowsToBlob
+};
+
+/* Cache field → table name for medium-frequency normalized tables */
+const _MEDIUM_FREQ_TABLES = {
+  goals: 'goals',
+  reflections: 'reflections',
+  overrides: 'overrides',
+  statuses: 'statuses',
+  notes: 'student_notes',
+  flags: 'student_flags',
+  termRatings: 'term_ratings'
+};
+
 /* Fields stored in their own normalized tables instead of course_data */
 const _NORMALIZED_TABLES = {
   scores: 'scores',
   observations: 'observations',
   assessments: 'assessments',
-  students: 'students_table'
+  students: 'students_table',
+  goals: 'goals',
+  reflections: 'reflections',
+  overrides: 'overrides',
+  statuses: 'statuses',
+  notes: 'student_notes',
+  flags: 'student_flags',
+  termRatings: 'term_ratings'
 };
 
 /* Helper: write to cache + sync */
@@ -1299,6 +1432,138 @@ function _studentRowsToBlob(rows) {
       sortName: r.sort_name || ''
     };
   });
+}
+
+/* ── Phase 4 converters: medium-frequency tables ── */
+
+/* goals blob { sid: { tagId: "text" } } ↔ rows */
+function _goalsBlobToRows(cid, obj) {
+  var rows = [];
+  for (var sid in obj) {
+    for (var tagId in obj[sid]) {
+      rows.push({ teacher_id: _teacherId, course_id: cid, student_id: sid, tag_id: tagId, text: obj[sid][tagId] || '', updated_at: new Date().toISOString() });
+    }
+  }
+  return rows;
+}
+function _goalsRowsToBlob(rows) {
+  var blob = {};
+  (rows || []).forEach(function(r) {
+    if (!blob[r.student_id]) blob[r.student_id] = {};
+    blob[r.student_id][r.tag_id] = r.text || '';
+  });
+  return blob;
+}
+
+/* reflections blob { sid: { tagId: { confidence, text, date } } } ↔ rows */
+function _reflectionsBlobToRows(cid, obj) {
+  var rows = [];
+  for (var sid in obj) {
+    for (var tagId in obj[sid]) {
+      var v = obj[sid][tagId] || {};
+      rows.push({ teacher_id: _teacherId, course_id: cid, student_id: sid, tag_id: tagId, confidence: v.confidence || 0, text: v.text || '', date: v.date || '', updated_at: new Date().toISOString() });
+    }
+  }
+  return rows;
+}
+function _reflectionsRowsToBlob(rows) {
+  var blob = {};
+  (rows || []).forEach(function(r) {
+    if (!blob[r.student_id]) blob[r.student_id] = {};
+    blob[r.student_id][r.tag_id] = { confidence: r.confidence || 0, text: r.text || '', date: r.date || '' };
+  });
+  return blob;
+}
+
+/* overrides blob { sid: { tagId: { level, reason, date, calculated } } } ↔ rows */
+function _overridesBlobToRows(cid, obj) {
+  var rows = [];
+  for (var sid in obj) {
+    for (var tagId in obj[sid]) {
+      var v = obj[sid][tagId] || {};
+      rows.push({ teacher_id: _teacherId, course_id: cid, student_id: sid, tag_id: tagId, level: v.level || 0, reason: v.reason || '', date: v.date || '', calculated: v.calculated || 0, updated_at: new Date().toISOString() });
+    }
+  }
+  return rows;
+}
+function _overridesRowsToBlob(rows) {
+  var blob = {};
+  (rows || []).forEach(function(r) {
+    if (!blob[r.student_id]) blob[r.student_id] = {};
+    var entry = { level: r.level || 0, reason: r.reason || '' };
+    if (r.date) entry.date = r.date;
+    if (r.calculated) entry.calculated = r.calculated;
+    blob[r.student_id][r.tag_id] = entry;
+  });
+  return blob;
+}
+
+/* statuses blob { "sid:aid": "status" } ↔ rows */
+function _statusesBlobToRows(cid, obj) {
+  var rows = [];
+  for (var compositeKey in obj) {
+    var parts = compositeKey.split(':');
+    if (parts.length < 2) continue;
+    rows.push({ teacher_id: _teacherId, course_id: cid, student_id: parts[0], assessment_id: parts.slice(1).join(':'), status: obj[compositeKey] || '', updated_at: new Date().toISOString() });
+  }
+  return rows;
+}
+function _statusesRowsToBlob(rows) {
+  var blob = {};
+  (rows || []).forEach(function(r) {
+    blob[r.student_id + ':' + r.assessment_id] = r.status || '';
+  });
+  return blob;
+}
+
+/* notes blob { sid: "text" } ↔ rows */
+function _notesBlobToRows(cid, obj) {
+  var rows = [];
+  for (var sid in obj) {
+    rows.push({ teacher_id: _teacherId, course_id: cid, student_id: sid, text: obj[sid] || '', updated_at: new Date().toISOString() });
+  }
+  return rows;
+}
+function _notesRowsToBlob(rows) {
+  var blob = {};
+  (rows || []).forEach(function(r) { blob[r.student_id] = r.text || ''; });
+  return blob;
+}
+
+/* flags blob { sid: true } ↔ rows */
+function _flagsBlobToRows(cid, obj) {
+  var rows = [];
+  for (var sid in obj) {
+    if (obj[sid]) rows.push({ teacher_id: _teacherId, course_id: cid, student_id: sid, updated_at: new Date().toISOString() });
+  }
+  return rows;
+}
+function _flagsRowsToBlob(rows) {
+  var blob = {};
+  (rows || []).forEach(function(r) { blob[r.student_id] = true; });
+  return blob;
+}
+
+/* termRatings blob { sid: { termId: { dims, narrative, created, modified } } } ↔ rows */
+function _termRatingsBlobToRows(cid, obj) {
+  var rows = [];
+  for (var sid in obj) {
+    for (var termId in obj[sid]) {
+      var v = obj[sid][termId] || {};
+      rows.push({ teacher_id: _teacherId, course_id: cid, student_id: sid, term_id: termId, dims: v.dims || {}, narrative: v.narrative || '', created_at: v.created || new Date().toISOString(), modified_at: v.modified || null, updated_at: new Date().toISOString() });
+    }
+  }
+  return rows;
+}
+function _termRatingsRowsToBlob(rows) {
+  var blob = {};
+  (rows || []).forEach(function(r) {
+    if (!blob[r.student_id]) blob[r.student_id] = {};
+    var entry = { dims: r.dims || {}, narrative: r.narrative || '', created: r.created_at || new Date().toISOString() };
+    if (r.modified_at) entry.modified = r.modified_at;
+    blob[r.student_id][r.term_id] = entry;
+  });
+  return blob;
 }
 
 /* Efficient single-score write — upserts one row to scores table + updates cache */

@@ -193,16 +193,139 @@ CREATE POLICY "Teachers access own students"
   WITH CHECK (auth.uid() = teacher_id);
 
 -- ──────────────────────────────────────────────────────────
+-- goals  [NORMALIZED TABLE — Phase 4]
+-- ──────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS goals (
+  teacher_id  UUID  NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  course_id   TEXT  NOT NULL,
+  student_id  TEXT  NOT NULL,
+  tag_id      TEXT  NOT NULL,
+  text        TEXT  NOT NULL DEFAULT '',
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (teacher_id, course_id, student_id, tag_id)
+);
+ALTER TABLE goals ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Teachers access own goals"
+  ON goals FOR ALL USING (auth.uid() = teacher_id)
+  WITH CHECK (auth.uid() = teacher_id);
+
+-- ──────────────────────────────────────────────────────────
+-- reflections  [NORMALIZED TABLE — Phase 4]
+-- ──────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS reflections (
+  teacher_id  UUID     NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  course_id   TEXT     NOT NULL,
+  student_id  TEXT     NOT NULL,
+  tag_id      TEXT     NOT NULL,
+  confidence  SMALLINT DEFAULT 0,
+  text        TEXT     NOT NULL DEFAULT '',
+  date        TEXT     DEFAULT '',
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (teacher_id, course_id, student_id, tag_id)
+);
+ALTER TABLE reflections ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Teachers access own reflections"
+  ON reflections FOR ALL USING (auth.uid() = teacher_id)
+  WITH CHECK (auth.uid() = teacher_id);
+
+-- ──────────────────────────────────────────────────────────
+-- overrides  [NORMALIZED TABLE — Phase 4]
+-- ──────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS overrides (
+  teacher_id  UUID     NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  course_id   TEXT     NOT NULL,
+  student_id  TEXT     NOT NULL,
+  tag_id      TEXT     NOT NULL,
+  level       SMALLINT NOT NULL DEFAULT 0,
+  reason      TEXT     NOT NULL DEFAULT '',
+  date        TEXT     DEFAULT '',
+  calculated  REAL     DEFAULT 0,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (teacher_id, course_id, student_id, tag_id)
+);
+ALTER TABLE overrides ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Teachers access own overrides"
+  ON overrides FOR ALL USING (auth.uid() = teacher_id)
+  WITH CHECK (auth.uid() = teacher_id);
+
+-- ──────────────────────────────────────────────────────────
+-- statuses  [NORMALIZED TABLE — Phase 4]
+-- ──────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS statuses (
+  teacher_id    UUID  NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  course_id     TEXT  NOT NULL,
+  student_id    TEXT  NOT NULL,
+  assessment_id TEXT  NOT NULL,
+  status        TEXT  NOT NULL DEFAULT '',
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (teacher_id, course_id, student_id, assessment_id)
+);
+ALTER TABLE statuses ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Teachers access own statuses"
+  ON statuses FOR ALL USING (auth.uid() = teacher_id)
+  WITH CHECK (auth.uid() = teacher_id);
+
+-- ──────────────────────────────────────────────────────────
+-- student_notes  [NORMALIZED TABLE — Phase 4]
+-- ──────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS student_notes (
+  teacher_id  UUID  NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  course_id   TEXT  NOT NULL,
+  student_id  TEXT  NOT NULL,
+  text        TEXT  NOT NULL DEFAULT '',
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (teacher_id, course_id, student_id)
+);
+ALTER TABLE student_notes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Teachers access own student_notes"
+  ON student_notes FOR ALL USING (auth.uid() = teacher_id)
+  WITH CHECK (auth.uid() = teacher_id);
+
+-- ──────────────────────────────────────────────────────────
+-- student_flags  [NORMALIZED TABLE — Phase 4]
+-- ──────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS student_flags (
+  teacher_id  UUID  NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  course_id   TEXT  NOT NULL,
+  student_id  TEXT  NOT NULL,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (teacher_id, course_id, student_id)
+);
+ALTER TABLE student_flags ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Teachers access own student_flags"
+  ON student_flags FOR ALL USING (auth.uid() = teacher_id)
+  WITH CHECK (auth.uid() = teacher_id);
+
+-- ──────────────────────────────────────────────────────────
+-- term_ratings  [NORMALIZED TABLE — Phase 4]
+-- ──────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS term_ratings (
+  teacher_id  UUID        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  course_id   TEXT        NOT NULL,
+  student_id  TEXT        NOT NULL,
+  term_id     TEXT        NOT NULL,
+  dims        JSONB       DEFAULT '{}',
+  narrative   TEXT        NOT NULL DEFAULT '',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  modified_at TIMESTAMPTZ,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (teacher_id, course_id, student_id, term_id)
+);
+ALTER TABLE term_ratings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Teachers access own term_ratings"
+  ON term_ratings FOR ALL USING (auth.uid() = teacher_id)
+  WITH CHECK (auth.uid() = teacher_id);
+
+
+-- ──────────────────────────────────────────────────────────
 -- course_data  [PRIMARY RUNTIME TABLE]
 -- Generic key-value store scoped to teacher + course.
--- gb-data.js upserts all per-course data here as JSONB.
--- Scores → `scores` table. Observations → `observations` table.
--- Assessments → `assessments` table. Students → `students` table.
+-- gb-data.js upserts remaining config data here as JSONB.
+-- All high/medium-frequency data now in normalized tables.
 --
 -- data_key values (one row per key per course per teacher):
 --   learningmap, courseconfig,
---   modules, rubrics, flags, goals, reflections, overrides,
---   statuses, term-ratings, custom-tags, notes, report-config
+--   modules, rubrics, custom-tags, report-config
 --
 -- onConflict: (teacher_id, course_id, data_key)
 -- ──────────────────────────────────────────────────────────
@@ -336,44 +459,8 @@ CREATE TABLE IF NOT EXISTS modules (
 );
 
 
--- ──────────────────────────────────────────────────────────
--- student_meta
--- Per-student-per-course metadata: flags (IEP, ELL, etc.),
--- goals, reflections, proficiency overrides, and assignment
--- statuses (excused / not submitted).
--- ──────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS student_meta (
-  student_id  TEXT NOT NULL,
-  course_id   TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
-  flags       JSONB DEFAULT '{}',
-  goals       JSONB DEFAULT '{}',
-  reflections JSONB DEFAULT '{}',
-  overrides   JSONB DEFAULT '{}',
-  statuses    JSONB DEFAULT '{}',
-  PRIMARY KEY (student_id, course_id)
-);
-
-
--- (Old normalized observations table removed —
---  replaced by Phase 2 normalized table above course_data)
-
-
--- ──────────────────────────────────────────────────────────
--- term_ratings
--- End-of-term learner profile ratings. One row per student
--- per term per course. dims holds per-dimension ratings;
--- narrative is the written comment.
--- ──────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS term_ratings (
-  course_id           TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
-  student_id          TEXT NOT NULL,
-  term_id             TEXT NOT NULL,
-  dims                JSONB DEFAULT '{}',
-  narrative           TEXT DEFAULT '',
-  mention_assessments TEXT[] DEFAULT '{}',
-  traits              JSONB DEFAULT '{}',
-  PRIMARY KEY (course_id, student_id, term_id)
-);
+-- (Old student_meta, observations, term_ratings tables removed —
+--  replaced by Phase 2-4 normalized tables above course_data)
 
 
 -- ──────────────────────────────────────────────────────────
@@ -557,23 +644,8 @@ CREATE POLICY "Teachers manage own modules"
   USING (course_id IN (SELECT id FROM courses WHERE teacher_id = auth.uid()));
 
 
--- ── student_meta ──────────────────────────────────────────
-ALTER TABLE student_meta ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Teachers manage own student meta"
-  ON student_meta FOR ALL
-  USING (course_id IN (SELECT id FROM courses WHERE teacher_id = auth.uid()));
-
-
--- (observations RLS defined inline with table definition above)
-
-
--- ── term_ratings ──────────────────────────────────────────
-ALTER TABLE term_ratings ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Teachers manage own term ratings"
-  ON term_ratings FOR ALL
-  USING (course_id IN (SELECT id FROM courses WHERE teacher_id = auth.uid()));
+-- (student_meta, observations, term_ratings, goals, reflections, overrides,
+--  statuses, student_notes, student_flags RLS defined inline with table definitions above)
 
 
 -- ── custom_tags ───────────────────────────────────────────
