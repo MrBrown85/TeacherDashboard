@@ -1824,6 +1824,50 @@ body.mobile-mode :focus:not(:focus-visible) { outline: none; }
 .m-wdg-narrative-text { font-size:13px; color:var(--text-2); line-height:1.4; margin-top:4px; }
 
 /* ═══════════════════════════════════════════════════════════════
+   CARD WIDGET EDITOR — Long-press customization sheet
+   ═══════════════════════════════════════════════════════════════ */
+.m-wdg-editor { padding:8px 0 24px; }
+.m-wdg-editor-header { display:flex; align-items:center; justify-content:space-between;
+  padding:0 16px 16px; }
+.m-wdg-editor-title { font-size:17px; font-weight:600; color:var(--text); }
+.m-wdg-editor-done { font-size:15px; font-weight:600; color:var(--active);
+  background:none; border:none; padding:4px 8px; cursor:pointer; }
+
+.m-wdg-editor-section-label { font-size:11px; font-weight:600; text-transform:uppercase;
+  letter-spacing:0.5px; color:var(--text-3); padding:12px 16px 6px; }
+
+.m-wdg-editor-list { padding:0 8px; }
+
+.m-wdg-editor-row { display:flex; align-items:center; gap:12px; padding:10px 8px;
+  border-radius:10px; transition:background 0.15s; }
+.m-wdg-editor-row[data-enabled="false"] { opacity:0.5; }
+
+.m-wdg-editor-drag { font-size:16px; color:var(--text-3); cursor:grab; padding:4px;
+  -webkit-tap-highlight-color:transparent; user-select:none; }
+.m-wdg-editor-drag-spacer { width:24px; }
+
+.m-wdg-editor-label { flex:1; font-size:15px; color:var(--text); }
+
+/* iOS-style toggle switch */
+.m-wdg-editor-toggle { width:44px; height:26px; border-radius:13px; border:none;
+  background:var(--bg-secondary); position:relative; cursor:pointer; padding:0;
+  transition:background 0.2s; flex-shrink:0; }
+.m-wdg-editor-toggle.m-wdg-toggle-on { background:var(--active); }
+.m-wdg-toggle-knob { width:22px; height:22px; border-radius:11px; background:#fff;
+  position:absolute; top:2px; left:2px; transition:transform 0.2s;
+  box-shadow:0 1px 3px rgba(0,0,0,0.15); }
+.m-wdg-toggle-on .m-wdg-toggle-knob { transform:translateX(18px); }
+
+/* Drag state */
+.m-wdg-row-dragging { background:var(--bg); box-shadow:0 4px 12px rgba(0,0,0,0.12);
+  z-index:10; position:relative; }
+
+/* Reset button */
+.m-wdg-editor-reset { display:block; width:100%; background:none; border:none;
+  color:var(--priority); font-size:14px; font-weight:500; padding:16px;
+  cursor:pointer; text-align:center; margin-top:8px; }
+
+/* ═══════════════════════════════════════════════════════════════
    SOCIAL MEDIA POST CARDS — Observation feed
    ═══════════════════════════════════════════════════════════════ */
 .m-post {
