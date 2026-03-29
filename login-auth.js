@@ -151,6 +151,6 @@ async function handleForgot() {
   }
 }
 
-/* ── Form submit listeners (replaces inline onsubmit handlers) ── */
+/* ── Form submit listeners ── */
 document.getElementById('form-signin').addEventListener('submit', handleSignIn);
 document.getElementById('form-signup').addEventListener('submit', handleSignUp);

@@ -22,8 +22,7 @@ export default async function handler(request, context) {
 
   // Generate a per-request nonce and inject into all script/style tags
   const nonce = crypto.randomUUID();
-  html = html.replace(/<script(?=[\s>])/gi, `<script nonce="${nonce}"`);
-  html = html.replace(/<style(?=[\s>])/gi, `<style nonce="${nonce}"`);
+  html = html.replace(/<(script|style)(?=[\s>])/gi, `<$1 nonce="${nonce}"`);
 
   // Build new headers without Content-Length (it changed after replacement)
   const headers = new Headers(response.headers);

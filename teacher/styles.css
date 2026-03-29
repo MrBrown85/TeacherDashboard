@@ -75,7 +75,6 @@
   --toast-success: #1a7a34;
 
   /* Z-index scale — use these instead of magic numbers */
-  --z-sticky:    10;    /* sticky headers, scroll shadows */
   --z-navbar:    50;    /* fixed nav bars */
   --z-fab:      100;    /* FABs, dropdowns, tooltips, tab nav */
   --z-modal:    200;    /* modal overlays */
