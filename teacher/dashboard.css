@@ -395,7 +395,7 @@
 .dist-tip {
   display:none; position:absolute; top:100%; left:50%; transform:translateX(-50%);
   margin-top:8px; padding:8px 12px; background:var(--surface); border:1px solid var(--divider-strong);
-  border-radius:8px; box-shadow:var(--shadow-md); z-index:100;
+  border-radius:8px; box-shadow:var(--shadow-md); z-index:var(--z-fab);
   min-width:140px; max-width:220px; white-space:nowrap;
 }
 .dist-tip-title {
@@ -889,7 +889,7 @@
 .cm-color-swatch-selected:hover { box-shadow:0 0 0 2px var(--surface), 0 0 0 3.5px var(--text-3); }
 .cm-color-palette {
   display:none; flex-wrap:wrap; gap:6px; padding:10px;
-  position:absolute; top:100%; right:0; z-index:100;
+  position:absolute; top:100%; right:0; z-index:var(--z-fab);
   background:var(--surface); border:1px solid var(--border);
   border-radius:12px; box-shadow:0 4px 16px rgba(0,0,0,0.12);
   width:186px; margin-top:4px;

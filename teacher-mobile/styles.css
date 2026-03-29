@@ -50,7 +50,7 @@ body.mobile-mode :focus:not(:focus-visible) { outline: none; }
   -webkit-backdrop-filter: blur(20px);
   border-top: 0.5px solid var(--divider-medium);
   flex-shrink: 0;
-  z-index: 100;
+  z-index: var(--z-fab);
 }
 
 .m-tab-item {
@@ -93,7 +93,7 @@ body.mobile-mode :focus:not(:focus-visible) { outline: none; }
   width: 1px;
   height: 1px;
   overflow: hidden;
-  z-index: 9999;
+  z-index: var(--z-skip);
 }
 .m-skip-nav:focus {
   position: fixed;
@@ -169,7 +169,7 @@ body.mobile-mode :focus:not(:focus-visible) { outline: none; }
 .m-nav-bar {
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: var(--z-navbar);
   background: var(--surface-glass);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -869,7 +869,7 @@ body.mobile-mode :focus:not(:focus-visible) { outline: none; }
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  z-index: 90;
+  z-index: var(--z-fab);
   -webkit-tap-highlight-color: transparent;
   transition: transform 0.15s, box-shadow 0.15s;
 }
@@ -886,7 +886,7 @@ body.mobile-mode :focus:not(:focus-visible) { outline: none; }
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.4);
-  z-index: 200;
+  z-index: var(--z-modal);
   opacity: 0;
   transition: opacity 0.3s;
 }
@@ -901,7 +901,7 @@ body.mobile-mode :focus:not(:focus-visible) { outline: none; }
   bottom: 0;
   background: var(--surface);
   border-radius: 12px 12px 0 0;
-  z-index: 210;
+  z-index: var(--z-sheet);
   transform: translateY(100%);
   transition: transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1);
   max-height: 90vh;
@@ -1350,7 +1350,7 @@ body.mobile-mode :focus:not(:focus-visible) { outline: none; }
   bottom: calc(60px + env(safe-area-inset-bottom, 0px));
   left: 16px;
   right: 16px;
-  z-index: 300;
+  z-index: var(--z-toast);
   pointer-events: none;
 }
 .m-toast-item {
@@ -1388,7 +1388,7 @@ body.mobile-mode :focus:not(:focus-visible) { outline: none; }
   top: env(safe-area-inset-top, 0px);
   left: 0;
   right: 0;
-  z-index: 500;
+  z-index: var(--z-banner);
   background: var(--late);
   color: #fff;
   text-align: center;
@@ -1631,7 +1631,7 @@ body.mobile-mode :focus:not(:focus-visible) { outline: none; }
    ═══════════════════════════════════════════════════════════════ */
 .m-loading-overlay {
   position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
-  background:var(--bg); z-index:9999;
+  background:var(--bg); z-index:var(--z-loading);
 }
 .m-loading-spinner {
   width:32px; height:32px; border:3px solid var(--border);
@@ -1641,7 +1641,7 @@ body.mobile-mode :focus:not(:focus-visible) { outline: none; }
 .m-loading-text { font-size:15px; color:var(--text-3); font-weight:500; }
 
 .m-pull-indicator {
-  position:fixed; top:0; left:0; right:0; z-index:9999;
+  position:fixed; top:0; left:0; right:0; z-index:var(--z-loading);
   display:flex; align-items:center; justify-content:center;
   height:0; overflow:hidden; transition:height 0.2s;
   background:var(--bg);

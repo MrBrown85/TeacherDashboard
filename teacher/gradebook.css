@@ -318,7 +318,7 @@ th.gb-group-alt { background-color: rgba(0,0,0,0.03); }
 /* Student popover — fixed-position tooltip appended to body */
 .gb-name-wrap { position:relative; }
 #gb-tooltip {
-  display:none; position:fixed; z-index:9999;
+  display:none; position:fixed; z-index:var(--z-popover);
   background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
   box-shadow:0 6px 24px rgba(0,0,0,0.15); padding:10px 14px;
   white-space:nowrap; min-width:200px; pointer-events:none;
@@ -436,7 +436,7 @@ th.gb-group-alt { background-color: rgba(0,0,0,0.03); }
 
 /* Hover card tooltip (appended to body to escape overflow:hidden) */
 .gb-colhead-hover-card {
-  display:none; position:fixed; z-index:10000;
+  display:none; position:fixed; z-index:var(--z-top);
   transform:translateX(-50%);
   background:var(--surface); border:1px solid var(--border);
   border-radius:var(--radius); padding:10px 12px;
@@ -651,7 +651,7 @@ th.gb-group-alt { background-color: rgba(0,0,0,0.03); }
 
 /* Context menus */
 .gb-ctx-menu {
-  position:fixed; z-index:10000; min-width:180px;
+  position:fixed; z-index:var(--z-top); min-width:180px;
   background:var(--surface); border:1px solid var(--border);
   border-radius:var(--radius); box-shadow:0 4px 20px rgba(0,0,0,0.15);
   padding:4px 0; font-family:var(--font-base); font-size:var(--text-sm);
@@ -667,7 +667,7 @@ th.gb-group-alt { background-color: rgba(0,0,0,0.03); }
 
 /* New assignment popover */
 .gb-add-popover {
-  position:fixed; z-index:10001; width:360px;
+  position:fixed; z-index:var(--z-top); width:360px;
   background:var(--surface); border:1px solid var(--border);
   border-radius:var(--radius); box-shadow:0 8px 32px rgba(0,0,0,0.18);
   padding:16px; font-family:var(--font-base);

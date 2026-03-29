@@ -6,7 +6,7 @@
 .ti-overlay {
   position: fixed; inset: 0;
   background: rgba(0,0,0,0.55);
-  z-index: 10003;
+  z-index: var(--z-top);
   display: flex; align-items: center; justify-content: center;
   animation: tiFadeIn var(--duration-fast) var(--ease-out);
 }

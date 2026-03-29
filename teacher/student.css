@@ -316,7 +316,7 @@
 
 /* ── Edit Student Modal ──────────────────────────────────── */
 .edit-modal-overlay {
-  position:fixed; inset:0; z-index:10000;
+  position:fixed; inset:0; z-index:var(--z-top);
   background:rgba(0,0,0,0.3); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
   display:flex; align-items:center; justify-content:center;
 }
