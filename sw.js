@@ -1,6 +1,6 @@
 // IMPORTANT: Increment the version number when deploying new app code
 // This ensures users get the latest files
-const CACHE_NAME = 'fullvision-v17';
+const CACHE_NAME = 'fullvision-v18';
 
 // All app files to pre-cache on install
 const PRECACHE_URLS = [
@@ -45,6 +45,7 @@ const PRECACHE_URLS = [
   '/teacher-mobile/tab-students.js',
   '/teacher-mobile/tab-observe.js',
   '/teacher-mobile/tab-grade.js',
+  '/teacher-mobile/card-stack.js',
   // Vendor & data
   '/vendor/supabase.min.js',
   '/curriculum_data.js',
