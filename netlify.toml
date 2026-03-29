@@ -23,7 +23,7 @@
     Cache-Control = "no-cache"
 
 [[edge_functions]]
-  path = "/**/*.html"
+  path = "/*"
   function = "inject-env"
 
 # Root → login

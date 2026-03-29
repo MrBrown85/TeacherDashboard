@@ -78,7 +78,7 @@
     _pullToRefreshInitialized = true;
     document.addEventListener('touchstart', function(e) {
       var screen = e.target.closest('.m-screen-content');
-      if (!screen || screen.scrollTop > 0) return;
+      if (!screen || screen.scrollTop > 1) return;
       _pullStartY = e.touches[0].clientY;
       _pulling = true;
     }, { passive: true });

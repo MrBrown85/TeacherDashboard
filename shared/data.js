@@ -860,10 +860,10 @@ var _VISIBILITY_DEBOUNCE = 3000; // Don't re-fetch more than once per 3 seconds
 function _initVisibilityRefresh() {
   document.addEventListener('visibilitychange', function() {
     if (document.visibilityState !== 'visible') return;
-    if (!_useSupabase || !_teacherId) return;
     var now = Date.now();
     if (now - _lastVisibilityRefresh < _VISIBILITY_DEBOUNCE) return;
     _lastVisibilityRefresh = now;
+    // _refreshFromSupabase handles re-establishing lost connections internally
     _refreshFromSupabase();
   });
 }
@@ -875,6 +875,20 @@ async function _refreshFromSupabase() {
 
   var sb = getSupabase();
   if (!sb) return;
+
+  // Re-establish Supabase connection if it was lost (e.g. transient error during boot)
+  if (!_teacherId || !_useSupabase) {
+    try {
+      var sess = await sb.auth.getSession();
+      if (sess && sess.data && sess.data.session && sess.data.session.user) {
+        _teacherId = sess.data.session.user.id;
+        _useSupabase = true;
+        _initRealtimeSync(); // start live updates if skipped during boot
+      } else {
+        return; // No valid session — can't refresh
+      }
+    } catch (e) { return; }
+  }
 
   try {
     var changed = false;
