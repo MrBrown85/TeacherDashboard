@@ -348,6 +348,8 @@ window.PageStudent = (function() {
     var sections = getSections(cid);
     var allTags = getAllTags(cid);
     var assessments = getAssessments(cid);
+    var assessMap = {};
+    assessments.forEach(function(a) { assessMap[a.id] = a; });
     var overall = getOverallProficiency(cid, studentId);
     var overallRounded = Math.round(overall);
     var profColor = PROF_COLORS[overallRounded] || PROF_COLORS[0];
@@ -597,7 +599,7 @@ window.PageStudent = (function() {
           html += '<div style="font-size:0.75rem;color:var(--text-3);padding:4px 0;">No evidence yet</div>';
         } else {
           tagScores.forEach(function(sc) {
-            var assess = assessments.find(function(a) { return a.id === sc.assessmentId; });
+            var assess = assessMap[sc.assessmentId];
             var sColor = PROF_COLORS[sc.score] || PROF_COLORS[0];
             var href = assess ? '#/assignments?course=' + cid + '&open=' + assess.id + '&student=' + studentId : '';
             var title = assess ? esc(assess.title) : 'Unknown';
