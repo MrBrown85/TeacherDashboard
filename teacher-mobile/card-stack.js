@@ -79,14 +79,7 @@ window.MCardStack = (function() {
         counter.className = 'm-card-counter';
         containerEl.appendChild(counter);
       }
-      // Use a span for text so appended elements (e.g. customize button) survive updates
-      var span = counter.querySelector('.m-card-counter-text');
-      if (!span) {
-        span = document.createElement('span');
-        span.className = 'm-card-counter-text';
-        counter.insertBefore(span, counter.firstChild);
-      }
-      span.textContent = (_idx + 1) + ' of ' + _cards.length;
+      counter.textContent = (_idx + 1) + ' of ' + _cards.length;
     }
 
     // --- Touch handlers ---

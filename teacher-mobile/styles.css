@@ -1696,18 +1696,16 @@ body.mobile-mode :focus:not(:focus-visible) { outline: none; }
 .m-card-counter {
   text-align:center; padding:8px 0; font-size:13px; color:var(--text-3);
   font-weight:500; position:absolute; bottom:-28px; left:0; right:0;
-  display:flex; align-items:center; justify-content:center; gap:6px;
 }
-.m-card-customize-btn {
-  background:none; border:none; font-size:13px; color:var(--active);
-  padding:4px 0; cursor:pointer; line-height:1; font-weight:500;
-  -webkit-tap-highlight-color:transparent;
-}
-.m-card-customize-btn:active { opacity:0.5; }
 
 /* Student card content inside stack */
-.m-scard { padding:20px; display:flex; flex-direction:column; height:100%; box-sizing:border-box; }
+.m-scard { padding:20px; display:flex; flex-direction:column; height:100%; box-sizing:border-box; position:relative; }
 .m-scard-hero { display:flex; align-items:center; gap:14px; margin-bottom:16px; }
+.m-scard-customize { position:absolute; top:8px; right:8px; background:none; border:none;
+  color:var(--text-3); padding:10px; cursor:pointer; border-radius:50%;
+  -webkit-tap-highlight-color:transparent; line-height:0; z-index:1;
+  opacity:0.5; }
+.m-scard-customize:active { background:var(--bg-secondary); opacity:1; }
 .m-scard-avatar {
   width:64px; height:64px; border-radius:50%; color:#fff;
   display:flex; align-items:center; justify-content:center;

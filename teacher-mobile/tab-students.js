@@ -146,17 +146,6 @@ window.MStudents = (function() {
       onSwipe: function() { /* no-op, browsing only */ }
     });
 
-    // Add gear icon to counter for widget editor access
-    var counter = container.querySelector('.m-card-counter');
-    if (counter) {
-      var gear = document.createElement('button');
-      gear.className = 'm-card-customize-btn';
-      gear.setAttribute('data-action', 'm-open-widget-editor');
-      gear.setAttribute('aria-label', 'Customize card layout');
-      gear.textContent = 'Edit';
-      counter.appendChild(gear);
-    }
-
     _syncViewVisibility(true);
 
     // Long-press to edit card layout
