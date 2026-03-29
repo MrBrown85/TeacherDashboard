@@ -254,22 +254,24 @@ function _hasDataChanged(a, b) {
   return JSON.stringify(a) !== JSON.stringify(b);
 }
 
+// Lazily built sets for table lookups (avoids TDZ — constants declared later)
+var _cidKeyedTablesCache = null;
+function _getCidKeyedTables() {
+  if (!_cidKeyedTablesCache) _cidKeyedTablesCache = new Set(Object.values(_NORMALIZED_TABLES));
+  return _cidKeyedTablesCache;
+}
+var _configTableSetCache = null;
+function _getConfigTableSet() {
+  if (!_configTableSetCache) _configTableSetCache = new Set(Object.values(_CONFIG_TABLES));
+  return _configTableSetCache;
+}
+
 function _syncKey(table, key) {
-  if (table === 'course_data') return table + ':' + key.cid + ':' + key.dataKey;
-  if (table === 'scores') return 'scores:' + key.cid;
+  if (table === 'course_data') return 'course_data:' + key.cid + ':' + key.dataKey;
   if (table === 'scores_row') return 'scores_row:' + key.cid + ':' + key.sid + ':' + key.aid + ':' + key.tid;
-  if (table === 'observations') return 'observations:' + key.cid;
   if (table === 'obs_row') return 'obs_row:' + key.cid + ':' + key.obId;
   if (table === 'obs_delete') return 'obs_delete:' + key.cid + ':' + key.obId;
-  if (table === 'assessments') return 'assessments:' + key.cid;
-  if (table === 'students_table') return 'students_table:' + key.cid;
-  if (table === 'goals') return 'goals:' + key.cid;
-  if (table === 'reflections') return 'reflections:' + key.cid;
-  if (table === 'overrides') return 'overrides:' + key.cid;
-  if (table === 'statuses') return 'statuses:' + key.cid;
-  if (table === 'student_notes') return 'student_notes:' + key.cid;
-  if (table === 'student_flags') return 'student_flags:' + key.cid;
-  if (table === 'term_ratings') return 'term_ratings:' + key.cid;
+  if (_getCidKeyedTables().has(table)) return table + ':' + key.cid;
   return table + ':' + key;
 }
 
@@ -405,6 +407,15 @@ async function _doSync(table, key, data) {
           .abortSignal(controller.signal);
         if (insErr) throw insErr;
       }
+    } else if (_getConfigTableSet().has(table)) {
+      // Config tables: single JSONB blob per course, upsert
+      const { error } = await sb.from(table).upsert({
+        teacher_id: _teacherId,
+        course_id: key.cid,
+        data: data,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'teacher_id,course_id' }).abortSignal(controller.signal);
+      if (error) throw error;
     } else if (table === 'course_data') {
       const { error } = await sb.from('course_data').upsert({
         teacher_id: _teacherId,
@@ -827,6 +838,29 @@ function _initRealtimeSync() {
       });
     });
 
+    // Config tables: on any change, update cache from JSONB data column
+    Object.keys(_CONFIG_TABLES).forEach(function(cfgField) {
+      var cfgTblName = _CONFIG_TABLES[cfgField];
+      _realtimeChannel = _realtimeChannel.on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: cfgTblName,
+        filter: 'teacher_id=eq.' + _teacherId
+      }, function(payload) {
+        var row = payload.new || payload.old;
+        if (!row || !row.course_id) return;
+        var cid = row.course_id;
+        if (payload.eventType === 'DELETE') {
+          _cache[cfgField][cid] = _defaultForField(cfgField);
+        } else {
+          var newData = payload.new.data;
+          if (!_hasDataChanged(newData, _cache[cfgField][cid])) return;
+          _cache[cfgField][cid] = newData;
+        }
+        _invalidateAndRerender();
+      });
+    });
+
     _realtimeChannel.subscribe();
   } catch (e) {
     console.warn('Realtime sync not available:', e);
@@ -916,13 +950,17 @@ async function _refreshFromSupabase() {
       return q;
     }
     var [scoreResult, obsResult, assessResult, studResult,
-         goalsRefRes, reflRefRes, overRefRes, statusRefRes, notesRefRes, flagsRefRes, trRefRes] = await Promise.all([
+         goalsRefRes, reflRefRes, overRefRes, statusRefRes, notesRefRes, flagsRefRes, trRefRes,
+         cfgLmRefRes, cfgCourseRefRes, cfgModRefRes, cfgRubRefRes, cfgTagRefRes, cfgRepRefRes] = await Promise.all([
       _rq('scores', 'updated_at'), _rq('observations', 'modified_at'),
       _rq('assessments', 'updated_at'), _rq('students', 'updated_at'),
       _rq('goals', 'updated_at'), _rq('reflections', 'updated_at'),
       _rq('overrides', 'updated_at'), _rq('statuses', 'updated_at'),
       _rq('student_notes', 'updated_at'), _rq('student_flags', 'updated_at'),
-      _rq('term_ratings', 'updated_at')
+      _rq('term_ratings', 'updated_at'),
+      _rq('config_learning_maps', 'updated_at'), _rq('config_course', 'updated_at'),
+      _rq('config_modules', 'updated_at'), _rq('config_rubrics', 'updated_at'),
+      _rq('config_custom_tags', 'updated_at'), _rq('config_report', 'updated_at')
     ]);
 
     if (!scoreResult.error && scoreResult.data && scoreResult.data.length > 0) {
@@ -997,6 +1035,19 @@ async function _refreshFromSupabase() {
       }
     }
 
+    // Refresh config tables
+    var _cfgRefResults = { learningMaps: cfgLmRefRes, courseConfigs: cfgCourseRefRes, modules: cfgModRefRes, rubrics: cfgRubRefRes, customTags: cfgTagRefRes, reportConfig: cfgRepRefRes };
+    for (var _crf in _CONFIG_TABLES) {
+      var _crRes = _cfgRefResults[_crf];
+      if (!_crRes.error && _crRes.data && _crRes.data.length > 0) {
+        var newCfg = _crRes.data[0].data;
+        if (_hasDataChanged(newCfg, _cache[_crf][cid])) {
+          _cache[_crf][cid] = newCfg;
+          changed = true;
+        }
+      }
+    }
+
     if (changed) {
       _invalidateAndRerender();
     }
@@ -1034,7 +1085,6 @@ async function _doInitData(cid) {
       const byKey = {};
       (rows || []).forEach(r => { byKey[r.data_key] = r.data; });
 
-      // Populate cache from Supabase rows (except normalized tables)
       // Populate cache from course_data rows (only non-normalized fields)
       for (const [field, dataKey] of Object.entries(_DATA_KEYS)) {
         if (_NORMALIZED_TABLES[field]) continue;
@@ -1043,10 +1093,14 @@ async function _doInitData(cid) {
 
       // Load all normalized tables in parallel
       const _q = (tbl) => sb.from(tbl).select('*').eq('teacher_id', _teacherId).eq('course_id', cid);
-      const [scoreRes, obsRes, assessRes, studentRes, goalsRes, reflRes, overRes, statusRes, notesRes, flagsRes, trRes] = await Promise.all([
+      const [scoreRes, obsRes, assessRes, studentRes,
+             goalsRes, reflRes, overRes, statusRes, notesRes, flagsRes, trRes,
+             cfgLmRes, cfgCourseRes, cfgModRes, cfgRubRes, cfgTagRes, cfgRepRes] = await Promise.all([
         _q('scores'), _q('observations'), _q('assessments'), _q('students'),
         _q('goals'), _q('reflections'), _q('overrides'), _q('statuses'),
-        _q('student_notes'), _q('student_flags'), _q('term_ratings')
+        _q('student_notes'), _q('student_flags'), _q('term_ratings'),
+        _q('config_learning_maps'), _q('config_course'), _q('config_modules'),
+        _q('config_rubrics'), _q('config_custom_tags'), _q('config_report')
       ]);
 
       _cache.scores[cid] = scoreRes.error
@@ -1072,6 +1126,19 @@ async function _doInitData(cid) {
           _cache[_mf][cid] = _defaultForField(_mf);
         } else {
           _cache[_mf][cid] = _BULK_LOAD_CONVERTERS[_tbl](_res.data);
+        }
+      }
+
+      // Config tables: single JSONB blob per course
+      var _cfgResults = { learningMaps: cfgLmRes, courseConfigs: cfgCourseRes, modules: cfgModRes, rubrics: cfgRubRes, customTags: cfgTagRes, reportConfig: cfgRepRes };
+      for (var _cf in _CONFIG_TABLES) {
+        var _cfTbl = _CONFIG_TABLES[_cf];
+        var _cfRes = _cfgResults[_cf];
+        if (_cfRes.error) {
+          console.warn('Failed to load ' + _cfTbl + ' for', cid, _cfRes.error);
+          _cache[_cf][cid] = _defaultForField(_cf);
+        } else {
+          _cache[_cf][cid] = (_cfRes.data && _cfRes.data.length > 0) ? _cfRes.data[0].data : _defaultForField(_cf);
         }
       }
 
@@ -1216,6 +1283,16 @@ const _MEDIUM_FREQ_TABLES = {
   termRatings: 'term_ratings'
 };
 
+/* Config tables: single JSONB blob per course, same shape as course_data but with teacher_id PK */
+const _CONFIG_TABLES = {
+  learningMaps: 'config_learning_maps',
+  courseConfigs: 'config_course',
+  modules: 'config_modules',
+  rubrics: 'config_rubrics',
+  customTags: 'config_custom_tags',
+  reportConfig: 'config_report'
+};
+
 /* Fields stored in their own normalized tables instead of course_data */
 const _NORMALIZED_TABLES = {
   scores: 'scores',
@@ -1228,7 +1305,13 @@ const _NORMALIZED_TABLES = {
   statuses: 'statuses',
   notes: 'student_notes',
   flags: 'student_flags',
-  termRatings: 'term_ratings'
+  termRatings: 'term_ratings',
+  learningMaps: 'config_learning_maps',
+  courseConfigs: 'config_course',
+  modules: 'config_modules',
+  rubrics: 'config_rubrics',
+  customTags: 'config_custom_tags',
+  reportConfig: 'config_report'
 };
 
 /* Helper: write to cache + sync */

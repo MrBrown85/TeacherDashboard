@@ -23,12 +23,17 @@
 --      between app blob format and normalized rows on the fly.
 --      All include teacher_id in the PK for co-teaching readiness.
 --
---   B) JSONB document store (course_data + teacher_config)
---      Remaining data types still stored as JSONB blobs per
---      teacher+course. Being migrated incrementally (Phases 4-6).
+--   B) Normalized medium-frequency tables (goals, reflections, overrides,
+--      statuses, student_notes, student_flags, term_ratings)
+--      Per-entity rows with delete-all + bulk-insert sync pattern.
 --
---   C) Legacy normalized tables (courses, rubrics, modules, etc.)
---      These exist for future migration phases and reporting.
+--   C) Config tables (config_learning_maps, config_course, config_modules,
+--      config_rubrics, config_custom_tags, config_report)
+--      Single JSONB blob per teacher+course. Upsert sync pattern.
+--
+--   D) JSONB document store (course_data + teacher_config)
+--      course_data is now empty — all data migrated to A/B/C.
+--      teacher_config stores global config (courses, preferences).
 -- ============================================================
 
 
@@ -318,14 +323,10 @@ CREATE POLICY "Teachers access own term_ratings"
 
 
 -- ──────────────────────────────────────────────────────────
--- course_data  [PRIMARY RUNTIME TABLE]
+-- course_data  [LEGACY — being phased out]
 -- Generic key-value store scoped to teacher + course.
--- gb-data.js upserts remaining config data here as JSONB.
--- All high/medium-frequency data now in normalized tables.
---
--- data_key values (one row per key per course per teacher):
---   learningmap, courseconfig,
---   modules, rubrics, custom-tags, report-config
+-- All data has been migrated to normalized/config tables.
+-- Retained temporarily for Phase 6 cleanup.
 --
 -- onConflict: (teacher_id, course_id, data_key)
 -- ──────────────────────────────────────────────────────────
@@ -377,126 +378,110 @@ CREATE TABLE IF NOT EXISTS error_logs (
 
 
 -- ════════════════════════════════════════════════════════════
--- NORMALIZED TABLES
--- These mirror the JSONB data for future query/reporting use.
--- Included for completeness; the app currently reads/writes
--- via the course_data JSONB store above.
+-- CONFIG TABLES  [NORMALIZED — Phase 5]
+-- Single JSONB blob per teacher+course. Config changes rarely,
+-- so a simple data column is efficient. teacher_id in PK for
+-- co-teaching readiness.
 -- ════════════════════════════════════════════════════════════
 
-
 -- ──────────────────────────────────────────────────────────
--- courses
--- One row per course. teacher_id links to the owning teacher.
--- Fields match the COURSES global object in the app.
--- ──────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS courses (
-  id                    TEXT PRIMARY KEY,
-  teacher_id            UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  name                  TEXT NOT NULL,
-  grade_level           TEXT DEFAULT '',
-  description           TEXT DEFAULT '',
-  grading_system        TEXT DEFAULT 'proficiency',
-  calc_method           TEXT DEFAULT 'mostRecent',
-  decay_weight          REAL DEFAULT 0.65,
-  curriculum_tags       TEXT[] DEFAULT '{}',
-  report_as_percentage  BOOLEAN DEFAULT false,
-  created_at            TIMESTAMPTZ DEFAULT now()
-);
-
-
--- ──────────────────────────────────────────────────────────
--- course_config
--- Per-course calculation settings: category weights, grading
--- scale overrides, etc. Stored as a single JSONB blob.
--- ──────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS course_config (
-  course_id TEXT PRIMARY KEY REFERENCES courses(id) ON DELETE CASCADE,
-  config    JSONB DEFAULT '{}'
-);
-
-
--- ──────────────────────────────────────────────────────────
--- learning_maps
+-- config_learning_maps  [Phase 5]
 -- Custom curriculum structure per course. Contains subjects
 -- (top-level groupings) and sections/tags (learning outcomes).
 -- ──────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS learning_maps (
-  course_id TEXT PRIMARY KEY REFERENCES courses(id) ON DELETE CASCADE,
-  map_data  JSONB NOT NULL DEFAULT '{}'
+CREATE TABLE IF NOT EXISTS config_learning_maps (
+  teacher_id UUID        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  course_id  TEXT        NOT NULL,
+  data       JSONB       NOT NULL DEFAULT '{}',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (teacher_id, course_id)
 );
-
-
--- (Old normalized students, assessments, scores tables removed —
---  replaced by Phase 1-3 normalized tables above course_data)
-
+ALTER TABLE config_learning_maps ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Teachers access own config_learning_maps"
+  ON config_learning_maps FOR ALL USING (auth.uid() = teacher_id)
+  WITH CHECK (auth.uid() = teacher_id);
 
 -- ──────────────────────────────────────────────────────────
--- rubrics
--- Reusable scoring rubrics per course. criteria is a JSONB
--- array of {name, levels: [{label, description, score}]}.
+-- config_course  [Phase 5]
+-- Per-course calculation settings: category weights, grading
+-- scale overrides, etc.
 -- ──────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS rubrics (
-  id        TEXT NOT NULL,
-  course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
-  name      TEXT NOT NULL,
-  criteria  JSONB DEFAULT '[]',
-  PRIMARY KEY (id, course_id)
+CREATE TABLE IF NOT EXISTS config_course (
+  teacher_id UUID        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  course_id  TEXT        NOT NULL,
+  data       JSONB       NOT NULL DEFAULT '{}',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (teacher_id, course_id)
 );
-
+ALTER TABLE config_course ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Teachers access own config_course"
+  ON config_course FOR ALL USING (auth.uid() = teacher_id)
+  WITH CHECK (auth.uid() = teacher_id);
 
 -- ──────────────────────────────────────────────────────────
--- modules
+-- config_modules  [Phase 5]
 -- Teaching units/modules for grouping assessments.
--- color is a hex string; sort_order controls display order.
 -- ──────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS modules (
-  id         TEXT NOT NULL,
-  course_id  TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
-  name       TEXT NOT NULL,
-  color      TEXT DEFAULT '#007AFF',
-  sort_order INTEGER DEFAULT 0,
-  PRIMARY KEY (id, course_id)
+CREATE TABLE IF NOT EXISTS config_modules (
+  teacher_id UUID        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  course_id  TEXT        NOT NULL,
+  data       JSONB       NOT NULL DEFAULT '[]',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (teacher_id, course_id)
 );
-
-
--- (Old student_meta, observations, term_ratings tables removed —
---  replaced by Phase 2-4 normalized tables above course_data)
-
+ALTER TABLE config_modules ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Teachers access own config_modules"
+  ON config_modules FOR ALL USING (auth.uid() = teacher_id)
+  WITH CHECK (auth.uid() = teacher_id);
 
 -- ──────────────────────────────────────────────────────────
--- custom_tags
+-- config_rubrics  [Phase 5]
+-- Reusable scoring rubrics per course.
+-- ──────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS config_rubrics (
+  teacher_id UUID        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  course_id  TEXT        NOT NULL,
+  data       JSONB       NOT NULL DEFAULT '[]',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (teacher_id, course_id)
+);
+ALTER TABLE config_rubrics ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Teachers access own config_rubrics"
+  ON config_rubrics FOR ALL USING (auth.uid() = teacher_id)
+  WITH CHECK (auth.uid() = teacher_id);
+
+-- ──────────────────────────────────────────────────────────
+-- config_custom_tags  [Phase 5]
 -- Teacher-created observation dimension tags per course.
--- Stored as a JSONB array of tag objects.
 -- ──────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS custom_tags (
-  course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
-  tags      JSONB DEFAULT '[]',
-  PRIMARY KEY (course_id)
+CREATE TABLE IF NOT EXISTS config_custom_tags (
+  teacher_id UUID        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  course_id  TEXT        NOT NULL,
+  data       JSONB       NOT NULL DEFAULT '[]',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (teacher_id, course_id)
 );
-
+ALTER TABLE config_custom_tags ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Teachers access own config_custom_tags"
+  ON config_custom_tags FOR ALL USING (auth.uid() = teacher_id)
+  WITH CHECK (auth.uid() = teacher_id);
 
 -- ──────────────────────────────────────────────────────────
--- report_config
+-- config_report  [Phase 5]
 -- Per-course report generation settings (which sections to
 -- include, comment templates, layout options, etc.).
 -- ──────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS report_config (
-  course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
-  config    JSONB DEFAULT '{}',
-  PRIMARY KEY (course_id)
+CREATE TABLE IF NOT EXISTS config_report (
+  teacher_id UUID        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  course_id  TEXT        NOT NULL,
+  data       JSONB       NOT NULL DEFAULT '{}',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (teacher_id, course_id)
 );
-
-
--- ──────────────────────────────────────────────────────────
--- grading_scales
--- Per-course grading scale overrides. Allows teachers to
--- customize proficiency level labels and boundaries.
--- ──────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS grading_scales (
-  course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
-  scale     JSONB DEFAULT '{}',
-  PRIMARY KEY (course_id)
-);
+ALTER TABLE config_report ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Teachers access own config_report"
+  ON config_report FOR ALL USING (auth.uid() = teacher_id)
+  WITH CHECK (auth.uid() = teacher_id);
 
 
 -- ════════════════════════════════════════════════════════════
@@ -589,87 +574,10 @@ CREATE POLICY "Service role can read all errors"
   USING (true);
 
 
--- ── courses ───────────────────────────────────────────────
-ALTER TABLE courses ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Teachers see own courses"
-  ON courses FOR SELECT
-  USING (teacher_id = auth.uid());
-
-CREATE POLICY "Teachers create own courses"
-  ON courses FOR INSERT
-  WITH CHECK (teacher_id = auth.uid());
-
-CREATE POLICY "Teachers update own courses"
-  ON courses FOR UPDATE
-  USING (teacher_id = auth.uid());
-
-CREATE POLICY "Teachers delete own courses"
-  ON courses FOR DELETE
-  USING (teacher_id = auth.uid());
-
-
--- ── course_config ─────────────────────────────────────────
-ALTER TABLE course_config ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Teachers manage own course config"
-  ON course_config FOR ALL
-  USING (course_id IN (SELECT id FROM courses WHERE teacher_id = auth.uid()));
-
-
--- ── learning_maps ─────────────────────────────────────────
-ALTER TABLE learning_maps ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Teachers manage own learning maps"
-  ON learning_maps FOR ALL
-  USING (course_id IN (SELECT id FROM courses WHERE teacher_id = auth.uid()));
-
-
--- (students, assessments, scores RLS defined inline with table definitions above)
-
-
--- ── rubrics ───────────────────────────────────────────────
-ALTER TABLE rubrics ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Teachers manage own rubrics"
-  ON rubrics FOR ALL
-  USING (course_id IN (SELECT id FROM courses WHERE teacher_id = auth.uid()));
-
-
--- ── modules ───────────────────────────────────────────────
-ALTER TABLE modules ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Teachers manage own modules"
-  ON modules FOR ALL
-  USING (course_id IN (SELECT id FROM courses WHERE teacher_id = auth.uid()));
-
-
--- (student_meta, observations, term_ratings, goals, reflections, overrides,
---  statuses, student_notes, student_flags RLS defined inline with table definitions above)
-
-
--- ── custom_tags ───────────────────────────────────────────
-ALTER TABLE custom_tags ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Teachers manage own custom tags"
-  ON custom_tags FOR ALL
-  USING (course_id IN (SELECT id FROM courses WHERE teacher_id = auth.uid()));
-
-
--- ── report_config ─────────────────────────────────────────
-ALTER TABLE report_config ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Teachers manage own report config"
-  ON report_config FOR ALL
-  USING (course_id IN (SELECT id FROM courses WHERE teacher_id = auth.uid()));
-
-
--- ── grading_scales ────────────────────────────────────────
-ALTER TABLE grading_scales ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Teachers manage own grading scales"
-  ON grading_scales FOR ALL
-  USING (course_id IN (SELECT id FROM courses WHERE teacher_id = auth.uid()));
+-- (Legacy tables courses, course_config, learning_maps, rubrics, modules,
+--  custom_tags, report_config, grading_scales removed in Phase 5.
+--  Replaced by config_* tables with teacher_id PK. RLS policies are
+--  defined inline with the config table definitions above.)
 
 
 -- ════════════════════════════════════════════════════════════
