@@ -4,18 +4,18 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Strict-Transport-Security: max-age=31536000; includeSubDomains
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self' https://*.supabase.co https://*.nsvcs.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.nsvcs.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'
 
 # Cache JS files for 1 hour
-/*.js
+/**/*.js
   Cache-Control: public, max-age=3600
 
 # Cache CSS for 1 hour
-/*.css
+/**/*.css
   Cache-Control: public, max-age=3600
 
 # HTML pages — don't cache
-/*.html
+/**/*.html
   Cache-Control: no-cache
 
 # Curriculum data — cache for 1 day
