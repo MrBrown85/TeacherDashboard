@@ -1,10 +1,9 @@
 User-agent: *
-Disallow: /app.html
-Disallow: /student.html
-Disallow: /settings.html
-Disallow: /spreadsheet.html
-Disallow: /observations.html
-Disallow: /reports.html
+Disallow: /teacher/
+Disallow: /teacher-mobile/
+Disallow: /shared/
+Disallow: /vendor/
+Disallow: /student/
+Disallow: /parent/
 
 Allow: /login.html
-Allow: /index.html
