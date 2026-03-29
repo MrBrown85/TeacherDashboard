@@ -1,6 +1,6 @@
 // IMPORTANT: Increment the version number when deploying new app code
 // This ensures users get the latest files
-const CACHE_NAME = 'fullvision-v20';
+const CACHE_NAME = 'fullvision-v21';
 
 // All app files to pre-cache on install
 const PRECACHE_URLS = [
@@ -76,7 +76,7 @@ self.addEventListener('activate', event => {
 
 // Fetch strategy:
 // - HTML pages: Network first, fall back to cache (always get latest)
-// - JS/CSS files: Cache first, fall back to network (fast loads)
+// - JS/CSS files: Network first, fall back to cache (always get latest)
 // - Supabase API calls: Network only (never cache data)
 // - Curriculum JSON: Cache first (rarely changes)
 self.addEventListener('fetch', event => {

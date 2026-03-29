@@ -30,6 +30,10 @@
       console.error('Supabase CDN not loaded. Ensure the CDN script tag appears before gb-supabase.js.');
       return null;
     }
+    if (!SUPABASE_URL || !SUPABASE_KEY || SUPABASE_URL.startsWith('__')) {
+      console.error('Supabase credentials missing. Check environment variables.');
+      return null;
+    }
     window._supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     return window._supabase;
   }
