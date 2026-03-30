@@ -579,13 +579,13 @@
 /* ── Full-bleed 3-column workboard ── */
 .tq-wrap {
   display:grid; grid-template-columns:1fr 1fr 1fr;
-  grid-template-rows:auto 1fr auto auto;
+  grid-template-rows:auto 1fr 260px auto;
   grid-template-areas:
     "header  header  header"
     "rate    data    write"
     "rate    obs     obs"
     "footer  footer  footer";
-  gap:12px; padding:12px 2px 4px; min-height:calc(100vh - 110px);
+  gap:12px; padding:12px 2px 4px; height:calc(100vh - 110px);
 }
 
 /* ── Header bar — grid-area override for shared student header ── */
@@ -616,6 +616,7 @@
 
 /* ── Column 1: Rate ── */
 .tq-col-rate { grid-area:rate; display:flex; flex-direction:column; gap:14px; }
+.tq-col-rate > .tq-panel { flex:1; min-height:0; overflow-y:auto; }
 
 /* Dimension rows — stacked label + segmented control */
 .tq-dim-row {
