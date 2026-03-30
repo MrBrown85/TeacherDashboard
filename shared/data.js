@@ -111,7 +111,7 @@ let _initPromise = null;  // dedup concurrent initData calls
    The delete-all + insert-all sync pattern causes Realtime to echo DELETE events
    that temporarily wipe the in-memory cache before the INSERTs arrive. */
 const _echoGuard = {};  // key: "field:cid" → expiry timestamp
-const _ECHO_GUARD_MS = 8000;  // suppress echoes for 8s after save
+const _ECHO_GUARD_MS = 15000;  // suppress echoes for 15s after save (must exceed _SYNC_TIMEOUT_MS)
 
 function _setEchoGuard(field, cid) {
   _echoGuard[field + ':' + cid] = Date.now() + _ECHO_GUARD_MS;
@@ -318,6 +318,12 @@ function _syncToSupabase(table, key, data) {
     if (_pendingWrites.has(sk)) {
       const next = _pendingWrites.get(sk);
       _pendingWrites.delete(sk);
+      // Refresh echo guard so the queued sync's Realtime echoes are suppressed
+      if (next.key && next.key.cid) {
+        for (var _f in _NORMALIZED_TABLES) {
+          if (_NORMALIZED_TABLES[_f] === next.table) { _setEchoGuard(_f, next.key.cid); break; }
+        }
+      }
       _syncToSupabase(next.table, next.key, next.data);
     }
   });
@@ -650,6 +656,34 @@ function _initRealtimeSync() {
   var sb = getSupabase();
   if (!sb) return;
 
+  /* Debounced re-fetch for high-frequency tables.
+     Instead of processing individual DELETE/INSERT events (which is fragile
+     with the delete-all + insert-all sync pattern), we re-fetch the full
+     table from Supabase on any change — same safe approach used by
+     medium-frequency tables. Debounced so a flood of WAL events from a
+     bulk sync only triggers one re-fetch. */
+  var _realtimeRefetchTimers = {};
+  function _debouncedRefetch(field, supabaseTable, cid, converter) {
+    // Skip echoes from our own delete-all + insert-all sync
+    if (_isEchoGuarded(field, cid)) return;
+    var key = field + ':' + cid;
+    if (_realtimeRefetchTimers[key]) clearTimeout(_realtimeRefetchTimers[key]);
+    _realtimeRefetchTimers[key] = setTimeout(function() {
+      delete _realtimeRefetchTimers[key];
+      // Re-check guard (may have been set while debounce waited)
+      if (_isEchoGuarded(field, cid)) return;
+      var sb2 = getSupabase();
+      if (!sb2) return;
+      sb2.from(supabaseTable).select('*').eq('teacher_id', _teacherId).eq('course_id', cid).then(function(res) {
+        if (res.error || !res.data) return;
+        var newData = converter(res.data);
+        if (!_hasDataChanged(newData, _cache[field][cid])) return;
+        _cache[field][cid] = newData;
+        _invalidateAndRerender();
+      });
+    }, 500);
+  }
+
   try {
     _realtimeChannel = sb.channel('course-data-sync')
       .on('postgres_changes', {
@@ -659,37 +693,8 @@ function _initRealtimeSync() {
         filter: 'teacher_id=eq.' + _teacherId
       }, function(payload) {
         var row = payload.new || payload.old;
-        if (!row) return;
-        var cid = row.course_id;
-        if (!cid) return;
-        // Skip echoes from our own delete-all + insert-all sync
-        if (_isEchoGuarded('observations', cid)) return;
-        if (!_cache.observations[cid]) _cache.observations[cid] = {};
-
-        var sid = row.student_id;
-        var obId = row.id;
-
-        if (payload.eventType === 'DELETE') {
-          if (_cache.observations[cid][sid]) {
-            _cache.observations[cid][sid] = _cache.observations[cid][sid].filter(function(o) { return o.id !== obId; });
-          }
-        } else {
-          var r = payload.new;
-          if (!_cache.observations[cid][sid]) _cache.observations[cid][sid] = [];
-          var arr = _cache.observations[cid][sid];
-          var idx = arr.findIndex(function(o) { return o.id === obId; });
-          var entry = { id: r.id, text: r.text || '', dims: r.dims || [], created: r.created_at, date: r.date };
-          if (r.sentiment) entry.sentiment = r.sentiment;
-          if (r.context) entry.context = r.context;
-          if (r.assignment_context) entry.assignmentContext = r.assignment_context;
-          if (r.modified_at) entry.modified = r.modified_at;
-
-          // Self-echo check
-          if (idx !== -1 && arr[idx].text === entry.text && arr[idx].modified === entry.modified) return;
-
-          if (idx !== -1) { arr[idx] = entry; } else { arr.push(entry); }
-        }
-        _invalidateAndRerender();
+        if (!row || !row.course_id) return;
+        _debouncedRefetch('observations', 'observations', row.course_id, _obsRowsToBlob);
       })
       .on('postgres_changes', {
         event: '*',
@@ -698,44 +703,8 @@ function _initRealtimeSync() {
         filter: 'teacher_id=eq.' + _teacherId
       }, function(payload) {
         var row = payload.new || payload.old;
-        if (!row) return;
-        var cid = row.course_id;
-        if (!cid || !_cache.scores[cid]) return;
-        // Skip echoes from our own delete-all + insert-all sync
-        if (_isEchoGuarded('scores', cid)) return;
-
-        var sid = row.student_id;
-        var aid = row.assessment_id;
-        var tid = row.tag_id;
-
-        if (payload.eventType === 'DELETE') {
-          // Remove from cache blob
-          if (_cache.scores[cid][sid]) {
-            _cache.scores[cid][sid] = _cache.scores[cid][sid].filter(function(e) {
-              return !(e.assessmentId === aid && e.tagId === tid);
-            });
-          }
-        } else {
-          // INSERT or UPDATE — upsert into cache blob
-          var r = payload.new;
-          if (!_cache.scores[cid][sid]) _cache.scores[cid][sid] = [];
-          var arr = _cache.scores[cid][sid];
-          var idx = arr.findIndex(function(e) { return e.assessmentId === aid && e.tagId === tid; });
-          var entry = {
-            id: sid + ':' + aid + ':' + tid,
-            assessmentId: aid, tagId: tid,
-            score: r.score, date: r.date,
-            type: r.type || 'summative', note: r.note || '',
-            created: r.created_at || new Date().toISOString()
-          };
-
-          // Skip if data matches (self-echo)
-          if (idx !== -1 && arr[idx].score === entry.score && arr[idx].date === entry.date && arr[idx].note === entry.note) return;
-
-          if (idx !== -1) { arr[idx] = entry; } else { arr.push(entry); }
-        }
-
-        _invalidateAndRerender();
+        if (!row || !row.course_id) return;
+        _debouncedRefetch('scores', 'scores', row.course_id, _scoreRowsToBlob);
       })
       .on('postgres_changes', {
         event: '*',
@@ -744,28 +713,8 @@ function _initRealtimeSync() {
         filter: 'teacher_id=eq.' + _teacherId
       }, function(payload) {
         var row = payload.new || payload.old;
-        if (!row) return;
-        var cid = row.course_id;
-        if (!cid) return;
-        // Skip echoes from our own delete-all + insert-all sync
-        if (_isEchoGuarded('assessments', cid)) return;
-        if (!_cache.assessments[cid]) _cache.assessments[cid] = [];
-
-        if (payload.eventType === 'DELETE') {
-          _cache.assessments[cid] = _cache.assessments[cid].filter(function(a) { return a.id !== row.id; });
-        } else {
-          var r = payload.new;
-          var arr = _cache.assessments[cid];
-          var idx = arr.findIndex(function(a) { return a.id === r.id; });
-          var entry = _assessmentRowsToBlob([r])[0];
-
-          // Self-echo check
-          if (idx !== -1 && arr[idx].title === entry.title && arr[idx].date === entry.date
-              && JSON.stringify(arr[idx].tagIds) === JSON.stringify(entry.tagIds)) return;
-
-          if (idx !== -1) { arr[idx] = entry; } else { arr.push(entry); }
-        }
-        _invalidateAndRerender();
+        if (!row || !row.course_id) return;
+        _debouncedRefetch('assessments', 'assessments', row.course_id, _assessmentRowsToBlob);
       })
       .on('postgres_changes', {
         event: '*',
@@ -774,27 +723,10 @@ function _initRealtimeSync() {
         filter: 'teacher_id=eq.' + _teacherId
       }, function(payload) {
         var row = payload.new || payload.old;
-        if (!row) return;
-        var cid = row.course_id;
-        if (!cid) return;
-        // Skip echoes from our own delete-all + insert-all sync
-        if (_isEchoGuarded('students', cid)) return;
-        if (!_cache.students[cid]) _cache.students[cid] = [];
-
-        if (payload.eventType === 'DELETE') {
-          _cache.students[cid] = _cache.students[cid].filter(function(s) { return s.id !== row.id; });
-        } else {
-          var r = payload.new;
-          var arr = _cache.students[cid];
-          var idx = arr.findIndex(function(s) { return s.id === r.id; });
-          var entry = _studentRowsToBlob([r])[0];
-
-          // Self-echo check
-          if (idx !== -1 && arr[idx].firstName === entry.firstName && arr[idx].lastName === entry.lastName) return;
-
-          if (idx !== -1) { arr[idx] = entry; } else { arr.push(migrateStudent(entry)); }
-        }
-        _invalidateAndRerender();
+        if (!row || !row.course_id) return;
+        _debouncedRefetch('students', 'students', row.course_id, function(rows) {
+          return _studentRowsToBlob(rows).map(migrateStudent);
+        });
       });
 
     // Medium-frequency tables: on any change, re-fetch full table for course
