@@ -16,8 +16,9 @@
 (function() {
   'use strict';
 
-  // Dev mode: bypass all Supabase on localhost with ?dev=1
-  const _isDevMode = location.hostname === 'localhost' && new URLSearchParams(location.search).get('dev') === '1';
+  // Dev mode: bypass all Supabase on localhost when credentials are missing
+  const _hasSupabaseConfig = !!(window.__ENV && window.__ENV.SUPABASE_URL && !window.__ENV.SUPABASE_URL.startsWith('__'));
+  const _isDevMode = location.hostname === 'localhost' && !_hasSupabaseConfig;
 
   const SUPABASE_URL = (window.__ENV && window.__ENV.SUPABASE_URL) || '';
   const SUPABASE_KEY = (window.__ENV && window.__ENV.SUPABASE_KEY) || '';

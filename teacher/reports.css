@@ -720,7 +720,8 @@
 .tq-snapshot-grid { display:flex; flex-direction:column; gap:3px; }
 .tq-snapshot-item {
   display:flex; align-items:center; justify-content:space-between;
-  padding:5px 10px; background:var(--bg); border-radius:6px;
+  padding:0 10px; background:var(--bg); border-radius:6px;
+  height:36px; box-sizing:border-box;
 }
 .tq-snapshot-item-label {
   font-family:'SF Mono', ui-monospace, 'Menlo', monospace; font-size:var(--text-xs);
@@ -729,6 +730,7 @@
 .tq-snapshot-item-value {
   font-size:var(--text-md); font-weight:800; letter-spacing:var(--tracking-tight);
   padding:1px 8px; border-radius:var(--radius-sm);
+  min-width:110px; text-align:center; box-sizing:border-box;
 }
 
 /* Tag lists (strengths/growth) */

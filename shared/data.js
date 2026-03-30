@@ -1631,8 +1631,10 @@ function upsertScore(cid, sid, aid, tid, scoreVal, date, type, note) {
   }
   _cache.scores[cid] = scores;
   if (typeof clearProfCache === 'function') clearProfCache();
+  _safeLSSet('gb-scores-' + cid, JSON.stringify(scores));
 
   if (_useSupabase) {
+    _setEchoGuard('scores', cid);
     _syncToSupabase('scores_row', { cid, sid, aid, tid }, {
       teacher_id: _teacherId, course_id: cid, student_id: sid,
       assessment_id: aid, tag_id: tid, score: scoreVal,
@@ -1640,8 +1642,6 @@ function upsertScore(cid, sid, aid, tid, scoreVal, date, type, note) {
       type: type || 'summative', note: note || '',
       updated_at: new Date().toISOString()
     });
-  } else {
-    _safeLSSet('gb-scores-' + cid, JSON.stringify(scores));
   }
   _broadcastChange(cid, 'scores');
 }
@@ -2434,7 +2434,9 @@ function addQuickOb(cid, sid, text, dims, sentiment, context, assignmentContext)
   if (assignmentContext) entry.assignmentContext = assignmentContext;
   all[sid].push(entry);
   _cache.observations[cid] = all;
+  _safeLSSet('gb-quick-obs-' + cid, JSON.stringify(all));
   if (_useSupabase) {
+    _setEchoGuard('observations', cid);
     _syncToSupabase('obs_row', { cid, obId: entry.id }, {
       teacher_id: _teacherId, course_id: cid, student_id: sid,
       id: entry.id, text: entry.text, dims: entry.dims,
@@ -2442,8 +2444,6 @@ function addQuickOb(cid, sid, text, dims, sentiment, context, assignmentContext)
       assignment_context: entry.assignmentContext || null,
       date: entry.date, created_at: entry.created
     });
-  } else {
-    _safeLSSet('gb-quick-obs-' + cid, JSON.stringify(all));
   }
   _broadcastChange(cid, 'observations');
 }
@@ -2453,10 +2453,10 @@ function deleteQuickOb(cid, sid, obId) {
   if (!all[sid]) return;
   all[sid] = all[sid].filter(o => o.id !== obId);
   _cache.observations[cid] = all;
+  _safeLSSet('gb-quick-obs-' + cid, JSON.stringify(all));
   if (_useSupabase) {
+    _setEchoGuard('observations', cid);
     _syncToSupabase('obs_delete', { cid, obId }, null);
-  } else {
-    _safeLSSet('gb-quick-obs-' + cid, JSON.stringify(all));
   }
   _broadcastChange(cid, 'observations');
 }
@@ -2472,7 +2472,9 @@ function updateQuickOb(cid, sid, obId, updates) {
   if (updates.context !== undefined) ob.context = updates.context || null;
   ob.modified = new Date().toISOString();
   _cache.observations[cid] = all;
+  _safeLSSet('gb-quick-obs-' + cid, JSON.stringify(all));
   if (_useSupabase) {
+    _setEchoGuard('observations', cid);
     _syncToSupabase('obs_row', { cid, obId: ob.id }, {
       teacher_id: _teacherId, course_id: cid, student_id: sid,
       id: ob.id, text: ob.text, dims: ob.dims,
@@ -2481,8 +2483,6 @@ function updateQuickOb(cid, sid, obId, updates) {
       date: ob.date, created_at: ob.created,
       modified_at: ob.modified
     });
-  } else {
-    _safeLSSet('gb-quick-obs-' + cid, JSON.stringify(all));
   }
   _broadcastChange(cid, 'observations');
 }

@@ -28,6 +28,12 @@ function portalRedirect(user) {
 
 /* ── Redirect if already logged in ─────────────────────────── */
 (async function() {
+  // Dev mode: skip login on localhost when Supabase is not configured
+  var hasConfig = !!(window.__ENV && window.__ENV.SUPABASE_URL && !window.__ENV.SUPABASE_URL.startsWith('__'));
+  if (location.hostname === 'localhost' && !hasConfig) {
+    window.location.href = '/teacher/app.html';
+    return;
+  }
   try {
     var sb = getSupabase();
     if (sb) {

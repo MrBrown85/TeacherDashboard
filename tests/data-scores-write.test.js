@@ -83,6 +83,27 @@ describe('setPointsScore', () => {
   });
 });
 
+describe('upsertScore durability', () => {
+  afterEach(() => {
+    _useSupabase = false;
+    _teacherId = null;
+  });
+
+  it('persists local backup data even when Supabase mode is enabled', () => {
+    _useSupabase = true;
+    _teacherId = 'teacher-1';
+    saveScores(CID, {});
+
+    upsertScore(CID, 'stu1', 'a1', 't1', 4, '2025-03-20', 'summative');
+
+    const stored = JSON.parse(localStorage.getItem('gb-scores-' + CID));
+    expect(stored.stu1).toHaveLength(1);
+    expect(stored.stu1[0].assessmentId).toBe('a1');
+    expect(stored.stu1[0].tagId).toBe('t1');
+    expect(stored.stu1[0].score).toBe(4);
+  });
+});
+
 /* ── deleteRubric ─────────────────────────────────────────── */
 describe('deleteRubric', () => {
   it('removes rubric from rubrics list', () => {
