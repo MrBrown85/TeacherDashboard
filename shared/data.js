@@ -1046,6 +1046,14 @@ async function _doInitData(cid) {
         ? (console.warn('Failed to load students for', cid, studentRes.error), [])
         : _studentRowsToBlob(studentRes.data).map(migrateStudent);
 
+      // Safety net: if Supabase returned dramatically fewer items than
+      // localStorage has, a prior DELETE+INSERT sync likely failed mid-way.
+      // Restore from localStorage and re-sync to heal Supabase.
+      _healFromLocalBackup(cid, 'students', 'students');
+      _healFromLocalBackup(cid, 'assessments', 'assessments');
+      _healFromLocalBackup(cid, 'scores', 'scores');
+      _healFromLocalBackup(cid, 'observations', 'quick-obs');
+
       // Medium-frequency tables
       var _medResults = { goals: goalsRes, reflections: reflRes, overrides: overRes, statuses: statusRes, notes: notesRes, flags: flagsRes, termRatings: trRes };
       for (var _mf in _MEDIUM_FREQ_TABLES) {
@@ -1100,6 +1108,38 @@ async function _doInitData(cid) {
 
   // localStorage path
   _loadCourseFromLS(cid);
+}
+
+/* If Supabase returned dramatically fewer items than localStorage for a field,
+   a prior non-transactional DELETE+INSERT sync probably failed mid-way.
+   Restore the richer dataset from localStorage and re-sync to heal Supabase. */
+function _healFromLocalBackup(cid, field, lsKey) {
+  var supaData = _cache[field][cid];
+  var lsRaw = _safeParseLS('gb-' + lsKey + '-' + cid, null);
+  if (!lsRaw) return; // no local backup
+
+  var supaCount, lsCount;
+  if (Array.isArray(supaData)) {
+    supaCount = supaData.length;
+    lsCount = Array.isArray(lsRaw) ? lsRaw.length : 0;
+  } else {
+    supaCount = Object.keys(supaData || {}).length;
+    lsCount = Object.keys(lsRaw || {}).length;
+  }
+
+  if (lsCount > 0 && supaCount < lsCount * 0.5) {
+    console.warn('Healing ' + field + ' from localStorage: Supabase had', supaCount,
+      'items vs', lsCount, 'locally — restoring and re-syncing');
+    // Restore cache from localStorage
+    if (field === 'students') {
+      _cache[field][cid] = (Array.isArray(lsRaw) ? lsRaw : []).map(migrateStudent);
+    } else {
+      _cache[field][cid] = lsRaw;
+    }
+    // Re-sync to heal Supabase
+    _setEchoGuard(field, cid);
+    _syncToSupabase(_NORMALIZED_TABLES[field], { cid: cid }, _cache[field][cid]);
+  }
 }
 
 function _loadCourseFromLS(cid) {
@@ -1253,12 +1293,13 @@ const _NORMALIZED_TABLES = {
 function _saveCourseField(field, cid, value) {
   _cache[field][cid] = value;
   if (_PROF_FIELDS.includes(field) && typeof clearProfCache === 'function') clearProfCache();
+  // Always persist to localStorage as a safety net — the non-transactional
+  // DELETE+INSERT Supabase sync can lose data if INSERT fails after DELETE.
+  var dataKey = _DATA_KEYS[field];
+  if (dataKey) _safeLSSet('gb-' + dataKey + '-' + cid, JSON.stringify(value));
   if (_useSupabase) {
     _setEchoGuard(field, cid);
     _syncToSupabase(_NORMALIZED_TABLES[field], { cid }, value);
-  } else {
-    const dataKey = _DATA_KEYS[field];
-    _safeLSSet('gb-' + dataKey + '-' + cid, JSON.stringify(value));
   }
   _broadcastChange(cid, field);
 }
