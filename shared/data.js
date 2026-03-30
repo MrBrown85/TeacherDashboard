@@ -107,9 +107,9 @@ let _useSupabase = false;
 let _teacherId = null;
 let _initPromise = null;  // dedup concurrent initData calls
 
-/* Echo guard: suppress Realtime events for a field+cid shortly after a local save.
-   The delete-all + insert-all sync pattern causes Realtime to echo DELETE events
-   that temporarily wipe the in-memory cache before the INSERTs arrive. */
+/* Echo guard: suppress Realtime refetches for a field+cid shortly after a local save.
+   Prevents Realtime events from triggering a refetch that could see partial state
+   while an UPSERT batch is still in-flight. */
 const _echoGuard = {};  // key: "field:cid" → expiry timestamp
 const _ECHO_GUARD_MS = 15000;  // suppress echoes for 15s after save (must exceed _SYNC_TIMEOUT_MS)
 
@@ -281,7 +281,7 @@ let _retryCount = 0;
 let _consecutiveFailures = 0;
 const _MAX_RETRIES = 6;
 const _MAX_RETRY_QUEUE = 100;
-const _SYNC_TIMEOUT_MS = 10000;
+const _SYNC_TIMEOUT_MS = 30000;  // 30s — bulk upserts of 2000+ rows need headroom on mobile
 
 /* Track in-flight and pending syncs per key to coalesce rapid saves */
 const _inflightSyncs = new Map();   // syncKey → true (currently in-flight)
@@ -354,26 +354,73 @@ async function _doSync(table, key, data) {
 
   try {
     if (table === 'scores') {
+      // Safe sync: UPSERT all current rows + DELETE only removed rows.
+      // Never delete-all — a failed INSERT after delete-all loses all grades.
       const rows = _scoreBlobToRows(key.cid, data);
-      const { error: delErr } = await sb.from('scores')
-        .delete().eq('teacher_id', _teacherId).eq('course_id', key.cid)
+      const currentKeys = new Set(rows.map(r => r.student_id + ':' + r.assessment_id + ':' + r.tag_id));
+
+      // 1. Fetch existing row keys from DB to find what to delete
+      const { data: existing, error: fetchErr } = await sb.from('scores')
+        .select('student_id,assessment_id,tag_id')
+        .eq('teacher_id', _teacherId).eq('course_id', key.cid)
         .abortSignal(controller.signal);
-      if (delErr) throw delErr;
+      if (fetchErr) throw fetchErr;
+
+      // 2. UPSERT all current rows (safe — inserts or updates, never deletes)
       if (rows.length > 0) {
-        const { error: insErr } = await sb.from('scores').insert(rows)
+        // Batch in chunks of 500 to stay within Supabase payload limits
+        for (let i = 0; i < rows.length; i += 500) {
+          const chunk = rows.slice(i, i + 500);
+          const { error: upsertErr } = await sb.from('scores').upsert(chunk, {
+            onConflict: 'teacher_id,course_id,student_id,assessment_id,tag_id'
+          }).abortSignal(controller.signal);
+          if (upsertErr) throw upsertErr;
+        }
+      }
+
+      // 3. DELETE only rows that were removed (targeted, not blanket)
+      const toDelete = (existing || []).filter(r =>
+        !currentKeys.has(r.student_id + ':' + r.assessment_id + ':' + r.tag_id)
+      );
+      for (let i = 0; i < toDelete.length; i++) {
+        const d = toDelete[i];
+        const { error: delErr } = await sb.from('scores')
+          .delete()
+          .eq('teacher_id', _teacherId).eq('course_id', key.cid)
+          .eq('student_id', d.student_id).eq('assessment_id', d.assessment_id)
+          .eq('tag_id', d.tag_id)
           .abortSignal(controller.signal);
-        if (insErr) throw insErr;
+        if (delErr) throw delErr;
       }
     } else if (table === 'observations') {
+      // Safe sync: UPSERT + targeted DELETE (same pattern as scores)
       const obsRows = _obsBlobToRows(key.cid, data);
-      const { error: delErr } = await sb.from('observations')
-        .delete().eq('teacher_id', _teacherId).eq('course_id', key.cid)
+      const currentIds = new Set(obsRows.map(r => r.id));
+
+      const { data: existingObs, error: fetchErr } = await sb.from('observations')
+        .select('id')
+        .eq('teacher_id', _teacherId).eq('course_id', key.cid)
         .abortSignal(controller.signal);
-      if (delErr) throw delErr;
+      if (fetchErr) throw fetchErr;
+
       if (obsRows.length > 0) {
-        const { error: insErr } = await sb.from('observations').insert(obsRows)
+        for (let i = 0; i < obsRows.length; i += 500) {
+          const chunk = obsRows.slice(i, i + 500);
+          const { error: upsertErr } = await sb.from('observations').upsert(chunk, {
+            onConflict: 'teacher_id,course_id,id'
+          }).abortSignal(controller.signal);
+          if (upsertErr) throw upsertErr;
+        }
+      }
+
+      const obsToDelete = (existingObs || []).filter(r => !currentIds.has(r.id));
+      for (let i = 0; i < obsToDelete.length; i++) {
+        const { error: delErr } = await sb.from('observations')
+          .delete()
+          .eq('teacher_id', _teacherId).eq('course_id', key.cid)
+          .eq('id', obsToDelete[i].id)
           .abortSignal(controller.signal);
-        if (insErr) throw insErr;
+        if (delErr) throw delErr;
       }
     } else if (table === 'obs_row') {
       // Single observation upsert
@@ -397,38 +444,118 @@ async function _doSync(table, key, data) {
       }).abortSignal(controller.signal);
       if (error) throw error;
     } else if (table === 'assessments') {
+      // Safe sync: UPSERT + targeted DELETE
       const aRows = _assessmentsBlobToRows(key.cid, data);
-      const { error: delErr } = await sb.from('assessments')
-        .delete().eq('teacher_id', _teacherId).eq('course_id', key.cid)
+      const currentIds = new Set(aRows.map(r => r.id));
+
+      const { data: existingA, error: fetchErr } = await sb.from('assessments')
+        .select('id')
+        .eq('teacher_id', _teacherId).eq('course_id', key.cid)
         .abortSignal(controller.signal);
-      if (delErr) throw delErr;
+      if (fetchErr) throw fetchErr;
+
       if (aRows.length > 0) {
-        const { error: insErr } = await sb.from('assessments').insert(aRows)
+        for (let i = 0; i < aRows.length; i += 500) {
+          const chunk = aRows.slice(i, i + 500);
+          const { error: upsertErr } = await sb.from('assessments').upsert(chunk, {
+            onConflict: 'teacher_id,course_id,id'
+          }).abortSignal(controller.signal);
+          if (upsertErr) throw upsertErr;
+        }
+      }
+
+      const aToDelete = (existingA || []).filter(r => !currentIds.has(r.id));
+      for (let i = 0; i < aToDelete.length; i++) {
+        const { error: delErr } = await sb.from('assessments')
+          .delete()
+          .eq('teacher_id', _teacherId).eq('course_id', key.cid)
+          .eq('id', aToDelete[i].id)
           .abortSignal(controller.signal);
-        if (insErr) throw insErr;
+        if (delErr) throw delErr;
       }
     } else if (table === 'students') {
+      // Safe sync: UPSERT + targeted DELETE
       const sRows = _studentsBlobToRows(key.cid, data);
-      const { error: delErr } = await sb.from('students')
-        .delete().eq('teacher_id', _teacherId).eq('course_id', key.cid)
+      const currentIds = new Set(sRows.map(r => r.id));
+
+      const { data: existingS, error: fetchErr } = await sb.from('students')
+        .select('id')
+        .eq('teacher_id', _teacherId).eq('course_id', key.cid)
         .abortSignal(controller.signal);
-      if (delErr) throw delErr;
+      if (fetchErr) throw fetchErr;
+
       if (sRows.length > 0) {
-        const { error: insErr } = await sb.from('students').insert(sRows)
+        for (let i = 0; i < sRows.length; i += 500) {
+          const chunk = sRows.slice(i, i + 500);
+          const { error: upsertErr } = await sb.from('students').upsert(chunk, {
+            onConflict: 'teacher_id,course_id,id'
+          }).abortSignal(controller.signal);
+          if (upsertErr) throw upsertErr;
+        }
+      }
+
+      const sToDelete = (existingS || []).filter(r => !currentIds.has(r.id));
+      for (let i = 0; i < sToDelete.length; i++) {
+        const { error: delErr } = await sb.from('students')
+          .delete()
+          .eq('teacher_id', _teacherId).eq('course_id', key.cid)
+          .eq('id', sToDelete[i].id)
           .abortSignal(controller.signal);
-        if (insErr) throw insErr;
+        if (delErr) throw delErr;
       }
     } else if (_BULK_SYNC_CONVERTERS[table]) {
+      // Safe sync: UPSERT + targeted DELETE for medium-frequency tables
       const convFn = _BULK_SYNC_CONVERTERS[table];
       const bulkRows = convFn(key.cid, data);
-      const { error: delErr } = await sb.from(table)
-        .delete().eq('teacher_id', _teacherId).eq('course_id', key.cid)
-        .abortSignal(controller.signal);
-      if (delErr) throw delErr;
-      if (bulkRows.length > 0) {
-        const { error: insErr } = await sb.from(table).insert(bulkRows)
+
+      // Determine the primary key column(s) for this table
+      const pkMap = {
+        'goals': { pk: 'student_id,tag_id', keyCols: ['student_id', 'tag_id'], keyFn: r => r.student_id + ':' + r.tag_id },
+        'reflections': { pk: 'student_id,tag_id', keyCols: ['student_id', 'tag_id'], keyFn: r => r.student_id + ':' + r.tag_id },
+        'overrides': { pk: 'student_id,tag_id', keyCols: ['student_id', 'tag_id'], keyFn: r => r.student_id + ':' + r.tag_id },
+        'statuses': { pk: 'student_id,assessment_id', keyCols: ['student_id', 'assessment_id'], keyFn: r => r.student_id + ':' + r.assessment_id },
+        'student_notes': { pk: 'student_id', keyCols: ['student_id'], keyFn: r => r.student_id },
+        'student_flags': { pk: 'student_id', keyCols: ['student_id'], keyFn: r => r.student_id },
+        'term_ratings': { pk: 'student_id,term_id', keyCols: ['student_id', 'term_id'], keyFn: r => r.student_id + ':' + r.term_id },
+      };
+      const info = pkMap[table];
+      if (info) {
+        const currentKeys = new Set(bulkRows.map(info.keyFn));
+        const selectCols = info.keyCols.join(',');
+        const { data: existingRows, error: fetchErr } = await sb.from(table)
+          .select(selectCols)
+          .eq('teacher_id', _teacherId).eq('course_id', key.cid)
           .abortSignal(controller.signal);
-        if (insErr) throw insErr;
+        if (fetchErr) throw fetchErr;
+
+        if (bulkRows.length > 0) {
+          for (let i = 0; i < bulkRows.length; i += 500) {
+            const chunk = bulkRows.slice(i, i + 500);
+            const { error: upsertErr } = await sb.from(table).upsert(chunk, {
+              onConflict: 'teacher_id,course_id,' + info.pk
+            }).abortSignal(controller.signal);
+            if (upsertErr) throw upsertErr;
+          }
+        }
+
+        const rowsToDelete = (existingRows || []).filter(r => !currentKeys.has(info.keyFn(r)));
+        for (let i = 0; i < rowsToDelete.length; i++) {
+          const d = rowsToDelete[i];
+          let q = sb.from(table).delete()
+            .eq('teacher_id', _teacherId).eq('course_id', key.cid);
+          info.keyCols.forEach(col => { q = q.eq(col, d[col]); });
+          const { error: delErr } = await q.abortSignal(controller.signal);
+          if (delErr) throw delErr;
+        }
+      } else {
+        // Fallback for unknown tables: upsert all (no delete)
+        if (bulkRows.length > 0) {
+          for (let i = 0; i < bulkRows.length; i += 500) {
+            const chunk = bulkRows.slice(i, i + 500);
+            const { error: insErr } = await sb.from(table).upsert(chunk).abortSignal(controller.signal);
+            if (insErr) throw insErr;
+          }
+        }
       }
     } else if (_getConfigTableSet().has(table)) {
       // Config tables: single JSONB blob per course, upsert
@@ -509,11 +636,13 @@ async function _retryFailedSyncs() {
   _retryTimer = null;
   _retryCount++;
   if (_retryCount > _MAX_RETRIES) {
-    console.warn('Sync retry limit reached, dropping', _retryQueue.length, 'items');
-    _retryQueue = [];
+    // Don't drop the queue — keep it in localStorage so it can be retried
+    // on next page load or manual retry. Only reset counters.
+    console.error('[GUARD] Sync retry limit reached.', _retryQueue.length,
+      'items preserved in localStorage for recovery. Call retrySyncs() to retry.');
     _retryCount = 0;
     _consecutiveFailures = 0;
-    localStorage.removeItem('gb-retry-queue');
+    if (typeof showSyncToast === 'function') showSyncToast('Sync retries exhausted — data safe locally, will retry on reload', 'error');
     return;
   }
   // Process one at a time to avoid hammering the server
@@ -668,14 +797,24 @@ function _initRealtimeSync() {
         if (res.error || !res.data) return;
         var newData = converter(res.data);
         if (!_hasDataChanged(newData, _cache[field][cid])) return;
-        // Never-shrink guard: if the remote result is dramatically smaller
-        // than the local cache, it likely caught the DB mid-DELETE+INSERT.
-        // Skip the update to avoid data loss.
+        // Never-shrink guard: if the remote result is smaller than the local
+        // cache, it may have caught the DB mid-sync. Skip to avoid data loss.
+        // Applies to both array-shaped (students, assessments) and object-shaped (scores) data.
         var existing = _cache[field][cid];
         if (Array.isArray(existing) && Array.isArray(newData)) {
-          if (existing.length > 0 && newData.length < existing.length * 0.5) {
-            console.warn('Realtime refetch for', field, 'returned', newData.length,
+          if (existing.length > 0 && newData.length < existing.length * 0.8) {
+            console.warn('[GUARD] Realtime refetch for', field, 'returned', newData.length,
               'items vs', existing.length, 'in cache — skipping (likely mid-sync snapshot)');
+            return;
+          }
+        }
+        if (existing && !Array.isArray(existing) && typeof existing === 'object' &&
+            newData && !Array.isArray(newData) && typeof newData === 'object') {
+          var existingKeys = Object.keys(existing).length;
+          var newKeys = Object.keys(newData).length;
+          if (existingKeys > 0 && newKeys < existingKeys * 0.8) {
+            console.warn('[GUARD] Realtime refetch for', field, 'returned', newKeys,
+              'keys vs', existingKeys, 'in cache — skipping (likely mid-sync snapshot)');
             return;
           }
         }
@@ -2330,8 +2469,23 @@ function saveScores(cid, obj) {
   var prev = _cache.scores[cid];
   var prevCount = prev ? Object.keys(prev).length : 0;
   var newCount = obj ? Object.keys(obj).length : 0;
-  if (prevCount > 0 && newCount < prevCount * 0.5) {
-    console.error('[DIAG] SCORES STUDENT-COUNT DECREASED!', { cid: cid, prevStudents: prevCount, newStudents: newCount }, new Error().stack);
+  // Block catastrophic saves: if student-count drops >50%, refuse to save.
+  // This prevents empty/partial objects from wiping all grades.
+  if (prevCount > 2 && newCount < prevCount * 0.5) {
+    console.error('[GUARD] BLOCKED scores save — student-count dropped from', prevCount, 'to', newCount,
+      '(>50% loss). This likely indicates a bug or corrupted state. Stack:', new Error().stack);
+    if (typeof showSyncToast === 'function') showSyncToast('Score save blocked — data loss prevented', 'error');
+    return;
+  }
+  // Also count total score entries for a more granular check
+  var prevEntries = 0, newEntries = 0;
+  if (prev) for (var _ps in prev) prevEntries += (prev[_ps] || []).length;
+  if (obj) for (var _ns in obj) newEntries += (obj[_ns] || []).length;
+  if (prevEntries > 10 && newEntries < prevEntries * 0.3) {
+    console.error('[GUARD] BLOCKED scores save — entry-count dropped from', prevEntries, 'to', newEntries,
+      '(>70% loss). Stack:', new Error().stack);
+    if (typeof showSyncToast === 'function') showSyncToast('Score save blocked — data loss prevented', 'error');
+    return;
   }
   _saveCourseField('scores', cid, obj);
 }
