@@ -585,7 +585,7 @@
     "rate    data    write"
     "rate    obs     obs"
     "footer  footer  footer";
-  gap:12px; padding:12px 2px 4px; height:calc(100vh - 110px);
+  gap:12px; padding:12px 2px 4px; height:calc(100vh - 110px); overflow:hidden;
 }
 
 /* ── Header bar — grid-area override for shared student header ── */
