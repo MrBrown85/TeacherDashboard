@@ -103,7 +103,8 @@ function tqSetDim(sid, dim, val) {
   tqSaveNarrative();
   const termId = getTermId();
   const existing = getStudentTermRating(_activeCourse, sid, termId);
-  const currentDims = existing ? { ...existing.dims } : { engagement:0, collaboration:0, selfRegulation:0, resilience:0, curiosity:0, respect:0 };
+  const defaultDims = {}; OBS_DIMS.forEach(d => { defaultDims[d] = 0; });
+  const currentDims = existing ? { ...defaultDims, ...existing.dims } : defaultDims;
   currentDims[dim] = currentDims[dim] === val ? 0 : val; // Toggle off if same
   upsertTermRating(_activeCourse, sid, termId, { dims: currentDims });
   rerender();
@@ -1042,27 +1043,33 @@ function renderTermQuestionnaire(cid) {
   // ══ COLUMN 1: RATE — Dispositions + Quick Profile ══
   html += `<div class="tq-col-rate">`;
 
-  // Disposition ratings as compact rows
-  html += `<div class="tq-panel">
-    <div class="tq-panel-title">Learner Dispositions <span class="tq-panel-badge">${ratedDimCount}/6</span></div>`;
+  // Disposition ratings — two panels
   const PILL_TEXT = {1:'Needs Support', 2:'Developing', 3:'Growing', 4:'Thriving'};
-  OBS_DIMS.forEach(dim => {
-    const val = dims[dim] || 0;
-    const evCount = getQuickObsByDim(cid, sid, dim).length;
-    html += `<div class="tq-dim-row${val > 0 ? ' rated' : ''}">
-      <div class="tq-dim-header">
-        <span class="tq-dim-icon">${OBS_ICONS[dim]}</span>
-        <span class="tq-dim-label">${OBS_LABELS[dim]}</span>
-      </div>
-      <div class="tq-dim-pills">`;
-    [1,2,3,4].forEach(lvl => {
-      html += `<button class="tq-pill pill-${lvl}${val === lvl ? ' active' : ''}"
-        data-action="tqSetDim" data-sid="${sid}" data-dim="${dim}" data-lvl="${lvl}">${PILL_TEXT[lvl]}</button>`;
+  const ratedLearning = LEARNING_DIMS.filter(d => (dims[d]||0) > 0).length;
+  const ratedRelational = RELATIONAL_DIMS.filter(d => (dims[d]||0) > 0).length;
+
+  const _renderDimPanel = (dimList, title, ratedCount) => {
+    html += `<div class="tq-panel">
+      <div class="tq-panel-title">${title} <span class="tq-panel-badge">${ratedCount}/${dimList.length}</span></div>`;
+    dimList.forEach(dim => {
+      const val = dims[dim] || 0;
+      html += `<div class="tq-dim-row${val > 0 ? ' rated' : ''}">
+        <div class="tq-dim-header">
+          <span class="tq-dim-icon">${OBS_ICONS[dim]}</span>
+          <span class="tq-dim-label">${OBS_LABELS[dim]}</span>
+        </div>
+        <div class="tq-dim-pills">`;
+      [1,2,3,4].forEach(lvl => {
+        html += `<button class="tq-pill pill-${lvl}${val === lvl ? ' active' : ''}"
+          data-action="tqSetDim" data-sid="${sid}" data-dim="${dim}" data-lvl="${lvl}">${PILL_TEXT[lvl]}</button>`;
+      });
+      html += `</div>
+      </div>`;
     });
-    html += `</div>
-    </div>`;
-  });
-  html += `</div>`;
+    html += `</div>`;
+  };
+  _renderDimPanel(LEARNING_DIMS, 'Learning Dispositions', ratedLearning);
+  _renderDimPanel(RELATIONAL_DIMS, 'Relational & Identity', ratedRelational);
 
   // Quick Profile
   const RATE_LABELS = {1:'Rarely', 2:'Sometimes', 3:'Usually', 4:'Consistently'};

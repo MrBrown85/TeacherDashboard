@@ -685,7 +685,7 @@ window.PageStudent = (function() {
     var gpObs = getStudentQuickObs(cid, studentId);
     var obsDims = {};
     gpObs.forEach(function(o) { (o.dims || []).forEach(function(d) { obsDims[d] = (obsDims[d] || 0) + 1; }); });
-    var gpAllDims = [{key:'engagement',label:'Engage'},{key:'collaboration',label:'Collab'},{key:'selfRegulation',label:'Self-Reg'},{key:'resilience',label:'Grit'},{key:'curiosity',label:'Curiosity'},{key:'respect',label:'Respect'}];
+    var gpAllDims = OBS_DIMS.map(function(d) { return {key:d, label:OBS_SHORT[d]}; });
     html += '<div class="gp-dims">';
     gpAllDims.forEach(function(d) {
       var count = obsDims[d.key] || 0;

@@ -255,11 +255,12 @@ window.MCardWidgets = (function() {
     var vals = OBS_DIMS.map(function(d) { return dims[d] || 0; });
     if (vals.every(function(v) { return v === 0; })) return '';
 
+    var n = OBS_DIMS.length;
     var cx = 24, cy = 24, maxR = 20;
-    var bgHex = _petalPath(6, maxR, cx, cy, 'var(--bg-secondary)', 'none');
+    var bgHex = _petalPath(n, maxR, cx, cy, 'var(--bg-secondary)', 'none');
 
     var dataPts = OBS_DIMS.map(function(d, i) {
-      var angle = (2 * Math.PI * i / 6) - Math.PI / 2;
+      var angle = (2 * Math.PI * i / n) - Math.PI / 2;
       var r = (vals[i] / MAX_PROF) * maxR;
       return (cx + r * Math.cos(angle)).toFixed(2) + ',' + (cy + r * Math.sin(angle)).toFixed(2);
     });

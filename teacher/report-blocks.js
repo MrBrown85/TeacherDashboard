@@ -27,12 +27,17 @@ function getPronouns(student) {
 function sanitizeNarrativeHtml(raw) { return sanitizeHtml(raw); }
 
 const OBS_DESCRIPTORS = {
+  // Learning Dispositions
   engagement:      { prompt:'I participate actively and stay focused on my learning', desc:'Active participation and focus in learning', example:'Stays on task, asks questions, contributes ideas' },
+  curiosity:       { prompt:'I explore new ideas, take risks in my thinking, and connect learning to the world around me', desc:'Exploring ideas, taking intellectual risks, and connecting to place', example:'Asks "what if?", tries new approaches, ventures into unfamiliar territory' },
+  selfRegulation:  { prompt:'I manage my time, reflect on my learning, and understand my own growth', desc:'Managing time and emotions while developing reflective awareness', example:'Plans ahead, reflects on what worked, recognizes own growth areas' },
+  resilience:      { prompt:'I keep trying when things are difficult and learn from setbacks', desc:'Persevering through challenges and adapting', example:'Tries again after mistakes, seeks help, doesn\'t give up' },
+  // Relational & Identity
+  belonging:       { prompt:'I feel part of our learning community and connected to the people and places around me', desc:'Feeling connected to community, place, and learning environment', example:'Seeks connection with teacher and classmates, feels at home in class, engages with community' },
+  identity:        { prompt:'I know my strengths, explore who I am, and bring my whole self to learning', desc:'Developing self-knowledge, personal identity, and awareness of gifts', example:'Can name own strengths, brings personal/cultural knowledge to learning, growing self-awareness' },
   collaboration:   { prompt:'I work well with others and support my group', desc:'Working effectively with others', example:'Shares ideas, listens to peers, supports group goals' },
-  selfRegulation:  { prompt:'I manage my time, stay organized, and handle my emotions', desc:'Managing time, emotions, and work habits', example:'Plans ahead, handles setbacks, stays organized' },
-  resilience:      { prompt:'I keep trying when things are difficult', desc:'Persevering through challenges', example:'Tries again after mistakes, seeks help, doesn\'t give up' },
-  curiosity:       { prompt:'I explore new ideas and take risks in my thinking', desc:'Exploring ideas and taking intellectual risks', example:'Asks "what if?", tries new approaches, goes deeper' },
-  respect:         { prompt:'I show care for my classmates and our community', desc:'Showing care for others and the community', example:'Kind words, active listening, inclusive behavior' }
+  respect:         { prompt:'I show care for my classmates and our community', desc:'Showing care for others and the community', example:'Kind words, active listening, inclusive behavior' },
+  responsibility:  { prompt:'I think about how my actions affect others and give back to my community', desc:'Recognizing consequences of actions and contributing to community', example:'Shares what they learn, considers impact on others, takes on roles that help the group' }
 };
 
 /* ══════════════════════════════════════════════════════════════
@@ -102,15 +107,11 @@ function renderBlockAcademicSummary(cid, student) {
 
 // renderBlockNarrative removed — teacher-narrative block now handles all narrative output
 
-function renderBlockLearnerDimensions(cid, student) {
-  const termId = getTermId();
-  const rating = getStudentTermRating(cid, student.id, termId);
-  if (!rating) return '';
+function _renderDimGroup(dimList, rating, groupTitle) {
   const dims = rating.dims || {};
-  let html = `<div class="report-learner-profile">`;
-  html += `<div class="report-learner-title">👁 Disposition Dimensions</div>`;
+  let html = `<div class="report-learner-title">${groupTitle}</div>`;
   html += `<div class="report-learner-dims">`;
-  OBS_DIMS.forEach(dim => {
+  dimList.forEach(dim => {
     const val = dims[dim] || 0;
     const pct = val > 0 ? (val / 4 * 100) : 0;
     const label = val > 0 ? OBS_LEVEL_LABELS[val] : 'Not Assessed';
@@ -129,7 +130,18 @@ function renderBlockLearnerDimensions(cid, student) {
       </div>
     </div>`;
   });
-  html += `</div></div>`;
+  html += `</div>`;
+  return html;
+}
+
+function renderBlockLearnerDimensions(cid, student) {
+  const termId = getTermId();
+  const rating = getStudentTermRating(cid, student.id, termId);
+  if (!rating) return '';
+  let html = `<div class="report-learner-profile">`;
+  html += _renderDimGroup(LEARNING_DIMS, rating, '📐 Learning Dispositions');
+  html += _renderDimGroup(RELATIONAL_DIMS, rating, '🤝 Relational & Identity');
+  html += `</div>`;
   return html;
 }
 
@@ -323,19 +335,24 @@ function renderBlockStudentReflectionLearning(cid, student) {
   html += `<div style="display:flex;justify-content:flex-end;gap:0;margin-bottom:4px;padding-right:4px">`;
   scale.forEach(s => { html += `<span style="width:68px;text-align:center;font-size:0.56rem;font-weight:700;text-transform:uppercase;letter-spacing:0.03em;color:var(--text-3)">${s}</span>`; });
   html += `</div>`;
-  // Disposition rows
-  OBS_DIMS.forEach(dim => {
-    const info = OBS_DESCRIPTORS[dim];
-    html += `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--divider-subtle)">
-      <span style="font-size:1.1rem;flex-shrink:0">${OBS_ICONS[dim]}</span>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:0.82rem;font-weight:700;color:var(--text)">${OBS_LABELS[dim]}</div>
-        <div style="font-size:0.7rem;color:var(--text-2);font-style:italic;line-height:1.3">${info.prompt}</div>
-      </div>
-      <div style="display:flex;gap:0;flex-shrink:0">`;
-    scale.forEach(() => { html += `<span style="width:68px;display:flex;justify-content:center"><span class="report-reflect-bubble"></span></span>`; });
-    html += `</div></div>`;
-  });
+  // Disposition rows — grouped
+  const _reflectGroup = (dims, title) => {
+    html += `<div style="font-size:0.72rem;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:0.04em;padding:10px 0 2px;border-top:1.5px solid var(--border)">${title}</div>`;
+    dims.forEach(dim => {
+      const info = OBS_DESCRIPTORS[dim];
+      html += `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--divider-subtle)">
+        <span style="font-size:1.1rem;flex-shrink:0">${OBS_ICONS[dim]}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:0.82rem;font-weight:700;color:var(--text)">${OBS_LABELS[dim]}</div>
+          <div style="font-size:0.7rem;color:var(--text-2);font-style:italic;line-height:1.3">${info.prompt}</div>
+        </div>
+        <div style="display:flex;gap:0;flex-shrink:0">`;
+      scale.forEach(() => { html += `<span style="width:68px;display:flex;justify-content:center"><span class="report-reflect-bubble"></span></span>`; });
+      html += `</div></div>`;
+    });
+  };
+  _reflectGroup(LEARNING_DIMS, 'Learning Dispositions');
+  _reflectGroup(RELATIONAL_DIMS, 'Relational & Identity');
   // Open response
   html += `<div class="report-reflect-open" style="margin-top:16px;padding-top:14px;border-top:1.5px solid var(--border)">
     <div class="report-reflect-open-line"><span class="report-reflect-open-label">My biggest strength as a learner:</span><span class="report-reflect-open-field"></span></div>

@@ -30,15 +30,17 @@ window.PageObservations = (function() {
   var SEARCH_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
   var TAG_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>';
 
-  var DIM_COLORS = { engagement:'#3b82f6', collaboration:'#22c55e', selfRegulation:'#f59e0b', resilience:'#ef4444', curiosity:'#9333ea', respect:'#059669' };
+  var DIM_COLORS = { engagement:'#3b82f6', curiosity:'#9333ea', selfRegulation:'#f59e0b', resilience:'#ef4444', belonging:'#0ea5e9', identity:'#d946ef', collaboration:'#22c55e', respect:'#059669', responsibility:'#84cc16' };
   var CC_COLOR = '#e67700';
   var CUSTOM_COLOR = '#8b5cf6';
   function tagColor(t) { return t.startsWith('cc:') ? CC_COLOR : t.startsWith('tag:') ? CUSTOM_COLOR : DIM_COLORS[t] || '#999'; }
 
   function buildTagMenuItems() {
     var items = [];
-    items.push({ type:'section', label:'Learner Profile' });
-    OBS_DIMS.forEach(function(d) { items.push({ key:d, label:OBS_LABELS[d], color:DIM_COLORS[d]||'#999' }); });
+    items.push({ type:'section', label:'Learning Dispositions' });
+    LEARNING_DIMS.forEach(function(d) { items.push({ key:d, label:OBS_LABELS[d], color:DIM_COLORS[d]||'#999' }); });
+    items.push({ type:'section', label:'Relational & Identity' });
+    RELATIONAL_DIMS.forEach(function(d) { items.push({ key:d, label:OBS_LABELS[d], color:DIM_COLORS[d]||'#999' }); });
     items.push({ type:'section', label:'Core Competencies' });
     CORE_COMPETENCIES.forEach(function(cc) { items.push({ key:'cc:'+cc.id, label:cc.label, color:CC_COLOR }); });
     var custom = getCustomTags(activeCourse);

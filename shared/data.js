@@ -2561,7 +2561,7 @@ function upsertTermRating(cid, sid, termId, data) {
     all[sid][termId].modified = now;
   } else {
     all[sid][termId] = {
-      dims: { engagement:0, collaboration:0, selfRegulation:0, resilience:0, curiosity:0, respect:0 },
+      dims: Object.fromEntries(OBS_DIMS.map(d => [d, 0])),
       narrative: '',
       created: now,
       modified: now,
