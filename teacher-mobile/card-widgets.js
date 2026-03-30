@@ -7,14 +7,11 @@ window.MCardWidgets = (function() {
   var MAX_PROF = 4;
   var _renderers = {};
 
-  /* ── Public dispatch ──────────────────────────────────────────── */
-  function render(key, st, cid, data) {
-    var fn = _renderers[key];
-    if (!fn) return '';
-    return fn(st, cid, data);
+  /* ── Helpers ─────────────────────────────────────────────────── */
+  function _trunc(str, n) {
+    return str.length > n ? str.substring(0, n) + '\u2026' : str;
   }
 
-  /* ── Shared badge helper ─────────────────────────────────────── */
   function _renderBadges(st) {
     var badges = '';
     if (st.designations && st.designations.length) {
@@ -27,8 +24,29 @@ window.MCardWidgets = (function() {
     return badges;
   }
 
+  function _renderSocialChips(rating, filterIds, labelList, cssClass) {
+    var matched = (rating.socialTraits || []).filter(function(t) { return filterIds.has(t); });
+    if (!matched.length) return '';
+    var shown = matched.slice(0, 4);
+    var overflow = matched.length - shown.length;
+    var chips = shown.map(function(tid) {
+      var trait = labelList.find(function(t) { return t.id === tid; });
+      var label = trait ? trait.label : tid;
+      return '<span class="m-wdg-chip ' + cssClass + '">' + MC.esc(label) + '</span>';
+    }).join('');
+    if (overflow > 0) chips += '<span class="m-wdg-chip m-wdg-chip-more">+' + overflow + '</span>';
+    return chips;
+  }
+
+  /* ── Public dispatch ──────────────────────────────────────────── */
+  function render(key, st, cid, data) {
+    var fn = _renderers[key];
+    if (!fn) return '';
+    return fn(st, cid, data);
+  }
+
   /* ── hero ────────────────────────────────────────────────────── */
-  _renderers.hero = function(st, cid) {
+  _renderers.hero = function(st, cid, data) {
     var overall = getOverallProficiency(cid, st.id);
     var rounded = Math.round(overall);
     var color = MC.avatarColor(st.id);
@@ -36,10 +54,10 @@ window.MCardWidgets = (function() {
     var name = displayName(st);
     var badges = _renderBadges(st);
 
-    // Flag icon: only when flagStatus widget is in order AND student is flagged
+    // Flag icon: only when flagStatus widget is enabled AND student is flagged
     var flagHTML = '';
-    var cfg = getCardWidgetConfig();
-    if (cfg.order.indexOf('flagStatus') >= 0 && isStudentFlagged(cid, st.id)) {
+    var config = data.widgetConfig;
+    if (config.order.indexOf('flagStatus') >= 0 && isStudentFlagged(cid, st.id)) {
       flagHTML = '<span class="m-scard-flag" title="Flagged" aria-label="Flagged">&#x1F6A9;</span>';
     }
 
@@ -51,7 +69,7 @@ window.MCardWidgets = (function() {
         (badges ? '<div class="m-scard-badges">' + badges + '</div>' : '') +
       '</div>' +
       '<div class="m-scard-prof">' +
-        '<div class="m-scard-prof-val" style="color:' + MC.profBg(rounded) + '">' + (overall > 0 ? overall.toFixed(1) : '—') + '</div>' +
+        '<div class="m-scard-prof-val" style="color:' + MC.profBg(rounded) + '">' + (overall > 0 ? overall.toFixed(1) : '\u2014') + '</div>' +
         '<div class="m-scard-prof-label">' + (PROF_LABELS[rounded] || 'No Evidence') + '</div>' +
       '</div>' +
     '</div>';
@@ -88,17 +106,15 @@ window.MCardWidgets = (function() {
   };
 
   /* ── obsSnippet ──────────────────────────────────────────────── */
-  _renderers.obsSnippet = function(st, cid) {
-    var obs = getStudentQuickObs(cid, st.id);
+  _renderers.obsSnippet = function(st, cid, data) {
+    var obs = data.obs;
     if (!obs.length) {
       return '<div class="m-scard-obs-empty"><em>No observations yet</em></div>';
     }
     var latest = obs[0];
-    var text = (latest.text || '').substring(0, 80);
-    if (latest.text && latest.text.length > 80) text += '…';
     return '<div class="m-scard-obs">' +
       '<span style="color:var(--text-3);font-size:12px">' + MC.relativeTime(latest.created) + '</span> ' +
-      MC.esc(text) +
+      MC.esc(_trunc(latest.text || '', 80)) +
     '</div>';
   };
 
@@ -127,8 +143,8 @@ window.MCardWidgets = (function() {
 
   /* ── missingWork (alert metric tile) ─────────────────────────── */
   _renderers.missingWork = function(st, cid, data) {
-    var statuses = (data && data.statuses) || getAssignmentStatuses(cid);
-    var assessments = getAssessments(cid);
+    var statuses = data.statuses || getAssignmentStatuses(cid);
+    var assessments = data.assessments || getAssessments(cid);
     var count = assessments.filter(function(a) {
       return statuses[st.id + ':' + a.id] === 'NS';
     }).length;
@@ -141,9 +157,8 @@ window.MCardWidgets = (function() {
 
   /* ── growth (journey pill) ────────────────────────────────────── */
   _renderers.growth = function(st, cid, data) {
-    // Collect all summative scores across all sections/tags
     var allSummScores = [];
-    var sections = (data && data.sections) || [];
+    var sections = data.sections || [];
     sections.forEach(function(sec) {
       (sec.tags || []).forEach(function(tag) {
         getTagScores(cid, st.id, tag.id).forEach(function(s) {
@@ -154,14 +169,13 @@ window.MCardWidgets = (function() {
 
     if (!allSummScores.length) return '';
 
-    // Sort ascending by date
     allSummScores.sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); });
 
     if (allSummScores.length === 1) {
       var onlyScore = allSummScores[0].score;
       return '<div class="m-wdg-growth">' +
         '<span class="m-wdg-growth-label">' + (PROF_LABELS[onlyScore] || 'No Evidence') + '</span>' +
-        '<span class="m-wdg-growth-meta"> — 1 assessment</span>' +
+        '<span class="m-wdg-growth-meta"> \u2014 1 assessment</span>' +
       '</div>';
     }
 
@@ -170,13 +184,13 @@ window.MCardWidgets = (function() {
     var arrowColor, arrowChar;
     if (lastScore > firstScore) {
       arrowColor = 'var(--score-3)';
-      arrowChar = '↑';
+      arrowChar = '\u2191';
     } else if (lastScore < firstScore) {
       arrowColor = 'var(--score-1)';
-      arrowChar = '↓';
+      arrowChar = '\u2193';
     } else {
       arrowColor = 'var(--text-3)';
-      arrowChar = '→';
+      arrowChar = '\u2192';
     }
 
     return '<div class="m-wdg-growth">' +
@@ -188,13 +202,11 @@ window.MCardWidgets = (function() {
   };
 
   /* ── obsSummary ──────────────────────────────────────────────── */
-  _renderers.obsSummary = function(st, cid) {
-    var obs = getStudentQuickObs(cid, st.id);
+  _renderers.obsSummary = function(st, cid, data) {
+    var obs = data.obs;
     if (obs.length === 0) return '';
-    // Count observation contexts
     var ctxCounts = {};
     obs.forEach(function(o) { var c = o.context || 'unknown'; ctxCounts[c] = (ctxCounts[c] || 0) + 1; });
-    // Find most frequent
     var topCtx = null, topCount = 0, allSame = true, firstCount = null;
     Object.keys(ctxCounts).forEach(function(c) {
       if (firstCount === null) firstCount = ctxCounts[c];
@@ -219,11 +231,9 @@ window.MCardWidgets = (function() {
               : (goals[st.id] && goals[st.id].text) ? goals[st.id]
               : null;
     if (!entry) return '';
-    var text = entry.text;
-    if (text.length > 60) text = text.substring(0, 60) + '\u2026';
     return '<div class="m-wdg-reflection">' +
       '<div class="m-wdg-reflection-label">\ud83c\udfaf Student voice</div>' +
-      '<div class="m-wdg-reflection-text">' + MC.esc(text) + '</div>' +
+      '<div class="m-wdg-reflection-text">' + MC.esc(_trunc(entry.text, 60)) + '</div>' +
     '</div>';
   };
 
@@ -239,8 +249,7 @@ window.MCardWidgets = (function() {
 
   /* ── dispositions ────────────────────────────────────────────── */
   _renderers.dispositions = function(st, cid, data) {
-    var termId = (data && data.termId) || 'term-1';
-    var rating = getStudentTermRating(cid, st.id, termId);
+    var rating = data.termRating;
     if (!rating || !rating.dims) return '';
     var dims = rating.dims;
     var vals = OBS_DIMS.map(function(d) { return dims[d] || 0; });
@@ -249,7 +258,6 @@ window.MCardWidgets = (function() {
     var cx = 24, cy = 24, maxR = 20;
     var bgHex = _petalPath(6, maxR, cx, cy, 'var(--bg-secondary)', 'none');
 
-    // Data polygon
     var dataPts = OBS_DIMS.map(function(d, i) {
       var angle = (2 * Math.PI * i / 6) - Math.PI / 2;
       var r = (vals[i] / MAX_PROF) * maxR;
@@ -261,7 +269,6 @@ window.MCardWidgets = (function() {
       bgHex + dataShape +
     '</svg>';
 
-    // Top 2 dimensions
     var sorted = OBS_DIMS.slice().sort(function(a, b) { return (dims[b] || 0) - (dims[a] || 0); });
     var topTwo = sorted.slice(0, 2).filter(function(d) { return (dims[d] || 0) > 0; });
     var summary = topTwo.length ? 'Strong in ' + topTwo.map(function(d) { return OBS_LABELS[d]; }).join(', ') : '';
@@ -274,44 +281,25 @@ window.MCardWidgets = (function() {
 
   /* ── traits ──────────────────────────────────────────────────── */
   _renderers.traits = function(st, cid, data) {
-    var termId = (data && data.termId) || 'term-1';
-    var rating = getStudentTermRating(cid, st.id, termId);
+    var rating = data.termRating;
     if (!rating) return '';
-    var positive = (rating.socialTraits || []).filter(function(t) { return SOCIAL_TRAITS_POSITIVE_IDS.has(t); });
-    if (!positive.length) return '';
-    var shown = positive.slice(0, 4);
-    var overflow = positive.length - shown.length;
-    var chips = shown.map(function(tid) {
-      var trait = SOCIAL_TRAITS_POSITIVE.find(function(t) { return t.id === tid; });
-      var label = trait ? trait.label : tid;
-      return '<span class="m-wdg-chip m-wdg-chip-positive">' + MC.esc(label) + '</span>';
-    }).join('');
-    if (overflow > 0) chips += '<span class="m-wdg-chip m-wdg-chip-more">+' + overflow + '</span>';
+    var chips = _renderSocialChips(rating, SOCIAL_TRAITS_POSITIVE_IDS, SOCIAL_TRAITS_POSITIVE, 'm-wdg-chip-positive');
+    if (!chips) return '';
     return '<div class="m-wdg-traits">' + chips + '</div>';
   };
 
   /* ── concerns ────────────────────────────────────────────────── */
   _renderers.concerns = function(st, cid, data) {
-    var termId = (data && data.termId) || 'term-1';
-    var rating = getStudentTermRating(cid, st.id, termId);
+    var rating = data.termRating;
     if (!rating) return '';
-    var concern = (rating.socialTraits || []).filter(function(t) { return SOCIAL_TRAITS_CONCERN_IDS.has(t); });
-    if (!concern.length) return '';
-    var shown = concern.slice(0, 4);
-    var overflow = concern.length - shown.length;
-    var chips = shown.map(function(tid) {
-      var trait = SOCIAL_TRAITS_CONCERN.find(function(t) { return t.id === tid; });
-      var label = trait ? trait.label : tid;
-      return '<span class="m-wdg-chip m-wdg-chip-concern">' + MC.esc(label) + '</span>';
-    }).join('');
-    if (overflow > 0) chips += '<span class="m-wdg-chip m-wdg-chip-more">+' + overflow + '</span>';
+    var chips = _renderSocialChips(rating, SOCIAL_TRAITS_CONCERN_IDS, SOCIAL_TRAITS_CONCERN, 'm-wdg-chip-concern');
+    if (!chips) return '';
     return '<div class="m-wdg-concerns">' + chips + '</div>';
   };
 
   /* ── workHabits ──────────────────────────────────────────────── */
   _renderers.workHabits = function(st, cid, data) {
-    var termId = (data && data.termId) || 'term-1';
-    var rating = getStudentTermRating(cid, st.id, termId);
+    var rating = data.termRating;
     if (!rating) return '';
     var wh = rating.workHabits || 0;
     var part = rating.participation || 0;
@@ -343,11 +331,10 @@ window.MCardWidgets = (function() {
 
   /* ── growthAreas ─────────────────────────────────────────────── */
   _renderers.growthAreas = function(st, cid, data) {
-    var termId = (data && data.termId) || 'term-1';
-    var rating = getStudentTermRating(cid, st.id, termId);
+    var rating = data.termRating;
     if (!rating || !rating.growthAreas || !rating.growthAreas.length) return '';
     var areas = rating.growthAreas;
-    var sections = getSections(cid);
+    var sections = data.sections;
     var shown = areas.slice(0, 3);
     var overflow = areas.length - shown.length;
     var chips = shown.map(function(tid) {
@@ -370,25 +357,27 @@ window.MCardWidgets = (function() {
 
   /* ── narrative ───────────────────────────────────────────────── */
   _renderers.narrative = function(st, cid, data) {
-    var termId = (data && data.termId) || 'term-1';
-    var rating = getStudentTermRating(cid, st.id, termId);
+    var rating = data.termRating;
     if (!rating || !rating.narrative) return '';
     var raw = (rating.narrative || '').replace(/<[^>]+>/g, '').trim();
     if (!raw) return '';
-    if (raw.length > 80) raw = raw.substring(0, 80) + '\u2026';
     return '<div class="m-wdg-narrative">' +
       '<div class="m-wdg-section-label">Term Report</div>' +
-      '<div class="m-wdg-narrative-text">' + MC.esc(raw) + '</div>' +
+      '<div class="m-wdg-narrative-text">' + MC.esc(_trunc(raw, 80)) + '</div>' +
     '</div>';
   };
 
-  /* ── flagStatus ──────────────────────────────────────────────── */
+  /* ── flagStatus — no own output; flag icon is co-rendered by hero ── */
   _renderers.flagStatus = function() { return ''; };
 
   /* ── assembleCard ────────────────────────────────────────────── */
   function assembleCard(st, cid, data) {
-    var config = getCardWidgetConfig();
+    var config = data.widgetConfig;
     var order = config.order;
+
+    // Pre-fetch per-student data once for all renderers
+    data.obs = getStudentQuickObs(cid, st.id);
+    data.termRating = getStudentTermRating(cid, st.id, data.termId);
 
     // Hero: pinned top (or fallback if disabled)
     var heroIdx = order.indexOf('hero');

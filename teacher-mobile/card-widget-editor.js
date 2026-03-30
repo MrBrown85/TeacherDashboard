@@ -4,6 +4,8 @@ window.MCardWidgetEditor = (function() {
   'use strict';
 
   var MC = window.MComponents;
+  var _registryMap = {};
+  WIDGET_REGISTRY.forEach(function(w) { _registryMap[w.key] = w; });
 
   function buildEditorHTML() {
     var config = getCardWidgetConfig();
@@ -17,7 +19,7 @@ window.MCardWidgetEditor = (function() {
     html += '<div class="m-wdg-editor-section-label">Visible</div>';
     html += '<div class="m-wdg-editor-list" id="m-wdg-enabled-list">';
     config.order.forEach(function(key) {
-      var w = WIDGET_REGISTRY.find(function(r) { return r.key === key; });
+      var w = _registryMap[key];
       if (!w) return;
       var noDrag = key === 'flagStatus';
       html += _editorRow(w, true, noDrag);
@@ -28,7 +30,7 @@ window.MCardWidgetEditor = (function() {
     html += '<div class="m-wdg-editor-section-label">More Widgets</div>';
     html += '<div class="m-wdg-editor-list" id="m-wdg-disabled-list">';
     config.disabled.forEach(function(key) {
-      var w = WIDGET_REGISTRY.find(function(r) { return r.key === key; });
+      var w = _registryMap[key];
       if (!w) return;
       html += _editorRow(w, false, false);
     });
@@ -73,16 +75,17 @@ window.MCardWidgetEditor = (function() {
   }
 
   function resetToDefaults() {
-    localStorage.removeItem('m-card-widgets');
+    clearCardWidgetConfig();
   }
 
   var _onUpdate = null;
+  var _dragListenersAttached = false;
 
   function show(onUpdate) {
     MC.presentSheet(buildEditorHTML(), { half: false });
     MC.haptic();
     _onUpdate = onUpdate || null;
-    initDragListeners();
+    _initDragListeners();
   }
 
   function handleAction(action, el) {
@@ -117,9 +120,10 @@ window.MCardWidgetEditor = (function() {
     return false;
   }
 
-  function initDragListeners() {
+  function _initDragListeners() {
     var container = document.getElementById('m-sheet-container');
-    if (!container) return;
+    if (!container || _dragListenersAttached) return;
+    _dragListenersAttached = true;
 
     var _dragState = null;
 
@@ -158,10 +162,9 @@ window.MCardWidgetEditor = (function() {
       el.classList.remove('m-wdg-row-dragging');
       el.style.transform = '';
       if (slots !== 0) {
-        var config = getCardWidgetConfig();
-        var fromIdx = config.order.indexOf(_dragState.key);
+        var fromIdx = getCardWidgetConfig().order.indexOf(_dragState.key);
         if (fromIdx >= 0) {
-          var toIdx = Math.max(0, Math.min(config.order.length - 1, fromIdx + slots));
+          var toIdx = Math.max(0, Math.min(getCardWidgetConfig().order.length - 1, fromIdx + slots));
           moveWidget(_dragState.key, toIdx);
           var content = document.querySelector('#m-sheet-container .m-sheet-content');
           if (content) content.innerHTML = buildEditorHTML();
@@ -178,7 +181,6 @@ window.MCardWidgetEditor = (function() {
     moveWidget: moveWidget,
     resetToDefaults: resetToDefaults,
     show: show,
-    handleAction: handleAction,
-    initDragListeners: initDragListeners
+    handleAction: handleAction
   };
 })();

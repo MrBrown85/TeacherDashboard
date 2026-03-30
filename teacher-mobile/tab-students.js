@@ -137,7 +137,8 @@ window.MStudents = (function() {
       sections: sections,
       statuses: allStatuses,
       assessments: allAssessments,
-      termId: 'term-1'
+      termId: 'term-1',
+      widgetConfig: getCardWidgetConfig()
     };
 
     _stackInstance = MCardStack.create(container, students, {
@@ -147,9 +148,17 @@ window.MStudents = (function() {
     });
 
     _syncViewVisibility(true);
+    _initLongPress(container, cid);
+  }
 
-    // Long-press to edit card layout
-    var _longPressTimer = null;
+  // Long-press listeners — attached once per container element
+  var _longPressContainer = null;
+  var _longPressTimer = null;
+
+  function _initLongPress(container, cid) {
+    if (_longPressContainer === container) return;
+    _longPressContainer = container;
+
     container.addEventListener('touchstart', function(e) {
       if (e.target.closest('button') || e.target.closest('[data-action]')) return;
       _longPressTimer = setTimeout(function() {

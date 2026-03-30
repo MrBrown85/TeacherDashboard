@@ -104,7 +104,8 @@ const SECTIONS = [
   { id: 's1', name: 'Questioning', shortName: 'Quest', color: '#2196F3' },
   { id: 's2', name: 'Planning', shortName: 'Plan', color: '#4CAF50' },
 ];
-const DATA = { sections: SECTIONS };
+const DEFAULT_CONFIG = { order: ['hero', 'sectionBars', 'completion', 'growth', 'obsSnippet', 'dispositions', 'actions'], disabled: [] };
+const DATA = { sections: SECTIONS, widgetConfig: DEFAULT_CONFIG, obs: [], termRating: null, statuses: {}, assessments: [], termId: 'term-1' };
 
 beforeEach(() => {
   localStorage.clear();
@@ -147,20 +148,16 @@ describe('MCardWidgets.render hero', () => {
   });
 
   it('shows flag icon when flagStatus widget enabled and student is flagged', () => {
-    mockWidgetDataLayer({
-      getCardWidgetConfig: () => ({ order: ['hero', 'flagStatus', 'actions'], disabled: [] }),
-      isStudentFlagged: () => true,
-    });
-    const html = MCardWidgets.render('hero', STUDENT, CID, DATA);
+    mockWidgetDataLayer({ isStudentFlagged: () => true });
+    const d = { ...DATA, widgetConfig: { order: ['hero', 'flagStatus', 'actions'], disabled: [] } };
+    const html = MCardWidgets.render('hero', STUDENT, CID, d);
     expect(html).toContain('m-scard-flag');
   });
 
   it('does not show flag icon when student is not flagged', () => {
-    mockWidgetDataLayer({
-      getCardWidgetConfig: () => ({ order: ['hero', 'flagStatus', 'actions'], disabled: [] }),
-      isStudentFlagged: () => false,
-    });
-    const html = MCardWidgets.render('hero', STUDENT, CID, DATA);
+    mockWidgetDataLayer({ isStudentFlagged: () => false });
+    const d = { ...DATA, widgetConfig: { order: ['hero', 'flagStatus', 'actions'], disabled: [] } };
+    const html = MCardWidgets.render('hero', STUDENT, CID, d);
     expect(html).not.toContain('m-scard-flag');
   });
 });
@@ -209,25 +206,23 @@ describe('MCardWidgets.render sectionBars', () => {
 /* ── Task 2: obsSnippet ──────────────────────────────────────────── */
 describe('MCardWidgets.render obsSnippet', () => {
   it('renders observation text and timestamp', () => {
-    mockWidgetDataLayer({
-      getStudentQuickObs: () => [{ text: 'Great participation today', created: '2026-03-28T10:00:00Z' }],
-    });
-    const html = MCardWidgets.render('obsSnippet', STUDENT, CID, DATA);
+    mockWidgetDataLayer({});
+    const d = { ...DATA, obs: [{ text: 'Great participation today', created: '2026-03-28T10:00:00Z' }] };
+    const html = MCardWidgets.render('obsSnippet', STUDENT, CID, d);
     expect(html).toContain('m-scard-obs');
     expect(html).toContain('Great participation today');
   });
 
   it('truncates long observation text at 80 chars', () => {
+    mockWidgetDataLayer({});
     const longText = 'A'.repeat(100);
-    mockWidgetDataLayer({
-      getStudentQuickObs: () => [{ text: longText, created: '2026-03-28T10:00:00Z' }],
-    });
-    const html = MCardWidgets.render('obsSnippet', STUDENT, CID, DATA);
-    expect(html).toContain('…');
+    const d = { ...DATA, obs: [{ text: longText, created: '2026-03-28T10:00:00Z' }] };
+    const html = MCardWidgets.render('obsSnippet', STUDENT, CID, d);
+    expect(html).toContain('\u2026');
   });
 
   it('shows empty state when no observations', () => {
-    mockWidgetDataLayer({ getStudentQuickObs: () => [] });
+    mockWidgetDataLayer({});
     const html = MCardWidgets.render('obsSnippet', STUDENT, CID, DATA);
     expect(html).toContain('m-scard-obs-empty');
     expect(html).toContain('No observations yet');
@@ -291,25 +286,27 @@ describe('MCardWidgets.render completion', () => {
 /* ── Task 3: missingWork ─────────────────────────────────────────── */
 describe('MCardWidgets.render missingWork', () => {
   it('renders count when missing work > 0', () => {
-    mockWidgetDataLayer({
-      getAssignmentStatuses: () => ({ 'stu1:a1': 'NS', 'stu1:a2': 'NS' }),
-      getAssessments: () => [
+    mockWidgetDataLayer({});
+    const d = { ...DATA,
+      statuses: { 'stu1:a1': 'NS', 'stu1:a2': 'NS' },
+      assessments: [
         { id: 'a1', type: 'summative', date: '2026-01-01', tagIds: [] },
         { id: 'a2', type: 'summative', date: '2026-01-02', tagIds: [] },
       ],
-    });
-    const html = MCardWidgets.render('missingWork', STUDENT, CID, DATA);
+    };
+    const html = MCardWidgets.render('missingWork', STUDENT, CID, d);
     expect(html).toContain('m-wdg-tile');
     expect(html).toContain('m-wdg-alert');
     expect(html).toContain('2');
   });
 
   it('returns empty string when 0 missing', () => {
-    mockWidgetDataLayer({
-      getAssignmentStatuses: () => ({}),
-      getAssessments: () => [{ id: 'a1', type: 'summative', date: '2026-01-01', tagIds: [] }],
-    });
-    const html = MCardWidgets.render('missingWork', STUDENT, CID, DATA);
+    mockWidgetDataLayer({});
+    const d = { ...DATA,
+      statuses: {},
+      assessments: [{ id: 'a1', type: 'summative', date: '2026-01-01', tagIds: [] }],
+    };
+    const html = MCardWidgets.render('missingWork', STUDENT, CID, d);
     expect(html).toBe('');
   });
 });
@@ -376,14 +373,13 @@ describe('MCardWidgets.render growth', () => {
 /* ── Task 4: obsSummary ──────────────────────────────────────────── */
 describe('MCardWidgets.render obsSummary', () => {
   it('renders context sentence with count and context label', () => {
-    mockWidgetDataLayer({
-      getStudentQuickObs: () => [
-        { text: 'Active participant', created: '2026-03-01', context: 'small-group', sentiment: 'strength' },
-        { text: 'On task', created: '2026-03-02', context: 'small-group', sentiment: 'strength' },
-        { text: 'Great focus', created: '2026-03-03', context: 'whole-class', sentiment: 'strength' },
-      ],
-    });
-    const html = MCardWidgets.render('obsSummary', STUDENT, CID, DATA);
+    mockWidgetDataLayer({});
+    const d = { ...DATA, obs: [
+      { text: 'Active participant', created: '2026-03-01', context: 'small-group', sentiment: 'strength' },
+      { text: 'On task', created: '2026-03-02', context: 'small-group', sentiment: 'strength' },
+      { text: 'Great focus', created: '2026-03-03', context: 'whole-class', sentiment: 'strength' },
+    ] };
+    const html = MCardWidgets.render('obsSummary', STUDENT, CID, d);
     expect(html).toContain('m-wdg-obs-summary');
     expect(html).toContain('3 observations');
     // small-group has count 2, whole-class has count 1 → top context is small-group
@@ -391,7 +387,7 @@ describe('MCardWidgets.render obsSummary', () => {
   });
 
   it('returns empty string when no observations', () => {
-    mockWidgetDataLayer({ getStudentQuickObs: () => [] });
+    mockWidgetDataLayer({});
     const html = MCardWidgets.render('obsSummary', STUDENT, CID, DATA);
     expect(html).toBe('');
   });
@@ -447,17 +443,16 @@ describe('MCardWidgets.render reflection', () => {
 /* ── Task 4: dispositions ────────────────────────────────────────── */
 describe('MCardWidgets.render dispositions', () => {
   it('renders petal SVG and top dimension summary', () => {
-    mockWidgetDataLayer({
-      getStudentTermRating: () => ({
-        dims: { engagement: 4, collaboration: 3, selfRegulation: 2, resilience: 1, curiosity: 3, respect: 2 },
-        socialTraits: [],
-        workHabits: 2,
-        participation: 2,
-        growthAreas: [],
-        narrative: '',
-      }),
-    });
-    const html = MCardWidgets.render('dispositions', STUDENT, CID, DATA);
+    mockWidgetDataLayer({});
+    const d = { ...DATA, termRating: {
+      dims: { engagement: 4, collaboration: 3, selfRegulation: 2, resilience: 1, curiosity: 3, respect: 2 },
+      socialTraits: [],
+      workHabits: 2,
+      participation: 2,
+      growthAreas: [],
+      narrative: '',
+    } };
+    const html = MCardWidgets.render('dispositions', STUDENT, CID, d);
     expect(html).toContain('m-wdg-dispositions');
     expect(html).toContain('m-wdg-petal');
     expect(html).toContain('<svg');
@@ -467,23 +462,22 @@ describe('MCardWidgets.render dispositions', () => {
   });
 
   it('returns empty when no term rating', () => {
-    mockWidgetDataLayer({ getStudentTermRating: () => null });
+    mockWidgetDataLayer({});
     const html = MCardWidgets.render('dispositions', STUDENT, CID, DATA);
     expect(html).toBe('');
   });
 
   it('returns empty when all dims are 0', () => {
-    mockWidgetDataLayer({
-      getStudentTermRating: () => ({
-        dims: { engagement: 0, collaboration: 0, selfRegulation: 0, resilience: 0, curiosity: 0, respect: 0 },
-        socialTraits: [],
-        workHabits: 0,
-        participation: 0,
-        growthAreas: [],
-        narrative: '',
-      }),
-    });
-    const html = MCardWidgets.render('dispositions', STUDENT, CID, DATA);
+    mockWidgetDataLayer({});
+    const d = { ...DATA, termRating: {
+      dims: { engagement: 0, collaboration: 0, selfRegulation: 0, resilience: 0, curiosity: 0, respect: 0 },
+      socialTraits: [],
+      workHabits: 0,
+      participation: 0,
+      growthAreas: [],
+      narrative: '',
+    } };
+    const html = MCardWidgets.render('dispositions', STUDENT, CID, d);
     expect(html).toBe('');
   });
 });
@@ -491,17 +485,16 @@ describe('MCardWidgets.render dispositions', () => {
 /* ── Task 4: traits ──────────────────────────────────────────────── */
 describe('MCardWidgets.render traits', () => {
   it('renders positive trait chips, caps at 4, shows overflow', () => {
-    mockWidgetDataLayer({
-      getStudentTermRating: () => ({
-        dims: {},
-        socialTraits: ['leader', 'collaborative', 'independent', 'peer-mentor', 'risk-taker'],
-        workHabits: 2,
-        participation: 2,
-        growthAreas: [],
-        narrative: '',
-      }),
-    });
-    const html = MCardWidgets.render('traits', STUDENT, CID, DATA);
+    mockWidgetDataLayer({});
+    const d = { ...DATA, termRating: {
+      dims: {},
+      socialTraits: ['leader', 'collaborative', 'independent', 'peer-mentor', 'risk-taker'],
+      workHabits: 2,
+      participation: 2,
+      growthAreas: [],
+      narrative: '',
+    } };
+    const html = MCardWidgets.render('traits', STUDENT, CID, d);
     expect(html).toContain('m-wdg-traits');
     expect(html).toContain('m-wdg-chip-positive');
     expect(html).toContain('Leader');
@@ -510,17 +503,16 @@ describe('MCardWidgets.render traits', () => {
   });
 
   it('returns empty when no positive traits', () => {
-    mockWidgetDataLayer({
-      getStudentTermRating: () => ({
-        dims: {},
-        socialTraits: ['needs-support', 'often-late'],
-        workHabits: 2,
-        participation: 2,
-        growthAreas: [],
-        narrative: '',
-      }),
-    });
-    const html = MCardWidgets.render('traits', STUDENT, CID, DATA);
+    mockWidgetDataLayer({});
+    const d = { ...DATA, termRating: {
+      dims: {},
+      socialTraits: ['needs-support', 'often-late'],
+      workHabits: 2,
+      participation: 2,
+      growthAreas: [],
+      narrative: '',
+    } };
+    const html = MCardWidgets.render('traits', STUDENT, CID, d);
     expect(html).toBe('');
   });
 });
@@ -528,17 +520,16 @@ describe('MCardWidgets.render traits', () => {
 /* ── Task 4: concerns ────────────────────────────────────────────── */
 describe('MCardWidgets.render concerns', () => {
   it('renders concern trait chips in red style', () => {
-    mockWidgetDataLayer({
-      getStudentTermRating: () => ({
-        dims: {},
-        socialTraits: ['needs-support', 'often-late', 'leader'],
-        workHabits: 2,
-        participation: 2,
-        growthAreas: [],
-        narrative: '',
-      }),
-    });
-    const html = MCardWidgets.render('concerns', STUDENT, CID, DATA);
+    mockWidgetDataLayer({});
+    const d = { ...DATA, termRating: {
+      dims: {},
+      socialTraits: ['needs-support', 'often-late', 'leader'],
+      workHabits: 2,
+      participation: 2,
+      growthAreas: [],
+      narrative: '',
+    } };
+    const html = MCardWidgets.render('concerns', STUDENT, CID, d);
     expect(html).toContain('m-wdg-concerns');
     expect(html).toContain('m-wdg-chip-concern');
     expect(html).toContain('Needs Support');
@@ -548,17 +539,16 @@ describe('MCardWidgets.render concerns', () => {
   });
 
   it('returns empty when no concern traits', () => {
-    mockWidgetDataLayer({
-      getStudentTermRating: () => ({
-        dims: {},
-        socialTraits: ['leader', 'collaborative'],
-        workHabits: 2,
-        participation: 2,
-        growthAreas: [],
-        narrative: '',
-      }),
-    });
-    const html = MCardWidgets.render('concerns', STUDENT, CID, DATA);
+    mockWidgetDataLayer({});
+    const d = { ...DATA, termRating: {
+      dims: {},
+      socialTraits: ['leader', 'collaborative'],
+      workHabits: 2,
+      participation: 2,
+      growthAreas: [],
+      narrative: '',
+    } };
+    const html = MCardWidgets.render('concerns', STUDENT, CID, d);
     expect(html).toBe('');
   });
 });
@@ -570,17 +560,16 @@ describe('MCardWidgets.render concerns', () => {
 /* ── Task 5: workHabits ──────────────────────────────────────────── */
 describe('MCardWidgets.render workHabits', () => {
   it('renders dual segmented bar with pip rows', () => {
-    mockWidgetDataLayer({
-      getStudentTermRating: () => ({
-        dims: {},
-        socialTraits: [],
-        workHabits: 3,
-        participation: 2,
-        growthAreas: [],
-        narrative: '',
-      }),
-    });
-    const html = MCardWidgets.render('workHabits', STUDENT, CID, DATA);
+    mockWidgetDataLayer({});
+    const d = { ...DATA, termRating: {
+      dims: {},
+      socialTraits: [],
+      workHabits: 3,
+      participation: 2,
+      growthAreas: [],
+      narrative: '',
+    } };
+    const html = MCardWidgets.render('workHabits', STUDENT, CID, d);
     expect(html).toContain('m-wdg-habits');
     expect(html).toContain('m-wdg-habit-col');
     expect(html).toContain('m-wdg-pips');
@@ -590,23 +579,22 @@ describe('MCardWidgets.render workHabits', () => {
   });
 
   it('returns empty when no term rating', () => {
-    mockWidgetDataLayer({ getStudentTermRating: () => null });
+    mockWidgetDataLayer({});
     const html = MCardWidgets.render('workHabits', STUDENT, CID, DATA);
     expect(html).toBe('');
   });
 
   it('returns empty when both workHabits and participation are 0', () => {
-    mockWidgetDataLayer({
-      getStudentTermRating: () => ({
-        dims: {},
-        socialTraits: [],
-        workHabits: 0,
-        participation: 0,
-        growthAreas: [],
-        narrative: '',
-      }),
-    });
-    const html = MCardWidgets.render('workHabits', STUDENT, CID, DATA);
+    mockWidgetDataLayer({});
+    const d = { ...DATA, termRating: {
+      dims: {},
+      socialTraits: [],
+      workHabits: 0,
+      participation: 0,
+      growthAreas: [],
+      narrative: '',
+    } };
+    const html = MCardWidgets.render('workHabits', STUDENT, CID, d);
     expect(html).toBe('');
   });
 });
@@ -615,14 +603,6 @@ describe('MCardWidgets.render workHabits', () => {
 describe('MCardWidgets.render growthAreas', () => {
   it('renders tag chips with section color dots', () => {
     mockWidgetDataLayer({
-      getStudentTermRating: () => ({
-        dims: {},
-        socialTraits: [],
-        workHabits: 2,
-        participation: 2,
-        growthAreas: ['tag1', 'tag2'],
-        narrative: '',
-      }),
       getTagById: (cid, tid) => {
         if (tid === 'tag1') return { id: 'tag1', name: 'Critical Thinking', shortName: 'Crit Think', sectionId: 's1' };
         if (tid === 'tag2') return { id: 'tag2', name: 'Communication', shortName: 'Comm', sectionId: 's2' };
@@ -633,7 +613,15 @@ describe('MCardWidgets.render growthAreas', () => {
         { id: 's2', name: 'Planning', color: '#4CAF50' },
       ],
     });
-    const html = MCardWidgets.render('growthAreas', STUDENT, CID, DATA);
+    const d = { ...DATA, termRating: {
+      dims: {},
+      socialTraits: [],
+      workHabits: 2,
+      participation: 2,
+      growthAreas: ['tag1', 'tag2'],
+      narrative: '',
+    } };
+    const html = MCardWidgets.render('growthAreas', STUDENT, CID, d);
     expect(html).toContain('m-wdg-growth-areas');
     expect(html).toContain('m-wdg-section-label');
     expect(html).toContain('Growth Areas');
@@ -644,18 +632,18 @@ describe('MCardWidgets.render growthAreas', () => {
 
   it('returns empty when no growth areas', () => {
     mockWidgetDataLayer({
-      getStudentTermRating: () => ({
-        dims: {},
-        socialTraits: [],
-        workHabits: 2,
-        participation: 2,
-        growthAreas: [],
-        narrative: '',
-      }),
       getTagById: () => null,
       getSections: () => [],
     });
-    const html = MCardWidgets.render('growthAreas', STUDENT, CID, DATA);
+    const d = { ...DATA, termRating: {
+      dims: {},
+      socialTraits: [],
+      workHabits: 2,
+      participation: 2,
+      growthAreas: [],
+      narrative: '',
+    } };
+    const html = MCardWidgets.render('growthAreas', STUDENT, CID, d);
     expect(html).toBe('');
   });
 });
@@ -663,17 +651,16 @@ describe('MCardWidgets.render growthAreas', () => {
 /* ── Task 5: narrative ───────────────────────────────────────────── */
 describe('MCardWidgets.render narrative', () => {
   it('renders truncated excerpt with shadow card and header', () => {
-    mockWidgetDataLayer({
-      getStudentTermRating: () => ({
-        dims: {},
-        socialTraits: [],
-        workHabits: 2,
-        participation: 2,
-        growthAreas: [],
-        narrative: '<p>This student has shown tremendous growth this term and demonstrates strong skills in collaborative problem solving.</p>',
-      }),
-    });
-    const html = MCardWidgets.render('narrative', STUDENT, CID, DATA);
+    mockWidgetDataLayer({});
+    const d = { ...DATA, termRating: {
+      dims: {},
+      socialTraits: [],
+      workHabits: 2,
+      participation: 2,
+      growthAreas: [],
+      narrative: '<p>This student has shown tremendous growth this term and demonstrates strong skills in collaborative problem solving.</p>',
+    } };
+    const html = MCardWidgets.render('narrative', STUDENT, CID, d);
     expect(html).toContain('m-wdg-narrative');
     expect(html).toContain('m-wdg-section-label');
     expect(html).toContain('Term Report');
@@ -685,22 +672,21 @@ describe('MCardWidgets.render narrative', () => {
   });
 
   it('returns empty when no narrative', () => {
-    mockWidgetDataLayer({
-      getStudentTermRating: () => ({
-        dims: {},
-        socialTraits: [],
-        workHabits: 2,
-        participation: 2,
-        growthAreas: [],
-        narrative: '',
-      }),
-    });
-    const html = MCardWidgets.render('narrative', STUDENT, CID, DATA);
+    mockWidgetDataLayer({});
+    const d = { ...DATA, termRating: {
+      dims: {},
+      socialTraits: [],
+      workHabits: 2,
+      participation: 2,
+      growthAreas: [],
+      narrative: '',
+    } };
+    const html = MCardWidgets.render('narrative', STUDENT, CID, d);
     expect(html).toBe('');
   });
 
   it('returns empty when no term rating', () => {
-    mockWidgetDataLayer({ getStudentTermRating: () => null });
+    mockWidgetDataLayer({});
     const html = MCardWidgets.render('narrative', STUDENT, CID, DATA);
     expect(html).toBe('');
   });
@@ -732,7 +718,7 @@ describe('Card Assembly', () => {
   });
 
   it('assembles default card with hero, sectionBars, obsSnippet, actions', () => {
-    var data = { sections: [{ id: 'sec1', name: 'Questioning', color: '#4A90D9' }] };
+    var data = { sections: [{ id: 'sec1', name: 'Questioning', color: '#4A90D9' }], widgetConfig: getCardWidgetConfig(), termId: 'term-1' };
     var html = MCardWidgets.assembleCard(st, cid, data);
     expect(html).toContain('m-scard');
     expect(html).toContain('m-scard-hero');
@@ -749,7 +735,7 @@ describe('Card Assembly', () => {
                  'flagStatus', 'reflection', 'dispositions', 'traits', 'concerns',
                  'workHabits', 'growthAreas', 'narrative']
     });
-    var data = { sections: [] };
+    var data = { sections: [], widgetConfig: getCardWidgetConfig(), termId: 'term-1' };
     var html = MCardWidgets.assembleCard(st, cid, data);
     expect(html).toContain('m-scard-hero-min');
     expect(html).not.toContain('m-scard-prof');
@@ -766,7 +752,9 @@ describe('Card Assembly', () => {
     var data = {
       sections: [],
       assessments: [{ id: 'a1' }],
-      statuses: { 's1:a1': 'NS' }
+      statuses: { 's1:a1': 'NS' },
+      widgetConfig: getCardWidgetConfig(),
+      termId: 'term-1'
     };
     var html = MCardWidgets.assembleCard(st, cid, data);
     expect(html).toContain('m-wdg-2up');
@@ -779,7 +767,7 @@ describe('Card Assembly', () => {
                  'obsSummary', 'flagStatus', 'reflection', 'dispositions', 'traits',
                  'concerns', 'workHabits', 'growthAreas', 'narrative']
     });
-    var html = MCardWidgets.assembleCard(st, cid, { sections: [] });
+    var html = MCardWidgets.assembleCard(st, cid, { sections: [], widgetConfig: getCardWidgetConfig(), termId: 'term-1' });
     expect(html).not.toContain('m-scard-sections');
     expect(html).not.toContain('m-scard-obs');
   });
@@ -843,7 +831,8 @@ describe('Integration — Full Card Render Cycle', () => {
       sections: [{ id: 'sec1', name: 'Questioning', shortName: 'Quest', color: '#4A90D9' }],
       assessments: [{ id: 'a1' }, { id: 'a2' }],
       statuses: {},
-      termId: 'term-1'
+      termId: 'term-1',
+      widgetConfig: getCardWidgetConfig()
     };
     var html = MCardWidgets.assembleCard(st, cid, data);
 
@@ -878,7 +867,7 @@ describe('Integration — Full Card Render Cycle', () => {
     expect(config.order).toContain('narrative');
     expect(config.order.length).toBe(7);
 
-    var data = { sections: [], assessments: [], statuses: {}, termId: 'term-1' };
+    var data = { sections: [], assessments: [], statuses: {}, termId: 'term-1', widgetConfig: getCardWidgetConfig() };
     var html = MCardWidgets.assembleCard(st, cid, data);
     expect(html).toContain('m-scard');
   });

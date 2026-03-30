@@ -2586,6 +2586,10 @@ function saveCardWidgetConfig(config) {
   _safeLSSet('m-card-widgets', JSON.stringify(config));
 }
 
+function clearCardWidgetConfig() {
+  try { localStorage.removeItem('m-card-widgets'); } catch (e) { /* storage error */ }
+}
+
 /* ── Namespace ──────────────────────────────────────────────── */
 var _mobileRerender = null;
 
@@ -2704,6 +2708,7 @@ window.GB = {
   saveReportConfig,
   getCardWidgetConfig,
   saveCardWidgetConfig,
+  clearCardWidgetConfig,
 };
 
 /**
