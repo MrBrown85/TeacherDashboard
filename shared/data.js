@@ -234,7 +234,16 @@ async function _handleCrossTabChange(cid, field) {
           } else if (field === 'assessments') {
             _cache[field][cid] = _assessmentRowsToBlob(result.data);
           } else if (field === 'students') {
-            _cache[field][cid] = _studentRowsToBlob(result.data).map(migrateStudent);
+            var newStudents = _studentRowsToBlob(result.data).map(migrateStudent);
+            var curStudents = _cache[field][cid];
+            // Never-shrink guard
+            if (Array.isArray(curStudents) && curStudents.length > 0 &&
+                newStudents.length < curStudents.length * 0.5) {
+              console.warn('Cross-tab students refetch returned', newStudents.length,
+                'vs', curStudents.length, 'in cache — skipping');
+            } else {
+              _cache[field][cid] = newStudents;
+            }
           }
         }
       }
@@ -408,7 +417,7 @@ async function _doSync(table, key, data) {
           .abortSignal(controller.signal);
         if (insErr) throw insErr;
       }
-    } else if (table === 'students_table') {
+    } else if (table === 'students') {
       // Full students sync: delete all for this course, then bulk insert
       const sRows = _studentsBlobToRows(key.cid, data);
       const { error: delErr } = await sb.from('students')
@@ -678,6 +687,17 @@ function _initRealtimeSync() {
         if (res.error || !res.data) return;
         var newData = converter(res.data);
         if (!_hasDataChanged(newData, _cache[field][cid])) return;
+        // Never-shrink guard: if the remote result is dramatically smaller
+        // than the local cache, it likely caught the DB mid-DELETE+INSERT.
+        // Skip the update to avoid data loss.
+        var existing = _cache[field][cid];
+        if (Array.isArray(existing) && Array.isArray(newData)) {
+          if (existing.length > 0 && newData.length < existing.length * 0.5) {
+            console.warn('Realtime refetch for', field, 'returned', newData.length,
+              'items vs', existing.length, 'in cache — skipping (likely mid-sync snapshot)');
+            return;
+          }
+        }
         _cache[field][cid] = newData;
         _invalidateAndRerender();
       });
@@ -1213,7 +1233,7 @@ const _NORMALIZED_TABLES = {
   scores: 'scores',
   observations: 'observations',
   assessments: 'assessments',
-  students: 'students_table',
+  students: 'students',
   goals: 'goals',
   reflections: 'reflections',
   overrides: 'overrides',

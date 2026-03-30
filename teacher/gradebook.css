@@ -500,7 +500,7 @@ th.gb-group-alt { background-color: rgba(0,0,0,0.03); }
 .gb-grid-rowhead {
   display:flex; align-items:center; justify-content:space-between;
   padding:0 12px; border-bottom:0.5px solid var(--divider-subtle);
-  box-sizing:border-box;
+  box-sizing:border-box; height:48px;
 }
 .gb-grid-rowhead.gb-scores-alt { background:rgba(0,0,0,0.015); }
 .gb-grid-rowhead-name {
