@@ -714,7 +714,7 @@
 }
 
 /* ── Column 2: Data — auto-populated panels ── */
-.tq-col-data { grid-area:data; display:flex; flex-direction:column; gap:12px; }
+.tq-col-data { grid-area:data; display:flex; flex-direction:column; gap:12px; min-height:0; }
 .tq-col-data > .tq-panel:first-child { flex:1; min-height:0; display:flex; flex-direction:column; }
 
 /* Snapshot rows */
