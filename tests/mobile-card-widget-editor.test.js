@@ -23,11 +23,11 @@ describe('Card Widget Editor', () => {
 
   it('toggleWidget enables a disabled widget', () => {
     var config = getCardWidgetConfig();
-    expect(config.disabled).toContain('completion');
-    MCardWidgetEditor.toggleWidget('completion');
+    expect(config.disabled).toContain('narrative');
+    MCardWidgetEditor.toggleWidget('narrative');
     config = getCardWidgetConfig();
-    expect(config.order).toContain('completion');
-    expect(config.disabled).not.toContain('completion');
+    expect(config.order).toContain('narrative');
+    expect(config.disabled).not.toContain('narrative');
   });
 
   it('toggleWidget disables an enabled widget', () => {
@@ -45,12 +45,13 @@ describe('Card Widget Editor', () => {
     expect(config.order[0]).toBe('hero');
     expect(config.order[1]).toBe('obsSnippet');
     expect(config.order[2]).toBe('sectionBars');
+    expect(config.order[3]).toBe('completion');
   });
 
   it('resetToDefaults clears saved config', () => {
     saveCardWidgetConfig({ order: ['hero'], disabled: [] });
     MCardWidgetEditor.resetToDefaults();
     var config = getCardWidgetConfig();
-    expect(config.order).toEqual(['hero', 'sectionBars', 'obsSnippet', 'actions']);
+    expect(config.order).toEqual(['hero', 'sectionBars', 'completion', 'growth', 'obsSnippet', 'dispositions', 'actions']);
   });
 });

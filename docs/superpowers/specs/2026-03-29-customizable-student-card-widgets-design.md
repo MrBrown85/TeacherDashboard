@@ -29,9 +29,9 @@ Stored in localStorage under key `m-card-widgets`:
 
 ```javascript
 {
-  order: ['hero', 'sectionBars', 'completion', 'obsSnippet', 'actions'],
-  disabled: ['missingWork', 'growth', 'obsSummary', 'flagStatus', 'reflection',
-             'dispositions', 'traits', 'concerns', 'workHabits', 'growthAreas', 'narrative']
+  order: ['hero', 'sectionBars', 'completion', 'growth', 'obsSnippet', 'dispositions', 'actions'],
+  disabled: ['missingWork', 'obsSummary', 'flagStatus', 'reflection',
+             'traits', 'concerns', 'workHabits', 'growthAreas', 'narrative']
 }
 ```
 
@@ -45,10 +45,9 @@ On first load (no localStorage entry), the config is:
 
 ```javascript
 {
-  order: ['hero', 'sectionBars', 'obsSnippet', 'actions'],
-  disabled: ['completion', 'missingWork', 'growth', 'obsSummary', 'flagStatus',
-             'reflection', 'dispositions', 'traits', 'concerns', 'workHabits',
-             'growthAreas', 'narrative']
+  order: ['hero', 'sectionBars', 'completion', 'growth', 'obsSnippet', 'dispositions', 'actions'],
+  disabled: ['missingWork', 'obsSummary', 'flagStatus', 'reflection',
+             'traits', 'concerns', 'workHabits', 'growthAreas', 'narrative']
 }
 ```
 
@@ -58,14 +57,14 @@ On first load (no localStorage entry), the config is:
 |---|-----|-------|---------|-----------------|
 | 0 | `hero` | Name & Proficiency | on | Fallback: always shows name even if toggled off |
 | 1 | `sectionBars` | Section Progress | on | Hidden if no sections |
-| 2 | `completion` | Completion | off | Shows "—" if no assessments |
+| 2 | `completion` | Completion | on | Shows "—" if no assessments |
 | 3 | `missingWork` | Missing Work | off | Hidden if 0 missing |
-| 4 | `growth` | Growth Journey | off | Hidden if no scored work |
+| 4 | `growth` | Growth Journey | on | Hidden if no scored work |
 | 5 | `obsSnippet` | Latest Observation | on | "No observations yet" italic |
 | 6 | `obsSummary` | Observation Insights | off | Hidden if 0 observations |
 | 7 | `flagStatus` | Flag | off | Hidden if not flagged |
 | 8 | `reflection` | Student Voice | off | Hidden if no reflections/goals |
-| 9 | `dispositions` | Learner Dispositions | off | Hidden if no term rating |
+| 9 | `dispositions` | Learner Dispositions | on | Hidden if no term rating |
 | 10 | `traits` | Character Strengths | off | Hidden if no positive traits |
 | 11 | `concerns` | Concerns | off | Hidden if no concerns |
 | 12 | `workHabits` | Work Habits & Participation | off | Hidden if no term rating |

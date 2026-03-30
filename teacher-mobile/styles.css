@@ -1678,7 +1678,8 @@ body.mobile-mode :focus:not(:focus-visible) { outline: none; }
    CARD STACK — Swipeable card deck with physical depth
    ═══════════════════════════════════════════════════════════════ */
 .m-card-stack {
-  position:relative; height:420px; margin:12px 0; perspective:1200px;
+  position:relative; height:calc(100vh - 280px); min-height:320px; max-height:640px;
+  margin:12px 0; perspective:1200px;
 }
 .m-card-stack-item {
   position:absolute; inset:0 16px; border-radius:20px;
@@ -1771,10 +1772,11 @@ body.mobile-mode :focus:not(:focus-visible) { outline: none; }
 
 /* ── Metric tiles ─────────────────────────────────────────── */
 .m-wdg-tile { display:flex; flex-direction:column; align-items:center; gap:4px;
-  background:var(--bg); border-radius:10px; padding:10px; flex:1; }
+  background:var(--bg); border-radius:10px; padding:10px; }
 .m-wdg-tile-label { font-size:11px; font-weight:600; text-transform:uppercase;
   letter-spacing:0.5px; color:var(--text-3); }
 .m-wdg-2up { display:flex; gap:10px; }
+.m-wdg-2up .m-wdg-tile { flex:1; }
 
 /* Alert metric tile */
 .m-wdg-alert .m-wdg-alert-val { font-size:18px; font-weight:800; color:var(--priority); }

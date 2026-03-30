@@ -12,11 +12,10 @@ describe('Card Widget Config', () => {
 
   it('returns default config when no localStorage entry exists', () => {
     var config = getCardWidgetConfig();
-    expect(config.order).toEqual(['hero', 'sectionBars', 'obsSnippet', 'actions']);
-    expect(config.disabled).toContain('completion');
-    expect(config.disabled).toContain('dispositions');
+    expect(config.order).toEqual(['hero', 'sectionBars', 'completion', 'growth', 'obsSnippet', 'dispositions', 'actions']);
+    expect(config.disabled).toContain('missingWork');
     expect(config.disabled).toContain('narrative');
-    expect(config.disabled.length).toBe(12);
+    expect(config.disabled.length).toBe(9);
   });
 
   it('reads saved config from localStorage', () => {
@@ -866,18 +865,18 @@ describe('Integration — Full Card Render Cycle', () => {
 
   it('editor toggle cycle preserves other widgets', () => {
     var config = getCardWidgetConfig();
-    expect(config.order.length).toBe(4);
+    expect(config.order.length).toBe(7);
 
-    MCardWidgetEditor.toggleWidget('dispositions');
+    MCardWidgetEditor.toggleWidget('narrative');
     config = getCardWidgetConfig();
-    expect(config.order).toContain('dispositions');
-    expect(config.order.length).toBe(5);
+    expect(config.order).toContain('narrative');
+    expect(config.order.length).toBe(8);
 
     MCardWidgetEditor.toggleWidget('sectionBars');
     config = getCardWidgetConfig();
     expect(config.order).not.toContain('sectionBars');
-    expect(config.order).toContain('dispositions');
-    expect(config.order.length).toBe(4);
+    expect(config.order).toContain('narrative');
+    expect(config.order.length).toBe(7);
 
     var data = { sections: [], assessments: [], statuses: {}, termId: 'term-1' };
     var html = MCardWidgets.assembleCard(st, cid, data);
