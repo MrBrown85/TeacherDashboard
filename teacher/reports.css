@@ -968,21 +968,20 @@
 .tq-wrap.floating .tq-col-write {
   display:contents;
 }
-/* Header & footer flow normally at top/bottom; panels float between them */
+/* Header stays in flow at top */
 .tq-wrap.floating .student-header-top {
   position:relative; z-index:200; margin-bottom:4px;
 }
+/* Footer pinned to bottom of the wrap */
 .tq-wrap.floating .tq-nav-footer {
-  position:relative; z-index:200; background:var(--bg);
+  position:absolute; bottom:0; left:0; right:0;
+  z-index:200; background:var(--bg);
+  padding:12px 2px; border-top:1px solid var(--border);
 }
 .tq-wrap.floating .tq-panel {
   position:absolute;
-  overflow:visible;   /* let resize handles extend outside */
+  overflow:hidden;
   box-sizing:border-box;
-}
-.tq-wrap.floating .tq-panel > :not(.tq-resize-handle) {
-  /* inner content scrolls if needed */
-  max-height:100%; overflow-y:auto;
 }
 .tq-wrap.floating .tq-panel.dragging { opacity:0.85; }
 .tq-wrap.floating .tq-panel-title {
@@ -1000,16 +999,16 @@
 }
 .tq-reset-layout-btn:hover { border-color:var(--text-3); color:var(--text-2); }
 
-/* Resize handles — positioned at panel edges, overflow:visible lets them extend outside */
-.tq-resize-handle { position:absolute; z-index:1; }
-.tq-resize-handle.n  { top:-3px; left:6px; right:6px; height:6px; cursor:n-resize; }
-.tq-resize-handle.s  { bottom:-3px; left:6px; right:6px; height:6px; cursor:s-resize; }
-.tq-resize-handle.e  { right:-3px; top:6px; bottom:6px; width:6px; cursor:e-resize; }
-.tq-resize-handle.w  { left:-3px; top:6px; bottom:6px; width:6px; cursor:w-resize; }
-.tq-resize-handle.nw { top:-3px; left:-3px; width:10px; height:10px; cursor:nw-resize; }
-.tq-resize-handle.ne { top:-3px; right:-3px; width:10px; height:10px; cursor:ne-resize; }
-.tq-resize-handle.sw { bottom:-3px; left:-3px; width:10px; height:10px; cursor:sw-resize; }
-.tq-resize-handle.se { bottom:-3px; right:-3px; width:12px; height:12px; cursor:se-resize; }
+/* Resize handles — inside panel bounds (overflow:hidden clips negatives) */
+.tq-resize-handle { position:absolute; z-index:10; }
+.tq-resize-handle.n  { top:0; left:6px; right:6px; height:6px; cursor:n-resize; }
+.tq-resize-handle.s  { bottom:0; left:6px; right:6px; height:6px; cursor:s-resize; }
+.tq-resize-handle.e  { right:0; top:6px; bottom:6px; width:6px; cursor:e-resize; }
+.tq-resize-handle.w  { left:0; top:6px; bottom:6px; width:6px; cursor:w-resize; }
+.tq-resize-handle.nw { top:0; left:0; width:10px; height:10px; cursor:nw-resize; }
+.tq-resize-handle.ne { top:0; right:0; width:10px; height:10px; cursor:ne-resize; }
+.tq-resize-handle.sw { bottom:0; left:0; width:10px; height:10px; cursor:sw-resize; }
+.tq-resize-handle.se { bottom:0; right:0; width:12px; height:12px; cursor:se-resize; }
 /* SE grip icon */
 .tq-resize-handle.se::after {
   content:''; position:absolute; right:2px; bottom:2px;
