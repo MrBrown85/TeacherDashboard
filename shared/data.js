@@ -111,7 +111,7 @@ let _initPromise = null;  // dedup concurrent initData calls
    Prevents Realtime events from triggering a refetch that could see partial state
    while an UPSERT batch is still in-flight. */
 const _echoGuard = {};  // key: "field:cid" → expiry timestamp
-const _ECHO_GUARD_MS = 15000;  // suppress echoes for 15s after save (must exceed _SYNC_TIMEOUT_MS)
+const _ECHO_GUARD_MS = 35000;  // suppress echoes for 35s after save (must exceed _SYNC_TIMEOUT_MS)
 
 function _setEchoGuard(field, cid) {
   _echoGuard[field + ':' + cid] = Date.now() + _ECHO_GUARD_MS;
