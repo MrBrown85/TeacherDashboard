@@ -743,7 +743,7 @@
 .tq-col-observations { grid-area:obs; align-self:stretch; justify-content:flex-end; }
 .tq-col-data > .tq-panel.fill { flex:1 1 auto; min-height:100%; }
 .tq-col-write > .tq-panel.fill { flex:1 1 auto; min-height:100%; }
-.tq-col-observations > .tq-panel.fill { flex:1 1 auto; }
+.tq-col-observations > .tq-panel.fill { flex:0 0 auto; }
 .tq-col-data > .tq-panel[data-panel-id="academic-snapshot"] {
   display:flex;
   flex-direction:column;
@@ -758,7 +758,8 @@
 }
 .tq-col-observations > .tq-panel {
   width:100%;
-  min-height:var(--tq-bottom-panel-height);
+  height:var(--tq-bottom-panel-height);
+  max-height:var(--tq-bottom-panel-height);
 }
 .tq-col-observations .tq-evidence-list { flex:1; min-height:0; overflow-y:auto; }
 
