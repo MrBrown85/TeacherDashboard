@@ -578,8 +578,8 @@
 
 /* ── Full-bleed 3-column workboard ── */
 .tq-wrap {
-  --tq-top-panel-height: 420px;
-  --tq-bottom-panel-height: 320px;
+  --tq-top-panel-height: 560px;
+  --tq-bottom-panel-height: 180px;
   display:grid; grid-template-columns:minmax(0, 1.12fr) minmax(0, 0.86fr) minmax(0, 1fr);
   grid-template-rows:auto auto auto auto;
   grid-template-areas:
@@ -749,10 +749,12 @@
   flex-direction:column;
   height:var(--tq-top-panel-height);
   max-height:var(--tq-top-panel-height);
+  min-height:var(--tq-top-panel-height);
 }
 .tq-col-write > .tq-panel[data-panel-id="narrative-comment"] {
   height:var(--tq-top-panel-height);
   max-height:var(--tq-top-panel-height);
+  min-height:var(--tq-top-panel-height);
 }
 .tq-col-observations > .tq-panel {
   width:100%;
@@ -784,6 +786,7 @@
   min-height:0;
   display:flex;
   flex-direction:column;
+  overflow:hidden;
 }
 .tq-assignment-section .tq-panel-title { font-size:0.5rem; margin-bottom:6px; }
 
@@ -983,6 +986,7 @@
   margin-top:6px;
   flex:1 1 auto;
   min-height:0;
+  height:100%;
   overflow-y:scroll;
   scrollbar-gutter:stable;
   padding-right:2px;
