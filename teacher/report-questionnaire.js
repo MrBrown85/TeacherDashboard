@@ -1167,10 +1167,13 @@ function renderTermQuestionnaire(cid) {
     html += `</div>`;
   }
 
-  // Observations (inside col-data, below snapshot + reflections)
+  // Observations (bottom-right, spanning data + write columns)
   const mentionObs = rating.mentionObs || [];
   const recentObs = allObs.slice(0, 8);
-  html += `<div class="tq-panel" data-panel-id="observations">
+  html += `</div>`; // close col-data
+
+  html += `<div class="tq-col-observations">
+    <div class="tq-panel fill" data-panel-id="observations">
     <div class="tq-panel-title spread">
       <span>Observations <span class="tq-panel-badge">${obsCount}</span></span>
       <div class="tq-obs-summary">`;
@@ -1208,9 +1211,7 @@ function renderTermQuestionnaire(cid) {
   } else {
     html += `<div class="tq-obs-empty">There are no observations for this student.</div>`;
   }
-  html += `</div>`;
-
-  html += `</div>`; // close col-data
+  html += `</div></div>`;
 
   // ══ COLUMN 3: WRITE — Narrative workspace ══
   html += `<div class="tq-col-write">`;

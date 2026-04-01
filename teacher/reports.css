@@ -578,11 +578,12 @@
 
 /* ── Full-bleed 3-column workboard ── */
 .tq-wrap {
-  display:grid; grid-template-columns:1fr 1fr 1fr;
-  grid-template-rows:auto 1fr auto;
+  display:grid; grid-template-columns:minmax(0, 1.12fr) minmax(0, 0.86fr) minmax(0, 1fr);
+  grid-template-rows:auto minmax(0, 1fr) minmax(260px, 0.92fr) auto;
   grid-template-areas:
     "header  header  header"
     "rate    data    write"
+    "rate    obs     obs"
     "footer  footer  footer";
   gap:12px; padding:12px 2px 4px;
   height:calc(100vh - 110px); /* constrain to viewport — panels scroll internally */
@@ -717,8 +718,10 @@
 
 /* ── Column 2: Data — auto-populated panels ── */
 .tq-col-data { grid-area:data; display:flex; flex-direction:column; gap:12px; min-height:0; overflow-y:auto; }
-.tq-col-data > .tq-panel:last-child { flex:1; min-height:0; }
-.tq-col-data > .tq-panel:last-child .tq-evidence-list { flex:1; min-height:0; overflow-y:auto; }
+.tq-col-data > .tq-panel.fill { flex:1; min-height:0; }
+.tq-col-observations { grid-area:obs; display:flex; flex-direction:column; min-height:0; }
+.tq-col-observations > .tq-panel { flex:1; min-height:0; }
+.tq-col-observations .tq-evidence-list { flex:1; min-height:0; overflow-y:auto; }
 
 /* Snapshot rows */
 .tq-snapshot-grid { display:flex; flex-direction:column; gap:3px; }
@@ -957,4 +960,3 @@
 .tq-assignment-score {
   font-size:var(--text-sm); font-weight:700; flex-shrink:0; min-width:60px; text-align:right;
 }
-
