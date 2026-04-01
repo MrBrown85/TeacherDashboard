@@ -1023,6 +1023,7 @@ function renderTermQuestionnaire(cid) {
 
   // ══ COLUMN 1: RATE — Dispositions + Quick Profile ══
   html += `<div class="tq-col-rate">`;
+  html += `<div class="tq-col-rate-top">`;
 
   // Disposition ratings — two panels
   const PILL_TEXT = {1:'Needs Support', 2:'Developing', 3:'Growing', 4:'Thriving'};
@@ -1051,6 +1052,9 @@ function renderTermQuestionnaire(cid) {
   };
   _renderDimPanel(LEARNING_DIMS, 'Learning Dispositions', ratedLearning, 'learning-dispositions');
   _renderDimPanel(RELATIONAL_DIMS, 'Relational & Identity', ratedRelational, 'relational-identity');
+  html += `</div>`;
+
+  html += `<div class="tq-col-rate-bottom">`;
 
   // Quick Profile
   const RATE_LABELS = {1:'Rarely', 2:'Sometimes', 3:'Usually', 4:'Consistently'};
@@ -1115,6 +1119,8 @@ function renderTermQuestionnaire(cid) {
     <span class="tq-nav-counter">${tqStudentIndex + 1} of ${students.length}</span>
     <button class="tq-nav-btn primary" data-action="tqNextStudent">${tqStudentIndex >= students.length - 1 ? 'Done ✓' : 'Save & Next →'}</button>
   </div>`;
+
+  html += `</div>`;
 
   html += `</div>`; // close col-rate
 
