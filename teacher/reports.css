@@ -579,13 +579,13 @@
 /* ── Full-bleed 3-column workboard ── */
 .tq-wrap {
   display:grid; grid-template-columns:minmax(0, 1.12fr) minmax(0, 0.86fr) minmax(0, 1fr);
-  grid-template-rows:auto minmax(0, 1fr) minmax(240px, 0.7fr);
+  grid-template-rows:auto auto auto auto;
   grid-template-areas:
     "header  header  header"
-    "rate    data    write"
-    "rate    obs     obs";
+    "rateTop data    write"
+    "rateBottom obs  obs"
+    "footer  footer  footer";
   gap:12px; padding:12px 2px 4px;
-  height:calc(100vh - 110px);
   align-items:stretch;
 }
 
@@ -618,29 +618,19 @@
 }
 
 /* ── Column 1: Rate ── */
-.tq-col-rate {
-  grid-area:rate;
-  display:grid;
-  grid-template-rows:minmax(0, 1fr) auto;
-  gap:14px;
-  min-height:100%;
-  height:100%;
-  align-self:stretch;
-  overflow:hidden;
-}
 .tq-col-rate-top {
+  grid-area:rateTop;
   display:flex;
   flex-direction:column;
   gap:14px;
-  min-height:0;
-  overflow-y:auto;
+  align-self:start;
 }
 .tq-col-rate-bottom {
+  grid-area:rateBottom;
   display:flex;
   flex-direction:column;
   gap:14px;
-  min-height:0;
-  flex-shrink:0;
+  align-self:stretch;
 }
 
 /* Dimension rows — stacked label + segmented control */
@@ -740,10 +730,21 @@
 }
 
 /* ── Column 2: Data — auto-populated panels ── */
-.tq-col-data { grid-area:data; display:flex; flex-direction:column; gap:12px; min-height:0; height:100%; align-self:stretch; overflow:hidden; }
-.tq-col-data > .tq-panel.fill { flex:1 1 auto; min-height:0; height:100%; }
-.tq-col-observations { grid-area:obs; display:flex; flex-direction:column; min-height:0; }
-.tq-col-observations > .tq-panel { flex:1; min-height:0; }
+.tq-col-data,
+.tq-col-write,
+.tq-col-observations {
+  display:flex;
+  flex-direction:column;
+  align-self:stretch;
+}
+.tq-col-data { grid-area:data; gap:12px; }
+.tq-col-write { grid-area:write; gap:12px; }
+.tq-col-observations { grid-area:obs; }
+.tq-col-data > .tq-panel.fill,
+.tq-col-write > .tq-panel.fill,
+.tq-col-observations > .tq-panel.fill {
+  flex:1 1 auto;
+}
 .tq-col-observations .tq-evidence-list { flex:1; min-height:0; overflow-y:auto; }
 
 /* Snapshot rows */
@@ -815,10 +816,6 @@
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1;
 }
 .tq-reflection-val { font-size:var(--text-xs); font-weight:600; flex-shrink:0; }
-
-/* ── Column 3: Write — narrative workspace ── */
-.tq-col-write { grid-area:write; display:flex; flex-direction:column; gap:12px; min-height:0; height:100%; align-self:stretch; overflow:hidden; }
-.tq-col-write > .tq-panel.fill { flex:1 1 auto; min-height:0; height:100%; }
 
 .tq-obs-wide-date { font-size:var(--text-sm); color:var(--text-3); white-space:nowrap; flex-shrink:0; margin-left:auto; padding-left:8px; }
 
@@ -941,13 +938,14 @@
 }
 .tq-auto-btn:hover { border-color:var(--active); color:var(--active); background:rgba(0,122,255,0.04); }
 
-/* ── Nav footer — lives under Quick Profile in left column ── */
+/* ── Nav footer — full-width page footer ── */
 .tq-nav-footer {
+  grid-area:footer;
   display:flex; align-items:center; justify-content:space-between;
   gap:10px;
+  margin-top:4px;
   padding-top:14px; border-top:1px solid var(--border);
-  position:relative; z-index:10; background:transparent;
-  flex-shrink:0;
+  position:relative; z-index:10; background:var(--bg);
 }
 .tq-nav-btn {
   font-family:var(--font-base);

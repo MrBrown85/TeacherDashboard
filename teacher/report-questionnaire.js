@@ -1021,8 +1021,7 @@ function renderTermQuestionnaire(cid) {
     buttonHref: `#/student?course=${cid}&id=${sid}`
   });
 
-  // ══ COLUMN 1: RATE — Dispositions + Quick Profile ══
-  html += `<div class="tq-col-rate">`;
+  // ══ COLUMN 1 TOP: Dispositions ══
   html += `<div class="tq-col-rate-top">`;
 
   // Disposition ratings — two panels
@@ -1054,6 +1053,7 @@ function renderTermQuestionnaire(cid) {
   _renderDimPanel(RELATIONAL_DIMS, 'Relational & Identity', ratedRelational, 'relational-identity');
   html += `</div>`;
 
+  // ══ COLUMN 1 BOTTOM: Quick Profile ══
   html += `<div class="tq-col-rate-bottom">`;
 
   // Quick Profile
@@ -1114,15 +1114,7 @@ function renderTermQuestionnaire(cid) {
       </div>
     </div></div>`;
 
-  html += `<div class="tq-nav-footer">
-    <button class="tq-nav-btn" data-action="tqPrevStudent" ${tqStudentIndex === 0 ? 'disabled' : ''}>← Previous</button>
-    <span class="tq-nav-counter">${tqStudentIndex + 1} of ${students.length}</span>
-    <button class="tq-nav-btn primary" data-action="tqNextStudent">${tqStudentIndex >= students.length - 1 ? 'Done ✓' : 'Save & Next →'}</button>
-  </div>`;
-
-  html += `</div>`;
-
-  html += `</div>`; // close col-rate
+  html += `</div>`; // close col-rate-bottom
 
   // ══ COLUMN 2: DATA — Auto-populated intelligence ══
   html += `<div class="tq-col-data">`;
@@ -1260,6 +1252,13 @@ function renderTermQuestionnaire(cid) {
   </div>`;
 
   html += `</div>`; // close col-write
+
+  // ══ NAV FOOTER (full-width) ══
+  html += `<div class="tq-nav-footer">
+    <button class="tq-nav-btn" data-action="tqPrevStudent" ${tqStudentIndex === 0 ? 'disabled' : ''}>← Previous</button>
+    <span class="tq-nav-counter">${tqStudentIndex + 1} of ${students.length}</span>
+    <button class="tq-nav-btn primary" data-action="tqNextStudent">${tqStudentIndex >= students.length - 1 ? 'Done ✓' : 'Save & Next →'}</button>
+  </div>`;
 
   html += `</div>`; // close tq-wrap
   return html;
