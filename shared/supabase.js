@@ -169,6 +169,13 @@
    * @returns {void}
    */
   window.requireAuth = async function() {
+    // Demo mode: bypass auth, stub the user, run local-only with seeded data.
+    // Set by the "Try Demo Mode" button on the login page.
+    if (localStorage.getItem('gb-demo-mode') === '1') {
+      window.getCurrentUser = async () => ({ id: 'demo-user', email: 'demo@fullvision.local', user_metadata: { display_name: 'Demo Teacher' } });
+      window.isLoggedIn = async () => true;
+      return;
+    }
     // Dev mode: bypass auth on localhost with ?dev=1
     if (_isDevMode) {
       window.getCurrentUser = async () => ({ id: 'dev-user', email: 'dev@localhost', user_metadata: { display_name: 'Dev Teacher' } });

@@ -136,8 +136,29 @@ document.addEventListener('click', function(e) {
       e.preventDefault();
       handleForgot();
       break;
+    case 'enter-demo-mode':
+      e.preventDefault();
+      enterDemoMode();
+      break;
   }
 });
+
+/* ── Demo mode — bypass Supabase auth, run local-only with seeded data ── */
+function enterDemoMode() {
+  // Wipe any existing gb-* state so seedIfNeeded gets a clean slate.
+  // The seed only fires when COURSES is empty AND the wiped flag isn't set,
+  // so prior real-account data would otherwise block it.
+  Object.keys(localStorage)
+    .filter(function(k) { return k.indexOf('gb-') === 0; })
+    .forEach(function(k) { localStorage.removeItem(k); });
+  // Set the demo flag the rest of the app reads to skip auth + sync.
+  // Cleared on sign-out (which also wipes all gb-* keys per FOIPPA).
+  localStorage.setItem('gb-demo-mode', '1');
+  // Mobile pref: respect any existing td-mobile-pref override; otherwise let
+  // viewport choose desktop vs mobile entry.
+  var preferMobile = window.innerWidth <= 768 && localStorage.getItem('td-mobile-pref') !== 'desktop';
+  window.location.href = preferMobile ? '/teacher-mobile/' : '/teacher/app.html';
+}
 
 /* ── Forgot password ───────────────────────────────────────── */
 async function handleForgot() {
