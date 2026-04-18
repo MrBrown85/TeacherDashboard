@@ -1021,10 +1021,7 @@ function renderTermQuestionnaire(cid) {
     buttonHref: `#/student?course=${cid}&id=${sid}`
   });
 
-  // ══ COLUMN 1 TOP: Dispositions ══
-  html += `<div class="tq-col-rate-top">`;
-
-  // Disposition ratings — two panels
+  // ══ ROW 1: Dispositions + Quick Profile (4/4/4) ══
   const PILL_TEXT = {1:'Needs Support', 2:'Developing', 3:'Growing', 4:'Thriving'};
   const ratedLearning = LEARNING_DIMS.filter(d => (dims[d]||0) > 0).length;
   const ratedRelational = RELATIONAL_DIMS.filter(d => (dims[d]||0) > 0).length;
@@ -1051,10 +1048,6 @@ function renderTermQuestionnaire(cid) {
   };
   _renderDimPanel(LEARNING_DIMS, 'Learning Dispositions', ratedLearning, 'learning-dispositions');
   _renderDimPanel(RELATIONAL_DIMS, 'Relational & Identity', ratedRelational, 'relational-identity');
-  html += `</div>`;
-
-  // ══ COLUMN 1 BOTTOM: Quick Profile ══
-  html += `<div class="tq-col-rate-bottom">`;
 
   // Quick Profile
   const RATE_LABELS = {1:'Rarely', 2:'Sometimes', 3:'Usually', 4:'Consistently'};
@@ -1114,70 +1107,12 @@ function renderTermQuestionnaire(cid) {
       </div>
     </div></div>`;
 
-  html += `</div>`; // close col-rate-bottom
-
-  // ══ COLUMN 2: DATA — Auto-populated intelligence ══
-  html += `<div class="tq-col-data">`;
-
-  // Academic Snapshot + Assignments
-  html += `<div class="tq-panel fill" data-panel-id="academic-snapshot">
-    <div class="tq-panel-title">Academic Snapshot <span class="tq-panel-badge">${assignmentPerf.length} assessed</span></div>
-    <div class="tq-snapshot-grid">
-      <div class="tq-snapshot-item overall">
-        <div class="tq-snapshot-item-label">Overall</div>
-        <div class="tq-snapshot-item-value" style="color:${PROF_COLORS[Math.round(overall)]||'var(--text-3)'};background:${PROF_TINT[Math.round(overall)]||'transparent'}">${overall > 0 ? PROF_LABELS[Math.round(overall)] : 'No data'}</div>
-      </div>`;
-  sections.forEach(sec => {
-    const prof = getSectionProficiency(cid, sid, sec.id);
-    const sr = Math.round(prof);
-    html += `<div class="tq-snapshot-item">
-      <div class="tq-snapshot-item-label">${esc(sec.shortName || sec.name)}</div>
-      <div class="tq-snapshot-item-value" style="color:${PROF_COLORS[sr]||'var(--text-3)'};background:${PROF_TINT[sr]||'transparent'}">${prof > 0 ? PROF_LABELS[sr] : '—'}</div>
-    </div>`;
-  });
-  html += `</div>`;
-
-  // Assignment performance rows (toggleable for mention in narrative)
-  if (assignmentPerf.length > 0) {
-    html += `<div class="tq-assignment-section"><div class="tq-panel-title">Assignments — select to mention</div>
-    <div class="tq-assignment-list">`;
-    assignmentPerf.forEach(a => {
-      const r = Math.round(a.avg);
-      const selected = mentionAssessments.includes(a.id);
-      html += `<div class="tq-assignment-row${selected ? ' selected' : ''}" data-action="tqToggleAssignment" data-sid="${sid}" data-aid="${a.id}">
-        <span class="tq-tag-check">${selected ? '✓' : ''}</span>
-        <span class="tq-assignment-title">${esc(a.title)}</span>
-        <span class="tq-assignment-type">${a.type === 'formative' ? 'Form' : 'Sum'}</span>
-        <span class="tq-assignment-score" style="color:${PROF_COLORS[r]||'var(--text-3)'}">${PROF_LABELS[r]}</span>
-      </div>`;
-    });
-    html += `</div></div>`;
-  }
-  html += `</div>`;
-
-  // Self-reflections (stays in col-data)
-  const reflectionEntries = Object.entries(studentReflections).filter(([,r]) => r && r.confidence > 0);
-  if (reflectionEntries.length > 0) {
-    html += `<div class="tq-panel" data-panel-id="self-reflections">
-      <div class="tq-panel-title">Student Self-Reflections</div>`;
-    reflectionEntries.forEach(([secId, ref]) => {
-      const sec = sections.find(s => s.id === secId);
-      const secName = sec ? (sec.shortName || sec.name) : secId;
-      html += `<div class="tq-reflection-row">
-        <span class="tq-reflection-label">${esc(secName)}</span>
-        <span class="tq-reflection-val" style="color:${CONFIDENCE_COLORS[ref.confidence]}">${CONFIDENCE_LABELS[ref.confidence]}</span>
-      </div>`;
-    });
-    html += `</div>`;
-  }
-
-  // Observations (bottom-right, spanning data + write columns)
+  // ══ ROW 2: Observations (full-bleed, span 12) ══
   const mentionObs = rating.mentionObs || [];
   const recentObs = allObs.slice(0, 8);
-  html += `</div>`; // close col-data
+  const reflectionEntries = Object.entries(studentReflections).filter(([,r]) => r && r.confidence > 0);
 
-  html += `<div class="tq-col-observations">
-    <div class="tq-panel fill" data-panel-id="observations">
+  html += `<div class="tq-panel" data-panel-id="observations">
     <div class="tq-panel-title spread">
       <span>Observations <span class="tq-panel-badge">${obsCount}</span></span>
       <div class="tq-obs-summary">`;
@@ -1215,12 +1150,61 @@ function renderTermQuestionnaire(cid) {
   } else {
     html += `<div class="tq-obs-empty">There are no observations for this student.</div>`;
   }
-  html += `</div></div>`;
+  html += `</div>`; // close observations panel
 
-  // ══ COLUMN 3: WRITE — Narrative workspace ══
-  html += `<div class="tq-col-write">`;
+  // ══ ROW 3: Academic Snapshot (span 6) + Narrative (span 6) ══
+  html += `<div class="tq-panel" data-panel-id="academic-snapshot">
+    <div class="tq-panel-title">Academic Snapshot <span class="tq-panel-badge">${assignmentPerf.length} assessed</span></div>
+    <div class="tq-snapshot-grid">
+      <div class="tq-snapshot-item overall">
+        <div class="tq-snapshot-item-label">Overall</div>
+        <div class="tq-snapshot-item-value" style="color:${PROF_COLORS[Math.round(overall)]||'var(--text-3)'};background:${PROF_TINT[Math.round(overall)]||'transparent'}">${overall > 0 ? PROF_LABELS[Math.round(overall)] : 'No data'}</div>
+      </div>`;
+  sections.forEach(sec => {
+    const prof = getSectionProficiency(cid, sid, sec.id);
+    const sr = Math.round(prof);
+    html += `<div class="tq-snapshot-item">
+      <div class="tq-snapshot-item-label">${esc(sec.shortName || sec.name)}</div>
+      <div class="tq-snapshot-item-value" style="color:${PROF_COLORS[sr]||'var(--text-3)'};background:${PROF_TINT[sr]||'transparent'}">${prof > 0 ? PROF_LABELS[sr] : '—'}</div>
+    </div>`;
+  });
+  html += `</div>`;
 
-  html += `<div class="tq-panel fill" data-panel-id="narrative-comment">
+  // Assignment performance rows (toggleable for mention in narrative)
+  if (assignmentPerf.length > 0) {
+    html += `<div class="tq-assignment-section"><div class="tq-panel-title">Assignments — select to mention</div>
+    <div class="tq-assignment-list">`;
+    assignmentPerf.forEach(a => {
+      const r = Math.round(a.avg);
+      const selected = mentionAssessments.includes(a.id);
+      html += `<div class="tq-assignment-row${selected ? ' selected' : ''}" data-action="tqToggleAssignment" data-sid="${sid}" data-aid="${a.id}">
+        <span class="tq-tag-check">${selected ? '✓' : ''}</span>
+        <span class="tq-assignment-title">${esc(a.title)}</span>
+        <span class="tq-assignment-type">${a.type === 'formative' ? 'Form' : 'Sum'}</span>
+        <span class="tq-assignment-score" style="color:${PROF_COLORS[r]||'var(--text-3)'}">${PROF_LABELS[r]}</span>
+      </div>`;
+    });
+    html += `</div></div>`;
+  }
+
+  // Self-reflections folded into academic-snapshot as a collapsed subsection
+  if (reflectionEntries.length > 0) {
+    html += `<details class="tq-reflections-subsection">
+      <summary>Student Self-Reflections <span class="tq-panel-badge">${reflectionEntries.length}</span></summary>
+      <div class="tq-reflections-body">`;
+    reflectionEntries.forEach(([secId, ref]) => {
+      const sec = sections.find(s => s.id === secId);
+      const secName = sec ? (sec.shortName || sec.name) : secId;
+      html += `<div class="tq-reflection-row">
+        <span class="tq-reflection-label">${esc(secName)}</span>
+        <span class="tq-reflection-val" style="color:${CONFIDENCE_COLORS[ref.confidence]}">${CONFIDENCE_LABELS[ref.confidence]}</span>
+      </div>`;
+    });
+    html += `</div></details>`;
+  }
+  html += `</div>`; // close academic-snapshot panel
+
+  html += `<div class="tq-panel" data-panel-id="narrative-comment">
     <div class="tq-panel-title">Narrative Comment</div>
     <div class="tq-editor-wrap">
       <div class="tq-toolbar">
@@ -1249,9 +1233,7 @@ function renderTermQuestionnaire(cid) {
         data-placeholder="Write about ${esc(name)}'s learning dispositions, work habits, and growth…"
         oninput="window._tqMarkDirty&&window._tqMarkDirty()">${sanitizeHtml(narrative || '')}</div>
     </div>
-  </div>`;
-
-  html += `</div>`; // close col-write
+  </div>`; // close narrative-comment panel
 
   // ══ NAV FOOTER (full-width) ══
   html += `<div class="tq-nav-footer">
