@@ -213,6 +213,10 @@ function _initCrossTab() {
 async function _handleCrossTabChange(cid, field) {
   if (!cid || !field) return;
 
+  // CANONICAL-RPC TRANSITION: skip the remote refetch (legacy tables don't exist).
+  // Cross-tab still sees the localStorage update via the BroadcastChannel listener.
+  return;
+  // eslint-disable-next-line no-unreachable
   // Re-fetch from the appropriate normalized table
   if (_useSupabase) {
     try {
@@ -345,6 +349,17 @@ function _syncToSupabase(table, key, data) {
 async function _doSync(table, key, data) {
   const sb = getSupabase();
   if (!sb || !_teacherId) return;
+
+  // CANONICAL-RPC TRANSITION: the legacy public-schema tables this function writes to
+  // (scores, observations, assessments, students, teacher_config, config_*, etc.) were
+  // dropped by the April 3 canonical_schema_foundation migration. Until each table's
+  // sync path is rewritten to call its canonical RPC (save_course_score,
+  // create_observation, save_course_policy, save_learning_map, save_report_config, ...),
+  // run as localStorage-only and surface the offline state. localStorage writes happen
+  // separately in _saveCourseField — this only suppresses the failing remote writes.
+  _syncStatus = 'offline';
+  _updateSyncIndicator();
+  return;
 
   _pendingSyncs++;
   _syncStatus = 'syncing';
@@ -684,16 +699,10 @@ function retrySyncs() {
 }
 
 async function _deleteFromSupabase(table, key) {
-  const sb = getSupabase();
-  if (!sb || !_teacherId) return;
-  try {
-    const { error } = await sb.from(table).delete()
-      .eq('teacher_id', _teacherId)
-      .eq('course_id', key.cid);
-    if (error) throw error;
-  } catch (err) {
-    console.error('Failed to delete from Supabase:', err);
-  }
+  // CANONICAL-RPC TRANSITION: legacy tables this would delete from don't exist.
+  // Course deletion is handled locally; canonical equivalent (when added) will
+  // call delete_course() / withdraw_enrollment() / delete_assessment() etc.
+  return;
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -718,22 +727,14 @@ async function initAllCourses() {
     }
   }
 
+  // CANONICAL-RPC TRANSITION: the public.teacher_config table was dropped by the
+  // April 3 canonical_schema_foundation migration. The replacement is
+  // get_teacher_preferences() (returns { activeCourseId, uiPrefs }) +
+  // list_teacher_courses() (returns the course list). Wiring those in is part of
+  // the data-layer rewrite. For now we run global state from localStorage only.
   if (_useSupabase) {
-    const sb = getSupabase();
-    // Fetch global config rows
-    const { data: configRows, error } = await sb.from('teacher_config')
-      .select('config_key, data')
-      .eq('teacher_id', _teacherId);
-    if (error) {
-      console.error('Failed to load teacher_config:', error);
-      _useSupabase = false;
-    } else {
-      const configMap = {};
-      (configRows || []).forEach(r => { configMap[r.config_key] = r.data; });
-
-      _cache.courses = configMap['courses'] || null;
-      _cache.config = configMap['config'] || {};
-    }
+    _syncStatus = 'offline';
+    _updateSyncIndicator();
   }
 
   // Fall back to defaults if needed
@@ -784,6 +785,15 @@ async function initAllCourses() {
 
 var _realtimeChannel = null;
 function _initRealtimeSync() {
+  // CANONICAL-RPC TRANSITION: supabase_realtime publication was emptied by the
+  // April 17 zero_data_publication migration — none of the legacy public tables
+  // this function subscribed to (scores, observations, assessments, students,
+  // and the medium-frequency / config tables) emit postgres_changes events any
+  // more (they don't exist). Cross-device sync is out of scope until the
+  // canonical schema gets its own publication strategy. Cross-tab sync via
+  // BroadcastChannel still works (see _initCrossTab).
+  return;
+  // eslint-disable-next-line no-unreachable
   if (_realtimeChannel || !_useSupabase || !_teacherId) return;
   var sb = getSupabase();
   if (!sb) return;
@@ -976,6 +986,11 @@ function _initVisibilityRefresh() {
 }
 
 async function _refreshFromSupabase() {
+  // CANONICAL-RPC TRANSITION: visibility-refresh path queries dropped legacy tables.
+  // Until the per-RPC reads land we no-op here; cache stays as last loaded from
+  // localStorage. Cross-device sync resumes once each canonical read RPC is wired up.
+  return;
+  // eslint-disable-next-line no-unreachable
   var cid = null;
   try { cid = getActiveCourse(); } catch (e) { return; }
   if (!cid) return;
@@ -1182,7 +1197,18 @@ async function _pagedSelect(sb, tbl, teacherId, cid, opts) {
 }
 
 async function _doInitData(cid) {
-  if (_useSupabase) {
+  // CANONICAL-RPC TRANSITION: every legacy public table this block reads from
+  // (scores, observations, assessments, students, goals, reflections, overrides,
+  // statuses, student_notes, student_flags, term_ratings, config_*) was dropped
+  // by the April 3 canonical_schema_foundation migration. Until each load is
+  // rewritten to call its canonical RPC (list_course_scores, list_course_roster,
+  // list_course_assessments, list_course_observations, get_course_policy,
+  // get_report_config, list_course_outcomes, list_assignment_statuses,
+  // list_section_overrides, list_student_reflections, get_student_goals,
+  // list_term_ratings_for_course, projection.list_student_flags) we initialize
+  // from localStorage only. Skipping the broken Promise.all also avoids the
+  // 18 PGRST205 errors that fire on every page load today.
+  if (false && _useSupabase) {
     const sb = getSupabase();
 
     try {

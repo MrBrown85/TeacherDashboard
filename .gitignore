@@ -23,3 +23,7 @@ test-*.html
 
 # Local Netlify folder
 .netlify
+
+# Playwright test artifacts (per-run state and failure screenshots)
+test-results/
+playwright-report/

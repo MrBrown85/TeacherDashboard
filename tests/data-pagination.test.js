@@ -75,7 +75,12 @@ function makeSupabaseClient(rowsByTable, opts) {
   };
 }
 
-describe('course-table pagination guards', () => {
+// CANONICAL-RPC TRANSITION: this suite drove the legacy public-table paged loads
+// in _doInitData. Those calls were short-circuited because the underlying tables
+// were dropped by the April 3 canonical schema migration. Re-enable (and rewrite
+// against the canonical RPCs: list_course_scores, list_course_assessments, etc.)
+// once Phase 1c lands.
+describe.skip('course-table pagination guards', () => {
   var originalGetSupabase;
   var originalUseSupabase;
   var originalTeacherId;
