@@ -105,3 +105,29 @@ body {
   text-align:center;
 }
 .auth-success.visible { display:block; }
+
+/* ── Demo mode — distinct from primary auth so it reads as secondary ── */
+.auth-demo {
+  margin-top:24px;
+}
+.auth-demo-divider {
+  display:flex; align-items:center; gap:12px;
+  margin:0 0 16px; color:var(--text-3);
+  font-size:var(--text-sm);
+}
+.auth-demo-divider::before,
+.auth-demo-divider::after {
+  content:''; flex:1; height:1px; background:var(--border);
+}
+.auth-demo-btn {
+  width:100%; padding:11px;
+  font-family:var(--font-base); font-size:var(--text-md); font-weight:500;
+  border:1px solid var(--border); border-radius:10px;
+  background:var(--surface); color:var(--text); cursor:pointer;
+  transition:all 0.15s;
+}
+.auth-demo-btn:hover { background:var(--divider-subtle); border-color:var(--text-3); }
+.auth-demo-hint {
+  margin:10px 0 0; text-align:center;
+  font-size:var(--text-xs); color:var(--text-3); line-height:1.4;
+}

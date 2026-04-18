@@ -711,8 +711,16 @@ async function _deleteFromSupabase(table, key) {
 
 /** Load global data (courses + config). Call before initData(). */
 async function initAllCourses() {
+  // Demo mode: hard-skip Supabase, force local-only, ensure seed data exists.
+  // Set by the "Try Demo Mode" button on the login page.
+  var _demoMode = localStorage.getItem('gb-demo-mode') === '1';
+  if (_demoMode) {
+    _useSupabase = false;
+    _teacherId = 'demo-user';
+  }
+
   // Check Supabase availability
-  if (typeof getSupabase === 'function') {
+  if (!_demoMode && typeof getSupabase === 'function') {
     const sb = getSupabase();
     if (sb) {
       try {
