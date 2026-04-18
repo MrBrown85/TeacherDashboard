@@ -1910,17 +1910,33 @@ function upsertScore(cid, sid, aid, tid, scoreVal, date, type, note) {
   if (typeof clearProfCache === 'function') clearProfCache();
   _safeLSSet('gb-scores-' + cid, JSON.stringify(scores));
 
-  if (_useSupabase) {
-    _setEchoGuard('scores', cid);
-    _syncToSupabase('scores_row', { cid, sid, aid, tid }, {
-      teacher_id: _teacherId, course_id: cid, student_id: sid,
-      assessment_id: aid, tag_id: tid, score: scoreVal,
-      date: date || new Date().toISOString().slice(0, 10),
-      type: type || 'summative', note: note || '',
-      updated_at: new Date().toISOString()
-    });
+  if (_useSupabase && localStorage.getItem('gb-demo-mode') !== '1') {
+    _persistScoreToCanonical(cid, sid, aid, tid, scoreVal, note);
   }
   _broadcastChange(cid, 'scores');
+}
+
+/* Canonical score write — requires all four IDs to be canonical UUIDs.
+   sid/aid/tid become canonical only AFTER their enrollment/assessment/outcome
+   creation RPCs complete, so a score saved during the brief window between
+   local create and async canonical resolution will skip remote sync. The
+   localStorage write still happens in upsertScore so the score isn't lost. */
+function _persistScoreToCanonical(cid, sid, aid, tid, scoreVal, note) {
+  if (!_isUuid(cid) || !_isUuid(sid) || !_isUuid(aid) || !_isUuid(tid)) return;
+  var sb = getSupabase();
+  if (!sb) return;
+  sb.rpc('save_course_score', {
+    p_course_offering_id: cid,
+    p_payload: {
+      assessmentId: aid,
+      enrollmentId: sid,
+      outcomeId: tid,
+      score: scoreVal != null ? String(scoreVal) : '',
+      comment: note || ''
+    }
+  }).then(function(res) {
+    if (res.error) console.warn('save_course_score failed:', res.error);
+  });
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -2650,21 +2666,281 @@ function getStudents(cid) {
   try { return (JSON.parse(localStorage.getItem('gb-students-'+cid))||[]).map(migrateStudent); } catch (e) { console.warn('Students parse fallback:', e); return []; }
 }
 function saveStudents(cid, arr) {
-  var prev = _cache.students[cid];
-  console.warn('[DIAG] saveStudents called: prev=' + (prev ? prev.length : '?') + ' new=' + (arr ? arr.length : '?'), new Error().stack);
-  if (prev && arr && arr.length < prev.length) {
-    console.error('[DIAG] STUDENT COUNT DECREASED!', { cid: cid, prevCount: prev.length, newCount: arr.length, prevNames: prev.map(function(s){return s.lastName;}).join(','), newNames: arr.map(function(s){return s.lastName;}).join(',') });
-  }
+  var prev = (_cache.students[cid] || []).slice();
   _saveCourseField('students', cid, arr);
+  // Demo mode and offline both stay local-only.
+  if (localStorage.getItem('gb-demo-mode') === '1' || !_useSupabase) return;
+  if (!cid || !arr) return;
+  _persistStudentsToCanonical(cid, prev, arr);
+}
+
+/* UUID detection — distinguishes canonical enrollment_ids from local uid()s */
+var _UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function _isUuid(v) { return typeof v === 'string' && _UUID_RE.test(v); }
+
+/* Per-course save lock so rapid saves don't double-enroll the same student */
+var _studentSaveQueue = {};   // cid → Promise tail
+
+/* Diff arr vs prev and translate to canonical RPC calls.
+   - student.id matching UUID → already enrolled → update_enrollment + update_student
+   - student.id local (uid) → new → enroll_student → patches local cache id to canonical
+   - prev student missing from arr → withdraw_enrollment */
+function _persistStudentsToCanonical(cid, prev, arr) {
+  var sb = getSupabase();
+  if (!sb) return;
+  var tail = _studentSaveQueue[cid] || Promise.resolve();
+  var next = tail.then(function() {
+    var prevById = {};
+    prev.forEach(function(s) { if (s && s.id) prevById[s.id] = s; });
+    var arrById = {};
+    arr.forEach(function(s) { if (s && s.id) arrById[s.id] = s; });
+
+    var ops = [];
+
+    // Adds (any id not in prev)
+    arr.forEach(function(s, idx) {
+      if (s && s.id && !prevById[s.id]) {
+        ops.push(_canonicalEnrollStudent(sb, cid, s, idx));
+      }
+    });
+    // Withdrawals (in prev, not in arr) — only if we have a canonical enrollment id
+    prev.forEach(function(s) {
+      if (s && s.id && !arrById[s.id] && _isUuid(s.id)) {
+        ops.push(_canonicalWithdrawEnrollment(sb, s.id));
+      }
+    });
+    // Updates (in both, with field changes)
+    arr.forEach(function(s, idx) {
+      var p = s && s.id ? prevById[s.id] : null;
+      if (!p || !_isUuid(s.id)) return;
+      if (_studentEnrollmentChanged(p, s) || _studentRosterPositionChanged(idx, prev, p, s)) {
+        ops.push(_canonicalUpdateEnrollment(sb, s.id, s, idx));
+      }
+      if (_studentIdentityChanged(p, s) && _isUuid(s.personId)) {
+        ops.push(_canonicalUpdateStudent(sb, s.personId, s));
+      }
+    });
+
+    return Promise.all(ops).catch(function(err) {
+      console.warn('Student sync to canonical RPCs failed for one or more rows:', err);
+    });
+  });
+  _studentSaveQueue[cid] = next;
+}
+
+function _studentEnrollmentChanged(a, b) {
+  return (a.studentNumber || '') !== (b.studentNumber || '')
+      || (a.enrolledDate || '') !== (b.enrolledDate || '')
+      || JSON.stringify(a.designations || []) !== JSON.stringify(b.designations || []);
+}
+function _studentRosterPositionChanged(idx, prevArr, prevStudent, newStudent) {
+  // Detect a real reorder: prev index of this student differs from new index
+  var prevIdx = prevArr.findIndex(function(p) { return p && p.id === newStudent.id; });
+  return prevIdx !== -1 && prevIdx !== idx;
+}
+function _studentIdentityChanged(a, b) {
+  return (a.firstName || '') !== (b.firstName || '')
+      || (a.lastName || '') !== (b.lastName || '')
+      || (a.preferred || '') !== (b.preferred || '')
+      || (a.pronouns || '') !== (b.pronouns || '')
+      || (a.email || '') !== (b.email || '')
+      || (a.dateOfBirth || '') !== (b.dateOfBirth || '');
+}
+
+function _canonicalEnrollStudent(sb, cid, s, idx) {
+  return sb.rpc('enroll_student', {
+    p_course_offering_id: cid,
+    p_payload: {
+      student: {
+        firstName: s.firstName || '',
+        lastName: s.lastName || '',
+        preferred: s.preferred || '',
+        pronouns: s.pronouns || '',
+        email: s.email || '',
+        dateOfBirth: s.dateOfBirth || ''
+      },
+      rosterPosition: idx + 1,
+      studentNumber: s.studentNumber || '',
+      enrolledDate: s.enrolledDate || '',
+      designations: s.designations || []
+    }
+  }).then(function(res) {
+    if (res.error) { console.warn('enroll_student failed:', res.error, s); return; }
+    var row = res.data || {};
+    // roster_entry_json returns canonical ids — patch the cached student in place
+    var cached = (_cache.students[cid] || []).find(function(c) { return c.id === s.id; });
+    if (cached && row.enrollment_id) {
+      cached.id = row.enrollment_id;
+      cached.personId = row.student_id;
+    }
+    // Persist the patched cache so the canonical id sticks across reloads
+    if (_cache.students[cid]) {
+      _safeLSSet('gb-students-' + cid, JSON.stringify(_cache.students[cid]));
+    }
+  });
+}
+
+function _canonicalUpdateEnrollment(sb, enrollmentId, s, idx) {
+  return sb.rpc('update_enrollment', {
+    p_enrollment_id: enrollmentId,
+    p_payload: {
+      studentNumber: s.studentNumber || '',
+      rosterPosition: idx + 1,
+      enrolledDate: s.enrolledDate || '',
+      designations: s.designations || []
+    }
+  }).then(function(res) {
+    if (res.error) console.warn('update_enrollment failed:', res.error, enrollmentId);
+  });
+}
+
+function _canonicalUpdateStudent(sb, studentId, s) {
+  return sb.rpc('update_student', {
+    p_student_id: studentId,
+    p_payload: {
+      firstName: s.firstName || '',
+      lastName: s.lastName || '',
+      preferred: s.preferred || '',
+      pronouns: s.pronouns || '',
+      email: s.email || '',
+      dateOfBirth: s.dateOfBirth || ''
+    }
+  }).then(function(res) {
+    if (res.error) console.warn('update_student failed:', res.error, studentId);
+  });
+}
+
+function _canonicalWithdrawEnrollment(sb, enrollmentId) {
+  return sb.rpc('withdraw_enrollment', {
+    enrollment_id: enrollmentId,
+    withdrawn_on: new Date().toISOString().slice(0, 10)
+  }).then(function(res) {
+    if (res.error) console.warn('withdraw_enrollment failed:', res.error, enrollmentId);
+  });
 }
 function getAssessments(cid) {
   if (_cache.assessments[cid] !== undefined) return _cache.assessments[cid];
   try { return JSON.parse(localStorage.getItem('gb-assessments-'+cid))||[]; } catch (e) { console.warn('Assessments parse fallback:', e); return []; }
 }
 function saveAssessments(cid, arr) {
-  var prev = (_cache.assessments && _cache.assessments[cid]) || [];
+  var prev = ((_cache.assessments && _cache.assessments[cid]) || []).slice();
   _saveCourseField('assessments', cid, arr);
   if (arr.length < prev.length) _cleanOrphanedScores(cid, arr);
+  if (localStorage.getItem('gb-demo-mode') === '1' || !_useSupabase) return;
+  if (!cid || !arr) return;
+  _persistAssessmentsToCanonical(cid, prev, arr);
+}
+
+/* Per-course save lock for assessments */
+var _assessmentSaveQueue = {};
+
+function _persistAssessmentsToCanonical(cid, prev, arr) {
+  var sb = getSupabase();
+  if (!sb) return;
+  var tail = _assessmentSaveQueue[cid] || Promise.resolve();
+  var next = tail.then(function() {
+    var prevById = {};
+    prev.forEach(function(a) { if (a && a.id) prevById[a.id] = a; });
+    var arrById = {};
+    arr.forEach(function(a) { if (a && a.id) arrById[a.id] = a; });
+
+    var ops = [];
+
+    // Adds
+    arr.forEach(function(a) {
+      if (a && a.id && !prevById[a.id]) {
+        ops.push(_canonicalCreateAssessment(sb, cid, a));
+      }
+    });
+    // Deletes (canonical-id removals only)
+    prev.forEach(function(a) {
+      if (a && a.id && !arrById[a.id] && _isUuid(a.id)) {
+        ops.push(_canonicalDeleteAssessment(sb, cid, a.id));
+      }
+    });
+    // Updates
+    arr.forEach(function(a) {
+      var p = a && a.id ? prevById[a.id] : null;
+      if (!p || !_isUuid(a.id)) return;
+      if (_assessmentChanged(p, a)) {
+        ops.push(_canonicalUpdateAssessment(sb, cid, a.id, a));
+      }
+    });
+
+    return Promise.all(ops).catch(function(err) {
+      console.warn('Assessment sync to canonical RPCs failed for one or more rows:', err);
+    });
+  });
+  _assessmentSaveQueue[cid] = next;
+}
+
+function _assessmentChanged(a, b) {
+  return (a.title || '') !== (b.title || '')
+      || (a.date || '') !== (b.date || '')
+      || (a.type || '') !== (b.type || '')
+      || (a.scoreMode || '') !== (b.scoreMode || '')
+      || (a.collaboration || '') !== (b.collaboration || '')
+      || (a.maxPoints || 0) !== (b.maxPoints || 0)
+      || (a.weight || 1) !== (b.weight || 1)
+      || (a.notes || '') !== (b.notes || '')
+      || (a.rubricId || '') !== (b.rubricId || '')
+      || (a.moduleId || '') !== (b.moduleId || '')
+      || JSON.stringify(a.tagIds || []) !== JSON.stringify(b.tagIds || []);
+}
+
+function _assessmentPayload(a) {
+  // tagIds passed through only when they look like UUIDs — demo mode uses text codes
+  // ('QAP', 'PI') that would fail the canonical UUID cast.
+  var tagIds = (a.tagIds || []).filter(_isUuid);
+  return {
+    title: a.title || '',
+    description: a.description || '',
+    type: a.type || 'summative',
+    scoreMode: a.scoreMode || 'proficiency',
+    collaboration: a.collaboration || 'individual',
+    maxPoints: a.maxPoints != null ? String(a.maxPoints) : '',
+    weight: a.weight != null ? String(a.weight) : '',
+    notes: a.notes || '',
+    rubricId: a.rubricId || '',
+    moduleId: a.moduleId || '',
+    date: a.date || '',
+    dateAssigned: a.dateAssigned || '',
+    tagIds: tagIds
+  };
+}
+
+function _canonicalCreateAssessment(sb, cid, a) {
+  return sb.rpc('create_assessment', {
+    p_course_offering_id: cid,
+    p_payload: _assessmentPayload(a)
+  }).then(function(res) {
+    if (res.error) { console.warn('create_assessment failed:', res.error, a); return; }
+    var row = res.data || {};
+    var cached = (_cache.assessments[cid] || []).find(function(c) { return c.id === a.id; });
+    if (cached && row.assessment_id) cached.id = row.assessment_id;
+    if (_cache.assessments[cid]) {
+      _safeLSSet('gb-assessments-' + cid, JSON.stringify(_cache.assessments[cid]));
+    }
+  });
+}
+
+function _canonicalUpdateAssessment(sb, cid, assessmentId, a) {
+  return sb.rpc('update_assessment', {
+    p_course_offering_id: cid,
+    p_assessment_id: assessmentId,
+    p_payload: _assessmentPayload(a)
+  }).then(function(res) {
+    if (res.error) console.warn('update_assessment failed:', res.error, assessmentId);
+  });
+}
+
+function _canonicalDeleteAssessment(sb, cid, assessmentId) {
+  return sb.rpc('delete_assessment', {
+    p_course_offering_id: cid,
+    p_assessment_id: assessmentId
+  }).then(function(res) {
+    if (res.error) console.warn('delete_assessment failed:', res.error, assessmentId);
+  });
 }
 
 function _cleanOrphanedScores(cid, validArr) {
@@ -2824,15 +3100,8 @@ function addQuickOb(cid, sid, text, dims, sentiment, context, assignmentContext)
   all[sid].push(entry);
   _cache.observations[cid] = all;
   _safeLSSet('gb-quick-obs-' + cid, JSON.stringify(all));
-  if (_useSupabase) {
-    _setEchoGuard('observations', cid);
-    _syncToSupabase('obs_row', { cid, obId: entry.id }, {
-      teacher_id: _teacherId, course_id: cid, student_id: sid,
-      id: entry.id, text: entry.text, dims: entry.dims,
-      sentiment: entry.sentiment || null, context: entry.context || null,
-      assignment_context: entry.assignmentContext || null,
-      date: entry.date, created_at: entry.created
-    });
+  if (_useSupabase && localStorage.getItem('gb-demo-mode') !== '1') {
+    _persistObservationCreate(cid, sid, entry);
   }
   _broadcastChange(cid, 'observations');
 }
@@ -2843,9 +3112,8 @@ function deleteQuickOb(cid, sid, obId) {
   all[sid] = all[sid].filter(o => o.id !== obId);
   _cache.observations[cid] = all;
   _safeLSSet('gb-quick-obs-' + cid, JSON.stringify(all));
-  if (_useSupabase) {
-    _setEchoGuard('observations', cid);
-    _syncToSupabase('obs_delete', { cid, obId }, null);
+  if (_useSupabase && localStorage.getItem('gb-demo-mode') !== '1') {
+    _persistObservationDelete(cid, obId);
   }
   _broadcastChange(cid, 'observations');
 }
@@ -2862,18 +3130,72 @@ function updateQuickOb(cid, sid, obId, updates) {
   ob.modified = new Date().toISOString();
   _cache.observations[cid] = all;
   _safeLSSet('gb-quick-obs-' + cid, JSON.stringify(all));
-  if (_useSupabase) {
-    _setEchoGuard('observations', cid);
-    _syncToSupabase('obs_row', { cid, obId: ob.id }, {
-      teacher_id: _teacherId, course_id: cid, student_id: sid,
-      id: ob.id, text: ob.text, dims: ob.dims,
-      sentiment: ob.sentiment || null, context: ob.context || null,
-      assignment_context: ob.assignmentContext || null,
-      date: ob.date, created_at: ob.created,
-      modified_at: ob.modified
-    });
+  if (_useSupabase && localStorage.getItem('gb-demo-mode') !== '1') {
+    _persistObservationUpdate(cid, ob);
   }
   _broadcastChange(cid, 'observations');
+}
+
+/* Canonical observation writes — all require enrollment_id (UUID).
+   create_observation also needs cid as UUID; id is omitted so the RPC mints one. */
+function _persistObservationCreate(cid, sid, entry) {
+  if (!_isUuid(cid) || !_isUuid(sid)) return;
+  var sb = getSupabase();
+  if (!sb) return;
+  sb.rpc('create_observation', {
+    p_course_offering_id: cid,
+    p_payload: {
+      enrollmentId: sid,
+      created: entry.created,
+      sentiment: entry.sentiment || '',
+      context: entry.context || '',
+      text: entry.text || '',
+      dims: entry.dims || []
+    }
+  }).then(function(res) {
+    if (res.error) { console.warn('create_observation failed:', res.error); return; }
+    var row = res.data || {};
+    // Patch the cached entry's id to the canonical observation_id so future
+    // updates/deletes can reference it.
+    var arr = (_cache.observations[cid] || {})[sid];
+    if (Array.isArray(arr)) {
+      var cached = arr.find(function(o) { return o.id === entry.id; });
+      if (cached && row.observation_id) {
+        cached.id = row.observation_id;
+        _safeLSSet('gb-quick-obs-' + cid, JSON.stringify(_cache.observations[cid]));
+      }
+    }
+  });
+}
+
+function _persistObservationUpdate(cid, ob) {
+  if (!_isUuid(cid) || !_isUuid(ob.id)) return;
+  var sb = getSupabase();
+  if (!sb) return;
+  sb.rpc('update_observation', {
+    p_course_offering_id: cid,
+    p_observation_id: ob.id,
+    p_payload: {
+      sentiment: ob.sentiment || '',
+      context: ob.context || '',
+      text: ob.text || '',
+      dims: ob.dims || []
+    }
+  }).then(function(res) {
+    if (res.error) console.warn('update_observation failed:', res.error);
+  });
+}
+
+function _persistObservationDelete(cid, obId) {
+  if (!_isUuid(cid) || !_isUuid(obId)) return;
+  var sb = getSupabase();
+  if (!sb) return;
+  sb.rpc('delete_observation', {
+    p_course_offering_id: cid,
+    p_observation_id: obId
+  }).then(function(res) {
+    if (res.error) console.warn('delete_observation failed:', res.error);
+  });
 }
 
 function getQuickObsByDim(cid, sid, dim) {
