@@ -1,19 +1,37 @@
-const CID = 'paged-course';
-const TEACHER_ID = 'teacher-pagination-test';
+import './setup.js';
+import { beforeEach, describe, expect, it } from 'vitest';
 
-function buildScoreRows(total) {
+const CID = 'aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb';
+const TEACHER_ID = '99999999-9999-9999-9999-999999999999';
+
+function buildRosterRows(total) {
   var rows = [];
   for (var i = 0; i < total; i++) {
     rows.push({
-      teacher_id: TEACHER_ID,
-      course_id: CID,
-      student_id: 'stu-' + String((i % 5) + 1).padStart(3, '0'),
-      assessment_id: 'a-' + String(i + 1).padStart(4, '0'),
-      tag_id: 'QAP',
-      score: (i % 4) + 1,
-      date: '2026-03-20',
-      type: 'summative',
-      created_at: '2026-03-20T00:00:00.000Z',
+      enrollment_id: 'enroll-' + String(i + 1).padStart(4, '0'),
+      student_id: 'student-' + String(i + 1).padStart(4, '0'),
+      first_name: 'Student',
+      last_name: String(i + 1).padStart(4, '0'),
+      roster_position: i + 1,
+      designations: [],
+    });
+  }
+  return rows;
+}
+
+function buildScoreRows(total, rosterRows) {
+  var rows = [];
+  for (var i = 0; i < total; i++) {
+    var roster = rosterRows[i % rosterRows.length];
+    rows.push({
+      score_current_id: 'score-' + String(i + 1).padStart(4, '0'),
+      enrollment_id: roster.enrollment_id,
+      student_id: roster.student_id,
+      assessment_id: 'assessment-' + String(i + 1).padStart(4, '0'),
+      course_outcome_id: 'outcome-qap',
+      normalized_level: String((i % 4) + 1),
+      updated_at: '2026-03-20T12:00:00.000Z',
+      created_at: '2026-03-20T12:00:00.000Z',
     });
   }
   return rows;
@@ -23,64 +41,54 @@ function buildAssessmentRows(total) {
   var rows = [];
   for (var i = 0; i < total; i++) {
     rows.push({
-      teacher_id: TEACHER_ID,
-      course_id: CID,
-      id: 'a-' + String(i + 1).padStart(4, '0'),
+      assessment_id: 'assessment-' + String(i + 1).padStart(4, '0'),
       title: 'Assessment ' + (i + 1),
-      date: '2026-03-20',
-      type: 'summative',
-      tag_ids: ['QAP'],
-      updated_at: '2026-03-20T00:00:00.000Z',
+      assessment_kind: 'summative',
+      weighting: 1,
+      target_outcome_ids: ['outcome-qap'],
+      due_at: '2026-03-20T12:00:00.000Z',
     });
   }
   return rows;
 }
 
-function makeSupabaseClient(rowsByTable, opts) {
-  opts = opts || {};
-  var rangeCalls = [];
-
+function makeRpcClient(responses) {
   return {
-    rangeCalls: rangeCalls,
-    from: function(table) {
-      var state = { range: null, gtColumn: null, gtValue: null };
-      var chain = {
-        select: function() { return chain; },
-        eq: function() { return chain; },
-        gt: function(col, val) { state.gtColumn = col; state.gtValue = val; return chain; },
-        abortSignal: function() { return chain; },
-        range: function(start, end) {
-          state.range = { start: start, end: end };
-          rangeCalls.push({ table: table, start: start, end: end });
-          return chain;
-        },
-        then: function(resolve) {
-          var rows = (rowsByTable[table] || []).slice();
-          if (state.gtColumn && state.gtValue) {
-            rows = rows.filter(function(row) {
-              return (row[state.gtColumn] || '') > state.gtValue;
-            });
+    rpc: function (name) {
+      if (!Object.prototype.hasOwnProperty.call(responses, name)) {
+        return Promise.resolve({ data: null, error: new Error('Unexpected RPC: ' + name) });
+      }
+      var handler = responses[name];
+      if (typeof handler === 'function') return Promise.resolve(handler());
+      if (handler && handler.error) return Promise.resolve({ data: null, error: handler.error });
+      return Promise.resolve({ data: handler, error: null });
+    },
+    schema: function (schemaName) {
+      return {
+        rpc: function (name) {
+          var key = schemaName + '.' + name;
+          if (!Object.prototype.hasOwnProperty.call(responses, key)) {
+            return Promise.resolve({ data: null, error: new Error('Unexpected RPC: ' + key) });
           }
-          if (state.range) {
-            rows = rows.slice(state.range.start, state.range.end + 1);
-          } else {
-            rows = rows.slice(0, opts.defaultCap || 1000);
-          }
-          resolve({ data: rows, error: null });
+          var handler = responses[key];
+          if (typeof handler === 'function') return Promise.resolve(handler());
+          if (handler && handler.error) return Promise.resolve({ data: null, error: handler.error });
+          return Promise.resolve({ data: handler, error: null });
         },
       };
-      if (opts.disableRange) delete chain.range;
-      return chain;
     },
   };
 }
 
-// CANONICAL-RPC TRANSITION: this suite drove the legacy public-table paged loads
-// in _doInitData. Those calls were short-circuited because the underlying tables
-// were dropped by the April 3 canonical schema migration. Re-enable (and rewrite
-// against the canonical RPCs: list_course_scores, list_course_assessments, etc.)
-// once Phase 1c lands.
-describe.skip('course-table pagination guards', () => {
+function clearCourseCache(cid) {
+  Object.keys(_cache).forEach(function (key) {
+    if (_cache[key] && typeof _cache[key] === 'object' && key !== 'courses' && key !== 'config') {
+      delete _cache[key][cid];
+    }
+  });
+}
+
+describe('canonical initData large-payload guards', () => {
   var originalGetSupabase;
   var originalUseSupabase;
   var originalTeacherId;
@@ -90,89 +98,92 @@ describe.skip('course-table pagination guards', () => {
     originalUseSupabase = _useSupabase;
     originalTeacherId = _teacherId;
 
+    localStorage.clear();
+    clearCourseCache(CID);
     _useSupabase = true;
     _teacherId = TEACHER_ID;
-    _cache.scores[CID] = undefined;
-    localStorage.clear();
+    COURSES[CID] = { id: CID, name: 'Science 8', subjectCode: 'Science', gradingSystem: 'proficiency' };
   });
 
   afterEach(() => {
     globalThis.getSupabase = originalGetSupabase;
     _useSupabase = originalUseSupabase;
     _teacherId = originalTeacherId;
-    _cache.scores[CID] = undefined;
+    clearCourseCache(CID);
   });
 
-  it('paginates score refetches past the 1000-row PostgREST cap', async () => {
-    var rows = buildScoreRows(1500);
-    var client = makeSupabaseClient({ scores: rows });
-    globalThis.getSupabase = function() { return client; };
-
-    await _handleCrossTabChange(CID, 'scores');
-
-    expect(_countFieldItems('scores', _cache.scores[CID])).toBe(1500);
-    expect(client.rangeCalls).toEqual([
-      { table: 'scores', start: 0, end: 999 },
-      { table: 'scores', start: 1000, end: 1999 },
-    ]);
-  });
-
-  it('keeps the existing score cache when a refetch is truncated to 1000 rows', async () => {
-    var rows = buildScoreRows(1500);
-    _cache.scores[CID] = _scoreRowsToBlob(rows);
-
-    var client = makeSupabaseClient({ scores: rows }, { disableRange: true, defaultCap: 1000 });
-    globalThis.getSupabase = function() { return client; };
-
-    await _handleCrossTabChange(CID, 'scores');
-
-    expect(_countFieldItems('scores', _cache.scores[CID])).toBe(1500);
-    expect(client.rangeCalls).toHaveLength(0);
-  });
-
-  it('heals scores from local backup using total score entries, not just student keys', () => {
-    var fullRows = buildScoreRows(1500);
-    var partialRows = buildScoreRows(1000);
-    _cache.scores[CID] = _scoreRowsToBlob(partialRows);
-    localStorage.setItem('gb-scores-' + CID, JSON.stringify(_scoreRowsToBlob(fullRows)));
-
-    _teacherId = null; // avoid enqueueing a background sync in this unit test
-    _healFromLocalBackup(CID, 'scores', 'scores');
-
-    expect(_countFieldItems('scores', _cache.scores[CID])).toBe(1500);
-  });
-
-  it('paginates assessment loads during initData so login does not start from a truncated course state', async () => {
-    var scoreRows = buildScoreRows(1500);
+  it('hydrates more than 1000 assessments and score entries from canonical RPC reads', async () => {
+    var rosterRows = buildRosterRows(30);
     var assessmentRows = buildAssessmentRows(1500);
-    var client = makeSupabaseClient({
-      scores: scoreRows,
-      observations: [],
-      assessments: assessmentRows,
-      students: [],
-      goals: [],
-      reflections: [],
-      overrides: [],
-      statuses: [],
-      student_notes: [],
-      student_flags: [],
-      term_ratings: [],
-      config_learning_maps: [],
-      config_course: [],
-      config_modules: [],
-      config_rubrics: [],
-      config_custom_tags: [],
-      config_report: [],
-    });
-    globalThis.getSupabase = function() { return client; };
+    var scoreRows = buildScoreRows(1500, rosterRows);
+
+    globalThis.getSupabase = function () {
+      return makeRpcClient({
+        list_course_roster: rosterRows,
+        list_course_assessments: assessmentRows,
+        list_course_scores: scoreRows,
+        list_course_observations: [],
+        get_course_policy: {},
+        get_report_config: null,
+        list_course_outcomes: [],
+        list_assignment_statuses: [],
+        list_term_ratings_for_course: [],
+        list_student_flags: [],
+      });
+    };
+
+    await initData(CID);
+
+    expect(_cache.students[CID]).toHaveLength(30);
+    expect(_cache.assessments[CID]).toHaveLength(1500);
+    expect(_countFieldItems('scores', _cache.scores[CID])).toBe(1500);
+  });
+
+  it('keeps the fuller local assessment and score cache when canonical reads are truncated', async () => {
+    var rosterRows = buildRosterRows(30);
+    var fullAssessmentRows = buildAssessmentRows(1500);
+    var partialAssessmentRows = buildAssessmentRows(1000);
+    var fullScoreRows = buildScoreRows(1500, rosterRows);
+    var partialScoreRows = buildScoreRows(1000, rosterRows);
+
+    localStorage.setItem('gb-students-' + CID, JSON.stringify(_canonicalRosterToStudents(rosterRows)));
+    localStorage.setItem('gb-assessments-' + CID, JSON.stringify(_canonicalAssessmentsToBlob(fullAssessmentRows)));
+    localStorage.setItem(
+      'gb-scores-' + CID,
+      JSON.stringify(_canonicalScoresToBlob(fullScoreRows, {})),
+    );
+
+    globalThis.getSupabase = function () {
+      return makeRpcClient({
+        list_course_roster: rosterRows,
+        list_course_assessments: partialAssessmentRows,
+        list_course_scores: partialScoreRows,
+        list_course_observations: [],
+        get_course_policy: {},
+        get_report_config: null,
+        list_course_outcomes: [],
+        list_assignment_statuses: [],
+        list_term_ratings_for_course: [],
+        list_student_flags: [],
+      });
+    };
 
     await initData(CID);
 
     expect(_cache.assessments[CID]).toHaveLength(1500);
     expect(_countFieldItems('scores', _cache.scores[CID])).toBe(1500);
-    expect(client.rangeCalls.filter(function(call) { return call.table === 'assessments'; })).toEqual([
-      { table: 'assessments', start: 0, end: 999 },
-      { table: 'assessments', start: 1000, end: 1999 },
-    ]);
+  });
+
+  it('heals scores from local backup using total score entries, not just student keys', () => {
+    var rosterRows = buildRosterRows(5);
+    var fullRows = buildScoreRows(1500, rosterRows);
+    var partialRows = buildScoreRows(1000, rosterRows);
+    _cache.scores[CID] = _canonicalScoresToBlob(partialRows, {});
+    localStorage.setItem('gb-scores-' + CID, JSON.stringify(_canonicalScoresToBlob(fullRows, {})));
+
+    _teacherId = null; // avoid enqueueing a background sync in this unit test
+    _healFromLocalBackup(CID, 'scores', 'scores');
+
+    expect(_countFieldItems('scores', _cache.scores[CID])).toBe(1500);
   });
 });

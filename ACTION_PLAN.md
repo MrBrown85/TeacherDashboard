@@ -1,6 +1,6 @@
 # FullVision — Action Plan
 
-Last refreshed: 2026-04-17. Items are tracked here as they're discovered; closed items live in the Done section at the bottom.
+Last refreshed: 2026-04-18. Items are tracked here as they're discovered; closed items live in the Done section at the bottom.
 
 ---
 
@@ -24,15 +24,23 @@ Items #3 (key rotation), #4 (E2E suite), and #5 (CI) below are independent of th
 
 **Why**: Phase 2 (commit `c02e6e3` on `phase-2-canonical-writes`) wired all high-frequency *writes* to canonical RPCs (`enroll_student`, `create_assessment`, `save_course_score`, `create_observation`, etc.). Reads still come from localStorage — so data written from another device (or imported on the server side) never appears until you log out and back in. The bridge in `_doInitData` short-circuits the broken legacy `.from('students')` etc. calls.
 
+**Progress (2026-04-18)**: `_doInitData(cid)` now attempts canonical top-level reads with per-RPC fallback to localStorage for roster, assessments, scores, observations, policy, report config, outcomes, statuses, term ratings, and flags. The flag load now falls back from `public.list_student_flags` to `projection.list_student_flags`, which matches the checked-in schema. Targeted unit coverage lives in `tests/data-init-canonical.test.js`, and `tests/data-pagination.test.js` has been rewritten and re-enabled against the canonical RPC path: it now verifies that `initData()` hydrates 1500-row assessment/score payloads correctly and keeps the fuller local cache when a canonical snapshot is truncated.
+
+**More progress (2026-04-18)**: `_doInitData(cid)` now also attempts the remaining per-student canonical reads for `get_student_goals`, `list_student_reflections`, and `list_section_overrides` after the roster load. Those responses are mapped back into the existing enrollment-keyed cache shape, and non-UUID/local-only students are skipped so failed roster loads do not generate bogus canonical calls. If those RPCs are missing, the app quietly keeps the localStorage copies instead of spamming warnings or wiping data. `tests/data-init-canonical.test.js` now covers both the successful per-student hydrate path and the missing-RPC fallback path.
+
+**Remaining gap**: the corresponding read RPCs are still not present in the checked-in `schema.sql`, so this part of Phase 1c is now client-ready but still needs schema confirmation before it can be called complete.
+
 **Plan**:
 - Replace `_doInitData(cid)` body with parallel calls to `list_course_roster`, `list_course_assessments`, `list_course_scores`, `list_course_observations`, `get_course_policy`, `get_report_config`, `list_course_outcomes`, `list_assignment_statuses`.
 - Per-student loops for `get_student_goals`, `list_student_reflections`, `list_section_overrides` (no bulk variant in the canonical schema).
 - Update converter functions to map canonical row shapes to the existing legacy cache shape so consumers don't have to change in lockstep.
-- Re-enable `tests/data-pagination.test.js` (currently `describe.skip`) against the canonical reads.
+- `tests/data-pagination.test.js` re-enabled against the canonical reads on 2026-04-18.
 
 ### 2. Score race-window during import
 
 **Why**: When a Teams import enrolls a student and immediately scores the same student in the same tick, the local student `id` is still a non-UUID `uid()` and `_persistScoreToCanonical` skips. The score lands in localStorage but never syncs. Users see scores locally but not on other devices.
+
+**Blocker (2026-04-18)**: The current Teams importer is still entirely client-side: it batch-writes `saveScores(cid, scores)` with blank `tagId` values instead of calling the schema-backed import pipeline (`stage_import` / `validate_import_job` / `commit_import_job`) or the canonical score RPCs. That means the roadmap note about `_persistScoreToCanonical` is now only part of the story; a real fix likely needs importer-side canonical wiring, not just a queue in `data.js`.
 
 **Fix options**: await the per-row `enroll_student` promise inside `teams-import.js` before scoring, OR queue a deferred score sync in `data.js` that fires once all in-flight enrollments resolve.
 
@@ -46,11 +54,19 @@ Items #3 (key rotation), #4 (E2E suite), and #5 (CI) below are independent of th
 
 ### 4. Get the E2E suite green
 
-Last run: 102 of ~141 specs failing. Root cause for the auth specs: [`login-auth.js:33`](login-auth.js#L33) auto-redirects to `/teacher/app.html` whenever `localhost` lacks env vars, so tests that try to assert anything on the login page never see it. Fix: require an explicit `?dev=1` opt-in (mirrors what `shared/supabase.js` already does for the dashboard).
+**Progress (2026-04-18)**: The localhost login-page redirect issue is already fixed in `login-auth.js` via explicit `?dev=1` opt-in, and `e2e/auth.spec.js` now passes locally. The immediate blocker turned out to be different: `npm run dev` was broken because the current `npx serve` rejects `--no-single`, so Playwright got `ERR_CONNECTION_REFUSED` before any auth assertions ran. The workspace no longer depends on runtime `npx` for local startup: `package.json` and `playwright.config.js` now use `python3 -m http.server 8347`, and `curl http://127.0.0.1:8347/teacher/app.html` returns 200.
+
+**More progress (2026-04-18)**: The next shared failure was stale E2E bootstrapping in `e2e/helpers.js`, not app code. `mockAuth()` could throw before routing (`MutationObserver.observe(document.documentElement)` too early) and did not guarantee `window._supabase`, so `_populateDockUser()` blew up on `null.auth` and aborted page init before `PageDashboard.render()` ran. The helper now injects a stable fake client, stubs the seed hooks without touching `document.documentElement` before it exists, and seeds the current localStorage keys (`gb-learningmap-*`, `gb-quick-obs-*`, `gb-term-ratings-*`, `gb-custom-tags-*`, `gb-courseconfig-*`, `gb-report-config-*`). Verified locally: `e2e/dashboard.spec.js` 10/10 passing, `e2e/assignments.spec.js` 6/6 passing.
+
+**New blocker (2026-04-18)**: With the server issue removed, the next failure is environment-level: Playwright's bundled Chromium dies before page load in this Codex sandbox with `mach_port_rendezvous_mac.cc` / `bootstrap_check_in ... Permission denied (1100)`, including single-worker runs of `e2e/auth.spec.js`. That means broader E2E triage is currently blocked on a less restricted browser runtime rather than app code.
+
+**Remaining work**: Re-run the broader Playwright suite in an environment where Chromium can launch successfully, then continue app-level failure triage from there. Keep the auth-spec root cause in this roadmap entry marked stale.
 
 ### 5. CI / branch-protection
 
-No GitHub Actions yet. Add a workflow that runs `npm test` + `npm run format:check` on push/PR, then turn on branch protection requiring it on `main`.
+**Progress (2026-04-18)**: Added `.github/workflows/ci.yml` to run `npm test` and `npm run format:check` on push/PR. Local `npm test` passes.
+
+**Blocker (2026-04-18)**: `npm run format:check` is currently red on the checked-in repo baseline (322 files, including tracked app/test/docs files), so branch protection should not require the workflow yet unless the formatting baseline is fixed or the scope of `format:check` is intentionally narrowed.
 
 ### 6. Clear the legacy bridge in `data.js`
 

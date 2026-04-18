@@ -106,7 +106,7 @@ export async function mockAuth(page) {
     // 2) Provide a fake `supabase` global so gb-supabase.js _initClient() succeeds.
     //    This must exist before the <script src="vendor/supabase.min.js"> tag runs.
     const noopPromise = (val) => Promise.resolve(val);
-    const makeFakeClient = () => ({
+    const fakeClient = {
       auth: {
         getSession: () => noopPromise({ data: { session: { ...fakeSession, user: fakeSession.user } }, error: null }),
         getUser: () => noopPromise({ data: { user: fakeSession.user }, error: null }),
@@ -118,6 +118,30 @@ export async function mockAuth(page) {
         resetPasswordForEmail: () => noopPromise({}),
         signInWithPassword: () => noopPromise({ data: fakeSession, error: null }),
         signUp: () => noopPromise({ data: fakeSession, error: null }),
+      },
+      rpc: (name) => {
+        if (name === 'get_teacher_preferences') {
+          const config = JSON.parse(localStorage.getItem('gb-config') || '{}');
+          const activeCourseId = config.activeCourse || null;
+          const uiPrefs = { ...config };
+          delete uiPrefs.activeCourse;
+          return noopPromise({ data: { activeCourseId, uiPrefs }, error: null });
+        }
+        if (name === 'list_teacher_courses') {
+          const courses = JSON.parse(localStorage.getItem('gb-courses') || '{}') || {};
+          const rows = Object.values(courses).map((course) => ({
+            course_offering_id: course.id,
+            title: course.name || 'Untitled Class',
+            description: course.description || '',
+            grade_band: course.gradeLevel || '',
+            subject_code: course.subjectCode || '',
+            school_year: course.schoolYear || '',
+            term_code: course.termCode || '',
+            status: course.archived ? 'archived' : 'active',
+          }));
+          return noopPromise({ data: rows, error: null });
+        }
+        return noopPromise({ data: null, error: new Error('Unexpected RPC: ' + name) });
       },
       from: (table) => {
         // For teacher_config: return courses + config from localStorage
@@ -159,10 +183,11 @@ export async function mockAuth(page) {
         };
         return chain;
       },
-    });
+    };
 
     // Fake the Supabase CDN global so createClient works
-    window.supabase = { createClient: () => makeFakeClient() };
+    window.supabase = { createClient: () => fakeClient };
+    window._supabase = fakeClient;
 
     // Also set __ENV so gb-supabase.js doesn't log errors
     window.__ENV = { SUPABASE_URL: 'https://fake.supabase.co', SUPABASE_KEY: 'fake-key' };
@@ -171,25 +196,27 @@ export async function mockAuth(page) {
     window._idleTimeout = null;
     window._resetIdleTimer = () => {};
 
-    // Prevent demo seed from overwriting test data
-    // seedIfNeeded is defined in gb-seed-data.js; we stub it after it loads
-    const _seedObserver = new MutationObserver(() => {
-      if (typeof window.seedIfNeeded === 'function' && !window._seedStubbed) {
-        window._seedStubbed = true;
-        window.seedIfNeeded = async () => {};
-        window.migrateAllStudents = async () => {};
-      }
-    });
-    _seedObserver.observe(document.documentElement, { childList: true, subtree: true });
-    // Also try directly in case script already loaded
-    setTimeout(() => {
+    // Prevent demo seed from overwriting test data once app scripts load.
+    const stubSeedFns = () => {
       if (typeof window.seedIfNeeded === 'function') {
         window.seedIfNeeded = async () => {};
+        window._seedStubbed = true;
       }
       if (typeof window.migrateAllStudents === 'function') {
         window.migrateAllStudents = async () => {};
       }
-      _seedObserver.disconnect();
+    };
+    const _seedTimer = setInterval(() => {
+      stubSeedFns();
+      if (window._seedStubbed) clearInterval(_seedTimer);
+    }, 50);
+    window.addEventListener('load', () => {
+      stubSeedFns();
+      clearInterval(_seedTimer);
+    });
+    setTimeout(() => {
+      stubSeedFns();
+      clearInterval(_seedTimer);
     }, 3000);
   }, TEACHER);
 
@@ -214,7 +241,7 @@ export async function mockAuth(page) {
  */
 export async function seedCourse(page) {
   await page.addInitScript((fixtures) => {
-    const { course, learningMap, teacherId } = fixtures;
+    const { course, learningMap } = fixtures;
     const courses = {};
     courses[course.id] = course;
 
@@ -224,11 +251,11 @@ export async function seedCourse(page) {
     localStorage.setItem('gb-lastActiveCourse', course.id);
 
     // Per-course data
-    localStorage.setItem('gb-learningMaps-' + course.id, JSON.stringify(learningMap));
+    localStorage.setItem('gb-learningmap-' + course.id, JSON.stringify(learningMap));
     localStorage.setItem('gb-students-' + course.id, JSON.stringify([]));
     localStorage.setItem('gb-assessments-' + course.id, JSON.stringify([]));
     localStorage.setItem('gb-scores-' + course.id, JSON.stringify({}));
-    localStorage.setItem('gb-observations-' + course.id, JSON.stringify([]));
+    localStorage.setItem('gb-quick-obs-' + course.id, JSON.stringify([]));
     localStorage.setItem('gb-modules-' + course.id, JSON.stringify([]));
     localStorage.setItem('gb-rubrics-' + course.id, JSON.stringify([]));
     localStorage.setItem('gb-flags-' + course.id, JSON.stringify({}));
@@ -237,12 +264,11 @@ export async function seedCourse(page) {
     localStorage.setItem('gb-overrides-' + course.id, JSON.stringify({}));
     localStorage.setItem('gb-statuses-' + course.id, JSON.stringify({}));
     localStorage.setItem('gb-notes-' + course.id, JSON.stringify({}));
-    localStorage.setItem('gb-termRatings-' + course.id, JSON.stringify({}));
-    localStorage.setItem('gb-customTags-' + course.id, JSON.stringify([]));
-    localStorage.setItem('gb-courseConfigs-' + course.id, JSON.stringify({}));
-    localStorage.setItem('gb-reportConfig-' + course.id, JSON.stringify({}));
-    localStorage.setItem('gb-gradingScales-' + course.id, JSON.stringify({}));
-  }, { course: TEST_COURSE, learningMap: TEST_LEARNING_MAP, teacherId: TEACHER.id });
+    localStorage.setItem('gb-term-ratings-' + course.id, JSON.stringify({}));
+    localStorage.setItem('gb-custom-tags-' + course.id, JSON.stringify([]));
+    localStorage.setItem('gb-courseconfig-' + course.id, JSON.stringify({}));
+    localStorage.setItem('gb-report-config-' + course.id, JSON.stringify({}));
+  }, { course: TEST_COURSE, learningMap: TEST_LEARNING_MAP });
 }
 
 /**

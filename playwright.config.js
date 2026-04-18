@@ -13,7 +13,7 @@ export default defineConfig({
     { name: 'chromium', use: { browserName: 'chromium' } },
   ],
   webServer: {
-    command: 'npx serve -l 8347',
+    command: 'python3 -m http.server 8347',
     port: 8347,
     reuseExistingServer: true,
   },
