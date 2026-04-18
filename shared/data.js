@@ -2136,23 +2136,100 @@ function saveCourses(obj) {
 let COURSES = loadCourses();
 if (!localStorage.getItem('gb-courses') && !_useSupabase) saveCourses(COURSES);
 
+/* Canonical create: mints a real course_offering UUID server-side and inserts a
+   default course_policy row. Falls back to a local-only stub if Supabase is
+   unavailable so offline-mode teachers can still scaffold a course. */
 function createCourse(data) {
-  const id = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
-  const course = { id, name: data.name || 'Untitled Class', gradingSystem: data.gradingSystem || 'proficiency',
-    calcMethod: data.calcMethod || 'mostRecent', decayWeight: data.decayWeight || 0.65,
-    description: data.description || '', gradeLevel: data.gradeLevel || '' };
-  COURSES[id] = course;
-  saveCourses(COURSES);
-  saveLearningMap(id, { subjects:[], sections:[], _customized:true, _version:1 });
-  // Seed all course data to Supabase so it persists across sessions
-  if (_useSupabase) _seedCourseToSupabase(id);
+  const localId = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+  const course = {
+    id: localId,
+    name: data.name || 'Untitled Class',
+    gradingSystem: data.gradingSystem || 'proficiency',
+    calcMethod: data.calcMethod || 'mostRecent',
+    decayWeight: data.decayWeight || 0.65,
+    description: data.description || '',
+    gradeLevel: data.gradeLevel || ''
+  };
+  COURSES[localId] = course;
+  _safeLSSet('gb-courses', JSON.stringify(COURSES));
+  saveLearningMap(localId, { subjects:[], sections:[], _customized:true, _version:1 });
+
+  if (_useSupabase) {
+    const sb = getSupabase();
+    if (sb) {
+      sb.rpc('create_course', { p_payload: {
+        name: course.name,
+        description: course.description,
+        gradeLevel: course.gradeLevel
+      }}).then(function(res) {
+        if (res.error) { console.warn('create_course RPC failed:', res.error); return; }
+        const row = res.data || {};
+        const canonicalId = row.course_offering_id;
+        if (!canonicalId || canonicalId === localId) return;
+        // Re-key under the canonical UUID and migrate any per-course localStorage.
+        const migrated = Object.assign({}, course, {
+          id: canonicalId,
+          name: row.title || course.name,
+          gradeLevel: row.grade_band || course.gradeLevel,
+          description: row.description || course.description,
+          subjectCode: row.subject_code || '',
+          schoolYear: row.school_year || '',
+          termCode: row.term_code || '',
+          archived: row.status === 'archived'
+        });
+        delete COURSES[localId];
+        COURSES[canonicalId] = migrated;
+        _cache.courses = COURSES;
+        _safeLSSet('gb-courses', JSON.stringify(COURSES));
+        // Persist policy with the user's chosen defaults.
+        sb.rpc('save_course_policy', {
+          p_course_offering_id: canonicalId,
+          p_payload: {
+            gradingSystem: course.gradingSystem,
+            calcMethod: course.calcMethod,
+            decayWeight: course.decayWeight
+          }
+        }).then(function(pr) {
+          if (pr.error) console.warn('save_course_policy RPC failed:', pr.error);
+        });
+      });
+    }
+  }
   return course;
 }
 
 function updateCourse(id, updates) {
   if (!COURSES[id]) return;
   Object.assign(COURSES[id], updates);
-  saveCourses(COURSES);
+  _safeLSSet('gb-courses', JSON.stringify(COURSES));
+
+  if (_useSupabase) {
+    const sb = getSupabase();
+    if (sb) {
+      // Only push fields the canonical schema knows about; ignore unknown locals.
+      const payload = {};
+      if (updates.name !== undefined) payload.name = updates.name;
+      if (updates.description !== undefined) payload.description = updates.description;
+      if (updates.gradeLevel !== undefined) payload.gradeLevel = updates.gradeLevel;
+      if (updates.subjectCode !== undefined) payload.subjectCode = updates.subjectCode;
+      if (updates.schoolYear !== undefined) payload.schoolYear = updates.schoolYear;
+      if (updates.termCode !== undefined) payload.termCode = updates.termCode;
+      if (updates.archived !== undefined) payload.archived = !!updates.archived;
+      if (Object.keys(payload).length > 0) {
+        sb.rpc('update_course', { p_course_offering_id: id, p_payload: payload })
+          .then(function(res) { if (res.error) console.warn('update_course RPC failed:', res.error); });
+      }
+      // Policy fields write through save_course_policy.
+      const policyKeys = ['gradingSystem','calcMethod','decayWeight'];
+      const policyPatch = {};
+      policyKeys.forEach(function(k) { if (updates[k] !== undefined) policyPatch[k] = updates[k]; });
+      if (Object.keys(policyPatch).length > 0) {
+        const merged = Object.assign({}, getCourseConfig(id), policyPatch);
+        sb.rpc('save_course_policy', { p_course_offering_id: id, p_payload: merged })
+          .then(function(res) { if (res.error) console.warn('save_course_policy RPC failed:', res.error); });
+      }
+    }
+  }
 }
 
 async function deleteCourseData(id) {
@@ -2529,17 +2606,37 @@ function getConfig() {
 }
 function saveConfig(obj) {
   _cache.config = obj;
+  _safeLSSet('gb-config', JSON.stringify(obj));
   if (_useSupabase) {
-    _syncToSupabase('teacher_config', 'config', obj);
-  } else {
-    _safeLSSet('gb-config', JSON.stringify(obj));
+    const sb = getSupabase();
+    if (sb) {
+      // Split: activeCourse → first arg (must be a UUID or null); the rest is uiPrefs.
+      const activeCourse = obj && obj.activeCourse ? obj.activeCourse : null;
+      const uiPrefs = Object.assign({}, obj || {});
+      delete uiPrefs.activeCourse;
+      sb.rpc('save_teacher_preferences', {
+        p_active_course_offering_id: activeCourse,
+        p_ui_prefs: uiPrefs
+      }).then(function(res) {
+        if (res.error) console.warn('save_teacher_preferences RPC failed:', res.error);
+      });
+    }
   }
 }
 function getCourseConfig(cid) {
   if (_cache.courseConfigs[cid] !== undefined) return _cache.courseConfigs[cid];
   try { return JSON.parse(localStorage.getItem('gb-courseconfig-'+cid))||{}; } catch (e) { console.warn('CourseConfig parse fallback:', e); return {}; }
 }
-function saveCourseConfig(cid, obj) { _saveCourseField('courseConfigs', cid, obj); }
+function saveCourseConfig(cid, obj) {
+  _saveCourseField('courseConfigs', cid, obj);
+  if (_useSupabase && cid) {
+    const sb = getSupabase();
+    if (sb) {
+      sb.rpc('save_course_policy', { p_course_offering_id: cid, p_payload: obj || {} })
+        .then(function(res) { if (res.error) console.warn('save_course_policy RPC failed:', res.error); });
+    }
+  }
+}
 function getStudents(cid) {
   if (_cache.students[cid] !== undefined) return _cache.students[cid];
   try { return (JSON.parse(localStorage.getItem('gb-students-'+cid))||[]).map(migrateStudent); } catch (e) { console.warn('Students parse fallback:', e); return []; }
@@ -2856,7 +2953,16 @@ function getReportConfig(cid) {
   if (_cache.reportConfig[cid] !== undefined) return _cache.reportConfig[cid];
   try { return JSON.parse(localStorage.getItem('gb-report-config-'+cid)) || null; } catch (e) { console.warn('ReportConfig parse fallback:', e); return null; }
 }
-function saveReportConfig(cid, config) { _saveCourseField('reportConfig', cid, config); }
+function saveReportConfig(cid, config) {
+  _saveCourseField('reportConfig', cid, config);
+  if (_useSupabase && cid) {
+    const sb = getSupabase();
+    if (sb) {
+      sb.rpc('save_report_config', { p_course_offering_id: cid, p_config: config || {} })
+        .then(function(res) { if (res.error) console.warn('save_report_config RPC failed:', res.error); });
+    }
+  }
+}
 
 /* ── Card Widget Config ───────────────────────────────────── */
 function _defaultWidgetConfig() {
