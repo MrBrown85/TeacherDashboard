@@ -28,6 +28,18 @@ function portalRedirect(user) {
 
 /* ── Redirect if already logged in ─────────────────────────── */
 (async function() {
+  // Opt-in demo via URL: /login.html?demo=1 wipes local state, sets the demo
+  // flag, and drops the user at the dashboard with Science 8 auto-seeded.
+  // Useful for testing and for sharing a "just works" local link.
+  if (new URLSearchParams(location.search).get('demo') === '1') {
+    Object.keys(localStorage)
+      .filter(function(k) { return k.indexOf('gb-') === 0; })
+      .forEach(function(k) { localStorage.removeItem(k); });
+    localStorage.setItem('gb-demo-mode', '1');
+    var preferMobile = window.innerWidth <= 768 && localStorage.getItem('td-mobile-pref') !== 'desktop';
+    window.location.href = preferMobile ? '/teacher-mobile/' : '/teacher/app.html';
+    return;
+  }
   // Dev mode: skip login on localhost when Supabase is not configured
   var hasConfig = !!(window.__ENV && window.__ENV.SUPABASE_URL && !window.__ENV.SUPABASE_URL.startsWith('__'));
   if (location.hostname === 'localhost' && !hasConfig) {
