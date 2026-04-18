@@ -1,21 +1,24 @@
 /* m-components.js — Shared iOS-style mobile UI components */
 
-window.MComponents = (function() {
+window.MComponents = (function () {
   'use strict';
 
   /* ── SVG Icons (SF Symbols style) ──────────────────────────── */
   var ICONS = {
-    chevronLeft: '<svg width="13" height="20" viewBox="0 0 13 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2L3 10l8 8"/></svg>',
-    chevronRight: '<svg class="m-cell-chevron" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l5.5 5.5L1 12"/></svg>',
+    chevronLeft:
+      '<svg width="13" height="20" viewBox="0 0 13 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2L3 10l8 8"/></svg>',
+    chevronRight:
+      '<svg class="m-cell-chevron" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l5.5 5.5L1 12"/></svg>',
     plus: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
-    settings: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>',
-    sort: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="9" y2="18"/></svg>'
+    settings:
+      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>',
+    sort: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="9" y2="18"/></svg>',
   };
 
   /* ── Avatar helper ─────────────────────────────────────────── */
   function avatarColor(id) {
     var hash = 0;
-    for (var i = 0; i < id.length; i++) hash = ((hash << 5) - hash) + id.charCodeAt(i);
+    for (var i = 0; i < id.length; i++) hash = (hash << 5) - hash + id.charCodeAt(i);
     return _AVATAR_COLORS[Math.abs(hash) % _AVATAR_COLORS.length];
   }
 
@@ -29,20 +32,33 @@ window.MComponents = (function() {
   function navBar(opts) {
     var back = '';
     if (opts.backLabel) {
-      back = '<button class="m-nav-bar-back" data-action="m-back">' +
-        ICONS.chevronLeft + '<span>' + _esc(opts.backLabel) + '</span></button>';
+      back =
+        '<button class="m-nav-bar-back" data-action="m-back">' +
+        ICONS.chevronLeft +
+        '<span>' +
+        _esc(opts.backLabel) +
+        '</span></button>';
     }
     var actions = '';
     if (opts.rightHTML) {
       actions = '<div class="m-nav-bar-actions">' + opts.rightHTML + '</div>';
     }
-    var subtitle = opts.subtitle ? '<div style="font-size:12px;color:var(--text-3);font-weight:400">' + _esc(opts.subtitle) + '</div>' : '';
-    return '<div class="m-nav-bar" id="m-nav-bar-' + (opts.id || 'main') + '">' +
+    var subtitle = opts.subtitle
+      ? '<div style="font-size:12px;color:var(--text-3);font-weight:400">' + _esc(opts.subtitle) + '</div>'
+      : '';
+    return (
+      '<div class="m-nav-bar" id="m-nav-bar-' +
+      (opts.id || 'main') +
+      '">' +
       '<div class="m-nav-bar-inner">' +
-        back +
-        '<h1 class="m-nav-bar-title-inline">' + _esc(opts.title) + subtitle + '</h1>' +
-        actions +
-      '</div></div>';
+      back +
+      '<h1 class="m-nav-bar-title-inline">' +
+      _esc(opts.title) +
+      subtitle +
+      '</h1>' +
+      actions +
+      '</div></div>'
+    );
   }
 
   function largeTitleHTML(title) {
@@ -57,12 +73,17 @@ window.MComponents = (function() {
     var backdrop = document.getElementById('m-sheet-backdrop');
     var container = document.getElementById('m-sheet-container');
     var halfClass = opts.half ? ' m-sheet-half' : '';
-    container.innerHTML = '<div class="m-sheet' + halfClass + '">' +
+    container.innerHTML =
+      '<div class="m-sheet' +
+      halfClass +
+      '">' +
       '<div class="m-sheet-handle"></div>' +
-      '<div class="m-sheet-content">' + html + '</div></div>';
+      '<div class="m-sheet-content">' +
+      html +
+      '</div></div>';
     backdrop.style.display = '';
     _sheetCloseCallback = opts.onClose || null;
-    requestAnimationFrame(function() {
+    requestAnimationFrame(function () {
       backdrop.classList.add('m-sheet-visible');
       container.querySelector('.m-sheet').classList.add('m-sheet-visible');
     });
@@ -72,44 +93,61 @@ window.MComponents = (function() {
 
   function _bindSheetSwipe(sheet) {
     if (!sheet) return;
-    var startY = 0, dy = 0, dragging = false;
+    var startY = 0,
+      dy = 0,
+      dragging = false;
     var DISMISS_THRESHOLD = 80;
 
-    sheet.addEventListener('touchstart', function(e) {
-      // Only allow swipe from handle area or when content is scrolled to top
-      var content = sheet.querySelector('.m-sheet-content');
-      var isHandle = e.target.closest('.m-sheet-handle');
-      if (!isHandle && content && content.scrollTop > 0) return;
-      startY = e.touches[0].clientY;
-      dy = 0;
-      dragging = false;
-    }, { passive: true });
+    sheet.addEventListener(
+      'touchstart',
+      function (e) {
+        // Only allow swipe from handle area or when content is scrolled to top
+        var content = sheet.querySelector('.m-sheet-content');
+        var isHandle = e.target.closest('.m-sheet-handle');
+        if (!isHandle && content && content.scrollTop > 0) return;
+        startY = e.touches[0].clientY;
+        dy = 0;
+        dragging = false;
+      },
+      { passive: true },
+    );
 
-    sheet.addEventListener('touchmove', function(e) {
-      if (startY === 0) return;
-      dy = e.touches[0].clientY - startY;
-      if (!dragging && dy > 10) {
-        dragging = true;
-        sheet.style.transition = 'none';
-      }
-      if (dragging && dy > 0) {
-        sheet.style.transform = 'translateY(' + dy + 'px)';
-        e.preventDefault();
-      }
-    }, { passive: false });
+    sheet.addEventListener(
+      'touchmove',
+      function (e) {
+        if (startY === 0) return;
+        dy = e.touches[0].clientY - startY;
+        if (!dragging && dy > 10) {
+          dragging = true;
+          sheet.style.transition = 'none';
+        }
+        if (dragging && dy > 0) {
+          sheet.style.transform = 'translateY(' + dy + 'px)';
+          e.preventDefault();
+        }
+      },
+      { passive: false },
+    );
 
-    sheet.addEventListener('touchend', function() {
-      if (!dragging) { startY = 0; return; }
-      sheet.style.transition = '';
-      if (dy > DISMISS_THRESHOLD) {
-        dismissSheet();
-      } else {
-        sheet.style.transform = 'translateY(0)';
-      }
-      startY = 0;
-      dy = 0;
-      dragging = false;
-    }, { passive: true });
+    sheet.addEventListener(
+      'touchend',
+      function () {
+        if (!dragging) {
+          startY = 0;
+          return;
+        }
+        sheet.style.transition = '';
+        if (dy > DISMISS_THRESHOLD) {
+          dismissSheet();
+        } else {
+          sheet.style.transform = 'translateY(0)';
+        }
+        startY = 0;
+        dy = 0;
+        dragging = false;
+      },
+      { passive: true },
+    );
   }
 
   function dismissSheet() {
@@ -118,10 +156,13 @@ window.MComponents = (function() {
     var sheet = container.querySelector('.m-sheet');
     if (sheet) sheet.classList.remove('m-sheet-visible');
     backdrop.classList.remove('m-sheet-visible');
-    setTimeout(function() {
+    setTimeout(function () {
       backdrop.style.display = 'none';
       container.innerHTML = '';
-      if (_sheetCloseCallback) { _sheetCloseCallback(); _sheetCloseCallback = null; }
+      if (_sheetCloseCallback) {
+        _sheetCloseCallback();
+        _sheetCloseCallback = null;
+      }
     }, 350);
   }
 
@@ -134,7 +175,7 @@ window.MComponents = (function() {
     var undoBtn = opts.onUndo ? '<button class="m-toast-undo" data-action="m-toast-undo">Undo</button>' : '';
     el.innerHTML = '<div class="m-toast-item"><span>' + _esc(message) + '</span>' + undoBtn + '</div>';
     if (opts.onUndo) {
-      el.querySelector('[data-action="m-toast-undo"]').onclick = function() {
+      el.querySelector('[data-action="m-toast-undo"]').onclick = function () {
         opts.onUndo();
         hideToast();
       };
@@ -154,13 +195,17 @@ window.MComponents = (function() {
     var content = screenEl.querySelector('.m-screen-content');
     var navBar = document.getElementById(navBarId);
     if (!content || !navBar) return;
-    content.addEventListener('scroll', function() {
-      if (content.scrollTop > 10) {
-        navBar.classList.add('m-nav-bar-scrolled');
-      } else {
-        navBar.classList.remove('m-nav-bar-scrolled');
-      }
-    }, { passive: true });
+    content.addEventListener(
+      'scroll',
+      function () {
+        if (content.scrollTop > 10) {
+          navBar.classList.add('m-nav-bar-scrolled');
+        } else {
+          navBar.classList.remove('m-nav-bar-scrolled');
+        }
+      },
+      { passive: true },
+    );
   }
 
   /* ── Haptic feedback (best-effort) ─────────────────────────── */
@@ -184,8 +229,18 @@ window.MComponents = (function() {
   }
 
   function dateGroupLabel(dateStr) {
-    var today = new Date(); today.setHours(0,0,0,0);
-    var d = new Date(dateStr); d.setHours(0,0,0,0);
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+    var d;
+    // Parse YYYY-MM-DD as a local calendar date. new Date('YYYY-MM-DD')
+    // is interpreted as UTC and shifts backward in western time zones.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr || '')) {
+      var parts = dateStr.split('-');
+      d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    } else {
+      d = new Date(dateStr);
+    }
+    d.setHours(0, 0, 0, 0);
     var diff = Math.round((today - d) / 86400000);
     if (diff === 0) return 'Today';
     if (diff === 1) return 'Yesterday';
@@ -234,6 +289,6 @@ window.MComponents = (function() {
     dateGroupLabel: dateGroupLabel,
     esc: _esc,
     profBg: profBg,
-    setupOfflineDetection: setupOfflineDetection
+    setupOfflineDetection: setupOfflineDetection,
   };
 })();

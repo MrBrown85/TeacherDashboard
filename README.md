@@ -2,7 +2,7 @@
 
 A standards-based grading and observation tool for British Columbia teachers. Track student proficiency against BC curriculum competencies, record classroom observations, and generate parent-friendly reports.
 
-Built with vanilla JavaScript — no framework, no build step. Backed by Supabase for auth and data, deployed on Netlify.
+Built with vanilla JavaScript and a simple copy build for Netlify deploys. Backed by Supabase for auth and data, deployed on Netlify.
 
 **Live app:** [fullvision.ca](https://fullvision.ca) · [Mobile](https://fullvision.ca/teacher-mobile/)
 
@@ -11,19 +11,21 @@ Built with vanilla JavaScript — no framework, no build step. Backed by Supabas
 ## Features
 
 **Desktop**
+
 - **Proficiency-based grading** — 4-level scale (Emerging → Extending) aligned to BC curriculum
 - **4 calculation methods** — Most Recent, Decaying Average, Mode, Mean
 - **BC curriculum mapping** — Tag assessments to specific learning standards
 - **Gradebook** — Spreadsheet view with per-tag and overall scores
 - **Student profiles** — Score timeline, sparklines, and smart insights (Apple Health style)
 - **Observations** — Quick notes with sentiment tagging (strength / growth / concern)
-- **Report builder** — 15 configurable block types, drag-to-reorder, AI narrative generation
+- **Report builder** — 15 configurable block types, drag-to-reorder, auto narrative generation
 - **Term questionnaire** — Disposition ratings per student per term
 - **CSV import** — Bulk import students; Microsoft Teams roster support
 - **Multi-course** — Independent grading config per course
 - **Dark mode** — Full light/dark theme via CSS custom properties
 
 **Mobile PWA** (installable on iOS/Android)
+
 - **Cards view** — Swipeable student cards showing proficiency + recent observation
 - **List view** — Sortable by name, proficiency, missing work, or last observed
 - **Speed grader** — Tap to score assessments one student at a time
@@ -35,14 +37,14 @@ Built with vanilla JavaScript — no framework, no build step. Backed by Supabas
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | Vanilla JS (IIFE modules), CSS custom properties |
+| Layer           | Technology                                                                                                                |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Frontend        | Vanilla JS (IIFE modules), CSS custom properties                                                                          |
 | Auth & Database | [Supabase](https://supabase.com) — Auth, Postgres, RLS, multi-namespace canonical schema with public-schema RPC interface |
-| Hosting | [Netlify](https://netlify.com) (static, no build step) — edge function injects env vars + per-request CSP nonce |
-| Testing | [Vitest](https://vitest.dev) — 648 unit tests · [Playwright](https://playwright.dev) — 137 E2E specs |
-| Formatting | [Prettier](https://prettier.io) |
-| PWA | Web app manifest + service worker (network-first, offline-capable) |
+| Hosting         | [Netlify](https://netlify.com) (static site, publish `dist/`) — edge function injects env vars + per-request CSP nonce    |
+| Testing         | [Vitest](https://vitest.dev) — 657 unit tests · [Playwright](https://playwright.dev) — 137 E2E specs                      |
+| Formatting      | [Prettier](https://prettier.io)                                                                                           |
+| PWA             | Web app manifest + service worker (network-first, offline-capable)                                                        |
 
 ---
 
@@ -65,11 +67,7 @@ npm install
 
 Create a Supabase project in **ca-central-1 (Montreal)** for FOIPPA compliance.
 
-The deployed schema is captured in [`schema.sql`](schema.sql) (auto-generated from `supabase_migrations.schema_migrations` — do not edit by hand). Apply it with the [Supabase CLI](https://supabase.com/docs/guides/cli):
-
-```bash
-supabase db push      # applies all migrations under supabase/migrations
-```
+The deployed schema is captured in [`schema.sql`](schema.sql) (auto-generated from `supabase_migrations.schema_migrations` — do not edit by hand). This checkout currently includes the generated schema dump, but not a checked-in `supabase/` migrations directory, so bootstrap a fresh project from `schema.sql` or restore the migrations separately before using `supabase db push`.
 
 The schema is multi-namespace (`academics.*`, `assessment.*`, `observation.*`, `reporting.*`, `identity.*`, `projection.*`, `integration.*`) with a public-schema RPC interface. Clients only call public RPCs — direct table access is not exposed via PostgREST.
 
@@ -137,7 +135,7 @@ TeacherDashboard/
 ├── netlify.toml                # Netlify config
 ├── _headers                    # Security + cache headers
 ├── curriculum_data.js          # BC curriculum data
-├── tests/                      # Vitest unit suite (648 tests)
+├── tests/                      # Vitest unit suite (657 tests)
 ├── e2e/                        # Playwright E2E suite (137 tests)
 └── docs/                       # Architecture + privacy docs
 ```
@@ -157,14 +155,14 @@ TeacherDashboard/
 
 Designed for [FOIPPA](https://www.bclaws.gov.bc.ca/civix/document/id/complete/statreg/96165_00) compliance:
 
-| Area | Detail |
-|------|--------|
-| Data residency | Canada only — Supabase on AWS ca-central-1 (Montreal) |
-| Row-Level Security | Teachers can only access their own data |
-| Idle timeout | Auto sign-out after 30 minutes of inactivity |
-| Logout | Clears all local data on sign-out |
-| No student accounts | Only the teacher accesses the system |
-| Security headers | CSP, HSTS, X-Frame-Options, X-Content-Type-Options |
+| Area                | Detail                                                |
+| ------------------- | ----------------------------------------------------- |
+| Data residency      | Canada only — Supabase on AWS ca-central-1 (Montreal) |
+| Row-Level Security  | Teachers can only access their own data               |
+| Idle timeout        | Auto sign-out after 30 minutes of inactivity          |
+| Logout              | Clears all local data on sign-out                     |
+| No student accounts | Only the teacher accesses the system                  |
+| Security headers    | CSP, HSTS, X-Frame-Options, X-Content-Type-Options    |
 
 See `docs/` for the Privacy Impact Assessment, Data Retention Policy, and Breach Notification Procedure.
 
@@ -177,13 +175,13 @@ npm test               # Run full suite
 npm run test:watch     # Watch mode
 ```
 
-580 tests covering the calculation engine, data layer, and mobile UI components.
+657 tests covering the calculation engine, data layer, and mobile UI components.
 
 ---
 
 ## Deployment
 
-Push to `main` — Netlify deploys automatically. No build step; publish directory is the project root.
+Push to `main` — Netlify deploys automatically. `bash scripts/build.sh` copies the static site into `dist/`, Netlify publishes `dist/`, and the edge function injects Supabase credentials into HTML responses at request time.
 
 ---
 

@@ -18,7 +18,7 @@ import { TEACHER, TEST_COURSE, TEST_LEARNING_MAP, TEST_STUDENTS, TEST_ASSESSMENT
 // ── Helper: mock auth with an instrumented Supabase client ──────────
 
 async function mockAuthWithSyncTracking(page) {
-  await page.addInitScript((teacher) => {
+  await page.addInitScript(teacher => {
     const fakeSession = {
       access_token: 'e2e-test-token',
       token_type: 'bearer',
@@ -40,13 +40,13 @@ async function mockAuthWithSyncTracking(page) {
     window.__syncFail = false;
     window.__syncDelay = 0;
 
-    const noopPromise = (val) => Promise.resolve(val);
+    const noopPromise = val => Promise.resolve(val);
 
     const makeFakeClient = () => ({
       auth: {
         getSession: () => noopPromise({ data: { session: { ...fakeSession, user: fakeSession.user } }, error: null }),
         getUser: () => noopPromise({ data: { user: fakeSession.user }, error: null }),
-        onAuthStateChange: (cb) => {
+        onAuthStateChange: cb => {
           setTimeout(() => cb('SIGNED_IN', { ...fakeSession, user: fakeSession.user }), 50);
           return { data: { subscription: { unsubscribe: () => {} } } };
         },
@@ -55,12 +55,15 @@ async function mockAuthWithSyncTracking(page) {
         signInWithPassword: () => noopPromise({ data: fakeSession, error: null }),
         signUp: () => noopPromise({ data: fakeSession, error: null }),
       },
-      from: (table) => {
+      from: table => {
         const _eqs = {};
         let _pendingUpsert = false;
         const chain = {
           select: () => chain,
-          eq: (col, val) => { _eqs[col] = val; return chain; },
+          eq: (col, val) => {
+            _eqs[col] = val;
+            return chain;
+          },
           neq: () => chain,
           in: () => chain,
           order: () => chain,
@@ -80,11 +83,11 @@ async function mockAuthWithSyncTracking(page) {
               _pendingUpsert = false;
               const delay = window.__syncDelay || 1;
               if (window.__syncFail) {
-                return new Promise((r) => {
+                return new Promise(r => {
                   setTimeout(() => r(resolve({ error: { message: 'simulated 504 timeout', code: '504' } })), delay);
                 });
               }
-              return new Promise((r) => {
+              return new Promise(r => {
                 setTimeout(() => r(resolve({ error: null })), delay);
               });
             }
@@ -98,7 +101,26 @@ async function mockAuthWithSyncTracking(page) {
             }
             if (table === 'course_data') {
               const cid = _eqs['course_id'] || 'sci8';
-              const dataKeys = ['students','assessments','scores','learningMaps','modules','rubrics','flags','goals','reflections','overrides','statuses','observations','notes','termRatings','customTags','courseConfigs','reportConfig','gradingScales'];
+              const dataKeys = [
+                'students',
+                'assessments',
+                'scores',
+                'learningMaps',
+                'modules',
+                'rubrics',
+                'flags',
+                'goals',
+                'reflections',
+                'overrides',
+                'statuses',
+                'observations',
+                'notes',
+                'termRatings',
+                'customTags',
+                'courseConfigs',
+                'reportConfig',
+                'gradingScales',
+              ];
               const rows = [];
               for (const dk of dataKeys) {
                 const val = localStorage.getItem('gb-' + dk + '-' + cid);
@@ -133,39 +155,50 @@ async function mockAuthWithSyncTracking(page) {
     }, 3000);
   }, TEACHER);
 
-  await page.route('**/vendor/supabase.min.js', route => route.fulfill({
-    status: 200, contentType: 'application/javascript', body: '/* mocked */',
-  }));
-  await page.route('**/cdn.jsdelivr.net/**supabase**', route => route.fulfill({
-    status: 200, contentType: 'application/javascript', body: '/* mocked */',
-  }));
+  await page.route('**/vendor/supabase.min.js', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/javascript',
+      body: '/* mocked */',
+    }),
+  );
+  await page.route('**/cdn.jsdelivr.net/**supabase**', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/javascript',
+      body: '/* mocked */',
+    }),
+  );
 }
 
 async function seedTestData(page) {
-  await page.addInitScript((fixtures) => {
-    const { course, learningMap, students, assessment } = fixtures;
-    const courses = {};
-    courses[course.id] = course;
-    localStorage.setItem('gb-courses', JSON.stringify(courses));
-    localStorage.setItem('gb-config', JSON.stringify({ activeCourse: course.id }));
-    localStorage.setItem('gb-lastActiveCourse', course.id);
-    localStorage.setItem('gb-learningMaps-' + course.id, JSON.stringify(learningMap));
-    localStorage.setItem('gb-students-' + course.id, JSON.stringify(students));
-    localStorage.setItem('gb-assessments-' + course.id, JSON.stringify([assessment]));
-    localStorage.setItem('gb-scores-' + course.id, JSON.stringify({}));
-    localStorage.setItem('gb-modules-' + course.id, JSON.stringify([]));
-    localStorage.setItem('gb-rubrics-' + course.id, JSON.stringify([]));
-    localStorage.setItem('gb-flags-' + course.id, JSON.stringify({}));
-    localStorage.setItem('gb-goals-' + course.id, JSON.stringify({}));
-    localStorage.setItem('gb-reflections-' + course.id, JSON.stringify({}));
-    localStorage.setItem('gb-overrides-' + course.id, JSON.stringify({}));
-    localStorage.setItem('gb-statuses-' + course.id, JSON.stringify({}));
-    localStorage.setItem('gb-notes-' + course.id, JSON.stringify({}));
-    localStorage.setItem('gb-termRatings-' + course.id, JSON.stringify({}));
-    localStorage.setItem('gb-customTags-' + course.id, JSON.stringify([]));
-    localStorage.setItem('gb-courseConfigs-' + course.id, JSON.stringify({}));
-    localStorage.setItem('gb-reportConfig-' + course.id, JSON.stringify({}));
-  }, { course: TEST_COURSE, learningMap: TEST_LEARNING_MAP, students: TEST_STUDENTS, assessment: TEST_ASSESSMENT });
+  await page.addInitScript(
+    fixtures => {
+      const { course, learningMap, students, assessment } = fixtures;
+      const courses = {};
+      courses[course.id] = course;
+      localStorage.setItem('gb-courses', JSON.stringify(courses));
+      localStorage.setItem('gb-config', JSON.stringify({ activeCourse: course.id }));
+      localStorage.setItem('gb-lastActiveCourse', course.id);
+      localStorage.setItem('gb-learningMaps-' + course.id, JSON.stringify(learningMap));
+      localStorage.setItem('gb-students-' + course.id, JSON.stringify(students));
+      localStorage.setItem('gb-assessments-' + course.id, JSON.stringify([assessment]));
+      localStorage.setItem('gb-scores-' + course.id, JSON.stringify({}));
+      localStorage.setItem('gb-modules-' + course.id, JSON.stringify([]));
+      localStorage.setItem('gb-rubrics-' + course.id, JSON.stringify([]));
+      localStorage.setItem('gb-flags-' + course.id, JSON.stringify({}));
+      localStorage.setItem('gb-goals-' + course.id, JSON.stringify({}));
+      localStorage.setItem('gb-reflections-' + course.id, JSON.stringify({}));
+      localStorage.setItem('gb-overrides-' + course.id, JSON.stringify({}));
+      localStorage.setItem('gb-statuses-' + course.id, JSON.stringify({}));
+      localStorage.setItem('gb-notes-' + course.id, JSON.stringify({}));
+      localStorage.setItem('gb-termRatings-' + course.id, JSON.stringify({}));
+      localStorage.setItem('gb-customTags-' + course.id, JSON.stringify([]));
+      localStorage.setItem('gb-courseConfigs-' + course.id, JSON.stringify({}));
+      localStorage.setItem('gb-reportConfig-' + course.id, JSON.stringify({}));
+    },
+    { course: TEST_COURSE, learningMap: TEST_LEARNING_MAP, students: TEST_STUDENTS, assessment: TEST_ASSESSMENT },
+  );
 }
 
 function countCalls(calls, table) {
@@ -175,7 +208,6 @@ function countCalls(calls, table) {
 // ── Tests ────────────────────────────────────────────────────────────
 
 test.describe('Sync Loop Detection', () => {
-
   test.beforeEach(async ({ page }) => {
     await mockAuthWithSyncTracking(page);
     await seedTestData(page);
@@ -183,15 +215,30 @@ test.describe('Sync Loop Detection', () => {
 
   test('rapid saves for same key do not grow without bound', async ({ page }) => {
     // Use slow upserts to simulate real network latency
-    await page.addInitScript(() => { window.__syncDelay = 200; });
+    await page.addInitScript(() => {
+      window.__syncDelay = 200;
+    });
     await page.goto('/teacher/app.html#/dashboard');
     await page.waitForSelector('#dock-mount nav', { timeout: 10_000 });
-    await page.evaluate(() => { window.__syncCalls = []; });
+    await page.evaluate(() => {
+      window.__syncCalls = [];
+    });
 
     // Fire 50 rapid score saves — without coalescing this could explode with retries
     await page.evaluate(() => {
       for (let i = 0; i < 50; i++) {
-        saveScores('sci8', { 'stu-001': [{ id: 's' + i, assessmentId: 'assess-001', tagId: 'QAP', score: i % 4 + 1, date: '2026-03-20', type: 'summative' }] });
+        saveScores('sci8', {
+          'stu-001': [
+            {
+              id: 's' + i,
+              assessmentId: 'assess-001',
+              tagId: 'QAP',
+              score: (i % 4) + 1,
+              date: '2026-03-20',
+              type: 'summative',
+            },
+          ],
+        });
       }
     });
 
@@ -215,7 +262,11 @@ test.describe('Sync Loop Detection', () => {
 
     // Trigger a save
     await page.evaluate(() => {
-      saveScores('sci8', { 'stu-001': [{ id: 's1', assessmentId: 'assess-001', tagId: 'QAP', score: 3, date: '2026-03-20', type: 'summative' }] });
+      saveScores('sci8', {
+        'stu-001': [
+          { id: 's1', assessmentId: 'assess-001', tagId: 'QAP', score: 3, date: '2026-03-20', type: 'summative' },
+        ],
+      });
     });
 
     // Wait long enough for multiple retry cycles
@@ -237,7 +288,11 @@ test.describe('Sync Loop Detection', () => {
 
     // Trigger 3 different saves to hit the consecutive failure threshold
     await page.evaluate(() => {
-      saveScores('sci8', { 'stu-001': [{ id: 's1', assessmentId: 'assess-001', tagId: 'QAP', score: 1, date: '2026-03-20', type: 'summative' }] });
+      saveScores('sci8', {
+        'stu-001': [
+          { id: 's1', assessmentId: 'assess-001', tagId: 'QAP', score: 1, date: '2026-03-20', type: 'summative' },
+        ],
+      });
       saveStudents('sci8', [{ id: 'stu-001', firstName: 'Alice', lastName: 'Anderson' }]);
       saveAssessments('sci8', [{ id: 'assess-001', title: 'Test', tagIds: ['QAP'] }]);
     });
@@ -254,30 +309,43 @@ test.describe('Sync Loop Detection', () => {
     expect(callsAfter).toBe(callsBefore);
   });
 
-  test('different keys are not coalesced — each gets its own sync', async ({ page }) => {
+  test('bridge-disabled fields stay local-only', async ({ page }) => {
     await page.goto('/teacher/app.html#/dashboard');
     await page.waitForSelector('#dock-mount nav', { timeout: 10_000 });
-    await page.evaluate(() => { window.__syncCalls = []; });
+    await page.evaluate(() => {
+      window.__syncCalls = [];
+    });
 
     await page.evaluate(() => {
-      saveScores('sci8', { 'stu-001': [{ id: 's1', assessmentId: 'assess-001', tagId: 'QAP', score: 3, date: '2026-03-20', type: 'summative' }] });
+      saveScores('sci8', {
+        'stu-001': [
+          { id: 's1', assessmentId: 'assess-001', tagId: 'QAP', score: 3, date: '2026-03-20', type: 'summative' },
+        ],
+      });
       saveStudents('sci8', [{ id: 'stu-001', firstName: 'Alice', lastName: 'Anderson' }]);
       saveNotes('sci8', { 'stu-001': 'Great work' });
     });
 
     await page.waitForTimeout(2000);
     const calls = await page.evaluate(() => window.__syncCalls);
-    // 3 different keys = 3 separate syncs
-    expect(countCalls(calls, 'course_data')).toBe(3);
+    // Notes and bulk saves still route through the disabled legacy bridge,
+    // so they should not hit the mocked network layer at all.
+    expect(countCalls(calls, 'course_data')).toBe(0);
   });
 
   test('no phantom calls after syncs complete', async ({ page }) => {
     await page.goto('/teacher/app.html#/dashboard');
     await page.waitForSelector('#dock-mount nav', { timeout: 10_000 });
-    await page.evaluate(() => { window.__syncCalls = []; });
+    await page.evaluate(() => {
+      window.__syncCalls = [];
+    });
 
     await page.evaluate(() => {
-      saveScores('sci8', { 'stu-001': [{ id: 's1', assessmentId: 'assess-001', tagId: 'QAP', score: 3, date: '2026-03-20', type: 'summative' }] });
+      saveScores('sci8', {
+        'stu-001': [
+          { id: 's1', assessmentId: 'assess-001', tagId: 'QAP', score: 3, date: '2026-03-20', type: 'summative' },
+        ],
+      });
     });
 
     await page.waitForTimeout(1000);
@@ -302,7 +370,18 @@ test.describe('Sync Loop Detection', () => {
     await page.evaluate(() => {
       let i = 0;
       const interval = setInterval(() => {
-        saveScores('sci8', { 'stu-001': [{ id: 's' + i, assessmentId: 'assess-001', tagId: 'QAP', score: i % 4 + 1, date: '2026-03-20', type: 'summative' }] });
+        saveScores('sci8', {
+          'stu-001': [
+            {
+              id: 's' + i,
+              assessmentId: 'assess-001',
+              tagId: 'QAP',
+              score: (i % 4) + 1,
+              date: '2026-03-20',
+              type: 'summative',
+            },
+          ],
+        });
         i++;
         if (i >= 20) clearInterval(interval);
       }, 500);
@@ -316,19 +395,25 @@ test.describe('Sync Loop Detection', () => {
     expect(totalCalls).toBeLessThan(50);
   });
 
-  test('sync status shows error state when server fails', async ({ page }) => {
+  test('sync status stays idle for bridge-disabled local-only saves', async ({ page }) => {
     await page.goto('/teacher/app.html#/dashboard');
     await page.waitForSelector('#dock-mount nav', { timeout: 10_000 });
 
-    await page.evaluate(() => { window.__syncFail = true; });
+    await page.evaluate(() => {
+      window.__syncFail = true;
+    });
 
     await page.evaluate(() => {
-      saveScores('sci8', { 'stu-001': [{ id: 's1', assessmentId: 'assess-001', tagId: 'QAP', score: 3, date: '2026-03-20', type: 'summative' }] });
+      saveScores('sci8', {
+        'stu-001': [
+          { id: 's1', assessmentId: 'assess-001', tagId: 'QAP', score: 3, date: '2026-03-20', type: 'summative' },
+        ],
+      });
     });
 
     await page.waitForTimeout(1000);
 
     const status = await page.evaluate(() => getSyncStatus());
-    expect(status.status).toBe('error');
+    expect(status.status).toBe('idle');
   });
 });

@@ -3,10 +3,25 @@
  */
 
 const CID = 'test';
+const CANONICAL_CID = '11111111-1111-1111-1111-111111111111';
+const ENROLLMENT_ID = '22222222-2222-2222-2222-222222222222';
+const STUDENT_ID = '33333333-3333-3333-3333-333333333333';
+let _origGetSupabase;
+let _origUseSupabase;
 
 beforeEach(() => {
   _cache.termRatings[CID] = undefined;
+  _cache.termRatings[CANONICAL_CID] = undefined;
+  _cache.students[CANONICAL_CID] = undefined;
   localStorage.clear();
+  _origGetSupabase = getSupabase;
+  _origUseSupabase = _useSupabase;
+  _useSupabase = false;
+});
+
+afterEach(() => {
+  globalThis.getSupabase = _origGetSupabase;
+  _useSupabase = _origUseSupabase;
 });
 
 describe('getStudentTermRating', () => {
@@ -68,5 +83,36 @@ describe('upsertTermRating', () => {
     const result = getStudentTermRating(CID, 'stu1', 'term1');
     expect(result.dims.engagement).toBe(4);
     expect(result.narrative).toBe('Added narrative');
+  });
+
+  it('calls canonical upsert_term_rating when course and student ids are canonical', async () => {
+    const rpcCalls = [];
+    _useSupabase = true;
+    _cache.students[CANONICAL_CID] = [
+      {
+        id: ENROLLMENT_ID,
+        personId: STUDENT_ID,
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        designations: [],
+        sortName: 'Lovelace Ada',
+      },
+    ];
+    globalThis.getSupabase = () => ({
+      rpc(name, payload) {
+        rpcCalls.push({ name, payload });
+        return Promise.resolve({ error: null });
+      },
+    });
+
+    upsertTermRating(CANONICAL_CID, ENROLLMENT_ID, 'term1', { narrative: 'Canonical write' });
+    await Promise.resolve();
+
+    expect(rpcCalls).toHaveLength(1);
+    expect(rpcCalls[0].name).toBe('upsert_term_rating');
+    expect(rpcCalls[0].payload.p_course_offering_id).toBe(CANONICAL_CID);
+    expect(rpcCalls[0].payload.p_student_id).toBe(STUDENT_ID);
+    expect(rpcCalls[0].payload.p_term_id).toBe('term1');
+    expect(rpcCalls[0].payload.p_patch.narrative).toBe('Canonical write');
   });
 });

@@ -24,6 +24,7 @@ Demo data lives in your browser's localStorage. Sign-out wipes it.
 4. **Quit Terminal completely** (Cmd+Q) and reopen it
 
 Verify:
+
 ```bash
 node --version    # should print v20.x.x or newer
 npm --version
@@ -45,16 +46,18 @@ Installs Prettier, Vitest, Playwright, and linkedom. Takes ~30 seconds.
 npm test
 ```
 
-Should print **648 passed, 5 skipped**.
+Should print the full Vitest suite passing (currently **652 passed, 5 skipped** in this checkout).
 
 ### Step 4: Run the E2E suite (optional)
 
 First time only — install the headless browser:
+
 ```bash
 npx playwright install chromium
 ```
 
 Then:
+
 ```bash
 npm run test:e2e          # headless (137 tests, ~25 min)
 npm run test:e2e:headed   # see the browser
@@ -72,16 +75,16 @@ Opens on port 8347. The root redirects to `/login.html`. To skip auth, click **"
 
 ## Available commands
 
-| Command | What it does |
-|---------|-------------|
-| `npm run dev` | Local dev server on port 8347 |
-| `npm test` | Vitest unit suite (one-shot) |
-| `npm run test:watch` | Vitest in watch mode |
-| `npm run test:e2e` | Playwright E2E suite (headless) |
-| `npm run test:e2e:headed` | Playwright with visible browser |
-| `npm run format` | Format all code with Prettier |
-| `npm run format:check` | Check formatting without writing |
-| `npm run build` | `bash scripts/build.sh` — copies public files to `dist/` for Netlify |
+| Command                   | What it does                                                         |
+| ------------------------- | -------------------------------------------------------------------- |
+| `npm run dev`             | Local dev server on port 8347                                        |
+| `npm test`                | Vitest unit suite (one-shot)                                         |
+| `npm run test:watch`      | Vitest in watch mode                                                 |
+| `npm run test:e2e`        | Playwright E2E suite (headless)                                      |
+| `npm run test:e2e:headed` | Playwright with visible browser                                      |
+| `npm run format`          | Format all code with Prettier                                        |
+| `npm run format:check`    | Check formatting without writing                                     |
+| `npm run build`           | `bash scripts/build.sh` — copies public files to `dist/` for Netlify |
 
 ---
 
@@ -89,9 +92,9 @@ Opens on port 8347. The root redirects to `/login.html`. To skip auth, click **"
 
 The repo auto-deploys on push to `main`. Netlify env vars to set on the site:
 
-| Variable | Source |
-|----------|--------|
-| `SUPABASE_URL` | Supabase → Project Settings → API |
+| Variable       | Source                                               |
+| -------------- | ---------------------------------------------------- |
+| `SUPABASE_URL` | Supabase → Project Settings → API                    |
 | `SUPABASE_KEY` | Supabase → Project Settings → API Keys → publishable |
 
 These are injected at edge by [`netlify/edge-functions/inject-env.js`](netlify/edge-functions/inject-env.js) — never committed to source.

@@ -13,36 +13,42 @@
  * ─────────────────────────────────────────────────────────────────────────── */
 function portalRedirect(user) {
   var portal = (user && user.user_metadata && user.user_metadata.portal) || 'teacher';
-  var preferMobile = portal === 'teacher' && window.innerWidth <= 768 && localStorage.getItem('td-mobile-pref') !== 'desktop';
+  var preferMobile =
+    portal === 'teacher' && window.innerWidth <= 768 && localStorage.getItem('td-mobile-pref') !== 'desktop';
 
   switch (portal) {
     case 'student':
-      return window.location.href = '/student/';
+      return (window.location.href = '/student/');
     case 'parent':
-      return window.location.href = '/parent/';
+      return (window.location.href = '/parent/');
     case 'teacher':
     default:
-      return window.location.href = preferMobile ? '/teacher-mobile/' : '/teacher/app.html';
+      return (window.location.href = preferMobile ? '/teacher-mobile/' : '/teacher/app.html');
   }
 }
 
 /* ── Redirect if already logged in ─────────────────────────── */
-(async function() {
+(async function () {
   // Opt-in demo via URL: /login.html?demo=1 wipes local state, sets the demo
   // flag, and drops the user at the dashboard with Science 8 auto-seeded.
   // Useful for testing and for sharing a "just works" local link.
   if (new URLSearchParams(location.search).get('demo') === '1') {
     Object.keys(localStorage)
-      .filter(function(k) { return k.indexOf('gb-') === 0; })
-      .forEach(function(k) { localStorage.removeItem(k); });
+      .filter(function (k) {
+        return k.indexOf('gb-') === 0;
+      })
+      .forEach(function (k) {
+        localStorage.removeItem(k);
+      });
     localStorage.setItem('gb-demo-mode', '1');
     var preferMobile = window.innerWidth <= 768 && localStorage.getItem('td-mobile-pref') !== 'desktop';
     window.location.href = preferMobile ? '/teacher-mobile/' : '/teacher/app.html';
     return;
   }
-  // Dev mode: skip login on localhost when Supabase is not configured
+  // Dev mode: only skip login on localhost when explicitly opted in with ?dev=1
   var hasConfig = !!(window.__ENV && window.__ENV.SUPABASE_URL && !window.__ENV.SUPABASE_URL.startsWith('__'));
-  if (location.hostname === 'localhost' && !hasConfig) {
+  var isDevOptIn = new URLSearchParams(location.search).get('dev') === '1';
+  if (location.hostname === 'localhost' && !hasConfig && isDevOptIn) {
     window.location.href = '/teacher/app.html';
     return;
   }
@@ -56,7 +62,9 @@ function portalRedirect(user) {
         return;
       }
     }
-  } catch(e) { /* not logged in, stay on page */ }
+  } catch (e) {
+    /* not logged in, stay on page */
+  }
 })();
 
 /* ── Tab switching ─────────────────────────────────────────── */
@@ -102,7 +110,7 @@ async function handleSignIn(e) {
     var password = document.getElementById('si-password').value;
     var result = await signIn(email, password);
     portalRedirect(result.user);
-  } catch(err) {
+  } catch (err) {
     showError(err.message || 'Sign in failed. Please try again.');
     btn.disabled = false;
     btn.textContent = 'Sign In';
@@ -128,8 +136,11 @@ async function handleSignUp(e) {
     await signUp(email, password, name);
     showSuccess('Check your email for a confirmation link.');
     btn.textContent = 'Account Created';
-    setTimeout(function() { btn.disabled = false; btn.textContent = 'Create Account'; }, 4000);
-  } catch(err) {
+    setTimeout(function () {
+      btn.disabled = false;
+      btn.textContent = 'Create Account';
+    }, 4000);
+  } catch (err) {
     showError(err.message || 'Sign up failed. Please try again.');
     btn.disabled = false;
     btn.textContent = 'Create Account';
@@ -137,7 +148,7 @@ async function handleSignUp(e) {
 }
 
 /* ── Delegated click handler ───────────────────────────────── */
-document.addEventListener('click', function(e) {
+document.addEventListener('click', function (e) {
   var btn = e.target.closest('[data-action]');
   if (!btn) return;
   switch (btn.dataset.action) {
@@ -161,8 +172,12 @@ function enterDemoMode() {
   // The seed only fires when COURSES is empty AND the wiped flag isn't set,
   // so prior real-account data would otherwise block it.
   Object.keys(localStorage)
-    .filter(function(k) { return k.indexOf('gb-') === 0; })
-    .forEach(function(k) { localStorage.removeItem(k); });
+    .filter(function (k) {
+      return k.indexOf('gb-') === 0;
+    })
+    .forEach(function (k) {
+      localStorage.removeItem(k);
+    });
   // Set the demo flag the rest of the app reads to skip auth + sync.
   // Cleared on sign-out (which also wipes all gb-* keys per FOIPPA).
   localStorage.setItem('gb-demo-mode', '1');
@@ -185,7 +200,7 @@ async function handleForgot() {
     var result = await sb.auth.resetPasswordForEmail(email);
     if (result.error) throw result.error;
     showSuccess('Password reset email sent. Check your inbox.');
-  } catch(err) {
+  } catch (err) {
     showError(err.message || 'Could not send reset email.');
   }
 }

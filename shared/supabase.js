@@ -13,11 +13,15 @@
  * after sign-in and routes each user to their correct interface.
  */
 
-(function() {
+(function () {
   'use strict';
 
   // Dev mode: bypass all Supabase on localhost when credentials are missing
-  const _hasSupabaseConfig = !!(window.__ENV && window.__ENV.SUPABASE_URL && !window.__ENV.SUPABASE_URL.startsWith('__'));
+  const _hasSupabaseConfig = !!(
+    window.__ENV &&
+    window.__ENV.SUPABASE_URL &&
+    !window.__ENV.SUPABASE_URL.startsWith('__')
+  );
   const _isDevMode = location.hostname === 'localhost' && !_hasSupabaseConfig;
 
   const SUPABASE_URL = (window.__ENV && window.__ENV.SUPABASE_URL) || '';
@@ -48,7 +52,7 @@
    * Returns the initialized Supabase client.
    * @returns {object|null} The Supabase client instance, or null if the CDN is unavailable
    */
-  window.getSupabase = function() {
+  window.getSupabase = function () {
     return window._supabase || _initClient();
   };
 
@@ -56,10 +60,12 @@
    * Returns the currently logged-in user, or null.
    * @returns {Promise<object|null>} The Supabase user object, or null if not authenticated
    */
-  window.getCurrentUser = async function() {
+  window.getCurrentUser = async function () {
     const sb = getSupabase();
     if (!sb) return null;
-    const { data: { user } } = await sb.auth.getUser();
+    const {
+      data: { user },
+    } = await sb.auth.getUser();
     return user;
   };
 
@@ -67,7 +73,7 @@
    * Returns true if a user is logged in.
    * @returns {Promise<boolean>} Whether a user is currently authenticated
    */
-  window.isLoggedIn = async function() {
+  window.isLoggedIn = async function () {
     const user = await getCurrentUser();
     return !!user;
   };
@@ -79,15 +85,15 @@
    * @param {string} displayName - The user's display name stored in user metadata
    * @returns {Promise<object>} The Supabase sign-up data (user and session)
    */
-  window.signUp = async function(email, password, displayName) {
+  window.signUp = async function (email, password, displayName) {
     const sb = getSupabase();
     if (!sb) throw new Error('Supabase not initialized');
     const { data, error } = await sb.auth.signUp({
       email,
       password,
       options: {
-        data: { display_name: displayName }
-      }
+        data: { display_name: displayName },
+      },
     });
     if (error) throw error;
     return data;
@@ -99,7 +105,7 @@
    * @param {string} password - The user's password
    * @returns {Promise<object>} The Supabase sign-in data (user and session)
    */
-  window.signIn = async function(email, password) {
+  window.signIn = async function (email, password) {
     const sb = getSupabase();
     if (!sb) throw new Error('Supabase not initialized');
     const { data, error } = await sb.auth.signInWithPassword({ email, password });
@@ -111,7 +117,7 @@
    * Signs out the current user, clears application localStorage data, and redirects to login.
    * @returns {Promise<void>}
    */
-  window.signOut = async function() {
+  window.signOut = async function () {
     const sb = getSupabase();
     if (!sb) return;
     // Wait for any pending data syncs to finish before clearing local data
@@ -129,9 +135,10 @@
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       // gb- and gb_ prefixes (data layer uses dashes, some UI prefs use underscores)
-    // sb- prefix (Supabase auth tokens)
-    // td- prefix (cross-portal prefs like td-mobile-pref)
-    if (key && (key.startsWith('gb-') || key.startsWith('gb_') || key.startsWith('sb-') || key.startsWith('td-'))) keysToRemove.push(key);
+      // sb- prefix (Supabase auth tokens)
+      // td- prefix (cross-portal prefs like td-mobile-pref)
+      if (key && (key.startsWith('gb-') || key.startsWith('gb_') || key.startsWith('sb-') || key.startsWith('td-')))
+        keysToRemove.push(key);
     }
     keysToRemove.forEach(k => localStorage.removeItem(k));
     // Clear session storage and cookies
@@ -152,7 +159,7 @@
    * @param {function(object|null, string): void} callback - Called with (user, event) on each auth state change
    * @returns {object|undefined} The Supabase auth subscription object, or undefined if client unavailable
    */
-  window.onAuthChange = function(callback) {
+  window.onAuthChange = function (callback) {
     const sb = getSupabase();
     if (!sb) return;
     try {
@@ -168,23 +175,34 @@
    * Redirects to login.html if the user is not logged in.
    * @returns {void}
    */
-  window.requireAuth = async function() {
+  window.requireAuth = async function () {
     // Demo mode: bypass auth, stub the user, run local-only with seeded data.
     // Set by the "Try Demo Mode" button on the login page.
     if (localStorage.getItem('gb-demo-mode') === '1') {
-      window.getCurrentUser = async () => ({ id: 'demo-user', email: 'demo@fullvision.local', user_metadata: { display_name: 'Demo Teacher' } });
+      window.getCurrentUser = async () => ({
+        id: 'demo-user',
+        email: 'demo@fullvision.local',
+        user_metadata: { display_name: 'Demo Teacher' },
+      });
       window.isLoggedIn = async () => true;
       return;
     }
-    // Dev mode: bypass auth on localhost with ?dev=1
+    // Dev mode: bypass auth on localhost when credentials are missing
     if (_isDevMode) {
-      window.getCurrentUser = async () => ({ id: 'dev-user', email: 'dev@localhost', user_metadata: { display_name: 'Dev Teacher' } });
+      window.getCurrentUser = async () => ({
+        id: 'dev-user',
+        email: 'dev@localhost',
+        user_metadata: { display_name: 'Dev Teacher' },
+      });
       window.isLoggedIn = async () => true;
       return;
     }
     // Auth check
     const sb = getSupabase();
-    if (!sb) { window.location.href = '/login.html'; return new Promise(function() {}); }
+    if (!sb) {
+      window.location.href = '/login.html';
+      return new Promise(function () {});
+    }
 
     // Fast path: check localStorage for cached session (Supabase stores this automatically)
     const storageKey = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
@@ -198,24 +216,29 @@
             return; // Session exists and is not expired — allow page to load
           }
         }
-      } catch(e) {
+      } catch (e) {
         console.warn('Session token parse failed:', e);
       }
     }
 
     // Slow path: no cached session found, check with Supabase
     try {
-      const { data: { session } } = await sb.auth.getSession();
-      if (!session) { window.location.href = '/login.html'; return new Promise(function() {}); }
-    } catch(e) {
+      const {
+        data: { session },
+      } = await sb.auth.getSession();
+      if (!session) {
+        window.location.href = '/login.html';
+        return new Promise(function () {});
+      }
+    } catch (e) {
       console.warn('Session check failed:', e);
       window.location.href = '/login.html';
-      return new Promise(function() {}); // Never resolve — page is redirecting
+      return new Promise(function () {}); // Never resolve — page is redirecting
     }
   };
 
   // Listen for auth state changes — notify on mid-session expiry
-  window.onAuthChange(function(user, event) {
+  window.onAuthChange(function (user, event) {
     if (event === 'TOKEN_REFRESHED' && !user) {
       // Session expired while the app was open
       if (typeof showSyncToast === 'function') {
@@ -225,35 +248,35 @@
         toast.className = 'sync-toast error';
         toast.id = 'sync-toast';
         toast.setAttribute('role', 'alert');
-        toast.innerHTML = '<span>Session expired</span><button class="sync-toast-btn" data-action="go-login">Sign In</button>';
+        toast.innerHTML =
+          '<span>Session expired</span><button class="sync-toast-btn" data-action="go-login">Sign In</button>';
         document.body.appendChild(toast);
       }
     }
   });
 
   // Delegated click handler for session-expired login redirect
-  document.addEventListener('click', function(e) {
+  document.addEventListener('click', function (e) {
     var btn = e.target.closest('[data-action="go-login"]');
     if (btn) {
       window.location.href = '/login.html';
     }
   });
-
 })();
 
 // Idle timeout: sign out after 30 minutes of inactivity on shared computers
 // Skip on login page — signOut() there causes pointless reload
-(function() {
+(function () {
   if (window.location.pathname.indexOf('login') !== -1) return;
   var _idleTimer = null;
   var IDLE_TIMEOUT = 30 * 60 * 1000; // 30 minutes
   function resetIdleTimer() {
     if (_idleTimer) clearTimeout(_idleTimer);
-    _idleTimer = setTimeout(function() {
+    _idleTimer = setTimeout(function () {
       if (typeof signOut === 'function') signOut();
     }, IDLE_TIMEOUT);
   }
-  ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach(function(evt) {
+  ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach(function (evt) {
     document.addEventListener(evt, resetIdleTimer, { passive: true });
   });
   resetIdleTimer();

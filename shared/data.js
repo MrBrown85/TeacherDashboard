@@ -61,57 +61,57 @@
    In-memory cache — populated by initData(), read by get*(), updated by save*()
    ══════════════════════════════════════════════════════════════════ */
 const _cache = {
-  courses: null,         // COURSES object (global)
-  config: null,          // gb-config (global)
-  students: {},          // keyed by cid
-  assessments: {},       // keyed by cid
-  scores: {},            // keyed by cid
-  learningMaps: {},      // keyed by cid
-  courseConfigs: {},      // keyed by cid
-  modules: {},           // keyed by cid
-  rubrics: {},           // keyed by cid
-  flags: {},             // keyed by cid
-  goals: {},             // keyed by cid
-  reflections: {},       // keyed by cid
-  overrides: {},         // keyed by cid
-  statuses: {},          // keyed by cid
-  observations: {},      // keyed by cid
-  termRatings: {},       // keyed by cid
-  customTags: {},        // keyed by cid
-  notes: {},             // keyed by cid
-  reportConfig: {},      // keyed by cid
+  courses: null, // COURSES object (global)
+  config: null, // gb-config (global)
+  students: {}, // keyed by cid
+  assessments: {}, // keyed by cid
+  scores: {}, // keyed by cid
+  learningMaps: {}, // keyed by cid
+  courseConfigs: {}, // keyed by cid
+  modules: {}, // keyed by cid
+  rubrics: {}, // keyed by cid
+  flags: {}, // keyed by cid
+  goals: {}, // keyed by cid
+  reflections: {}, // keyed by cid
+  overrides: {}, // keyed by cid
+  statuses: {}, // keyed by cid
+  observations: {}, // keyed by cid
+  termRatings: {}, // keyed by cid
+  customTags: {}, // keyed by cid
+  notes: {}, // keyed by cid
+  reportConfig: {}, // keyed by cid
 };
 
 // Mapping from cache field → localStorage key suffix (and Supabase data_key)
 const _DATA_KEYS = {
-  students:     'students',
-  assessments:  'assessments',
-  scores:       'scores',
+  students: 'students',
+  assessments: 'assessments',
+  scores: 'scores',
   learningMaps: 'learningmap',
   courseConfigs: 'courseconfig',
-  modules:      'modules',
-  rubrics:      'rubrics',
-  flags:        'flags',
-  goals:        'goals',
-  reflections:  'reflections',
-  overrides:    'overrides',
-  statuses:     'statuses',
+  modules: 'modules',
+  rubrics: 'rubrics',
+  flags: 'flags',
+  goals: 'goals',
+  reflections: 'reflections',
+  overrides: 'overrides',
+  statuses: 'statuses',
   observations: 'quick-obs',
-  termRatings:  'term-ratings',
-  customTags:   'custom-tags',
-  notes:        'notes',
+  termRatings: 'term-ratings',
+  customTags: 'custom-tags',
+  notes: 'notes',
   reportConfig: 'report-config',
 };
 
 let _useSupabase = false;
 let _teacherId = null;
-let _initPromise = null;  // dedup concurrent initData calls
+let _initPromise = null; // dedup concurrent initData calls
 
 /* Echo guard: suppress Realtime refetches for a field+cid shortly after a local save.
    Prevents Realtime events from triggering a refetch that could see partial state
    while an UPSERT batch is still in-flight. */
-const _echoGuard = {};  // key: "field:cid" → expiry timestamp
-const _ECHO_GUARD_MS = 35000;  // suppress echoes for 35s after save (must exceed _SYNC_TIMEOUT_MS)
+const _echoGuard = {}; // key: "field:cid" → expiry timestamp
+const _ECHO_GUARD_MS = 35000; // suppress echoes for 35s after save (must exceed _SYNC_TIMEOUT_MS)
 
 function _setEchoGuard(field, cid) {
   _echoGuard[field + ':' + cid] = Date.now() + _ECHO_GUARD_MS;
@@ -136,7 +136,9 @@ function getSyncStatus() {
   return { status: _syncStatus, pending: _pendingSyncs };
 }
 
-function getLastSyncedAt() { return _lastSyncedAt; }
+function getLastSyncedAt() {
+  return _lastSyncedAt;
+}
 
 /** Returns a promise that resolves when all pending syncs complete (or after timeout). */
 function waitForPendingSyncs(timeoutMs = 5000) {
@@ -157,8 +159,12 @@ function _updateSyncIndicator() {
   if (!dot) return;
   const s = getSyncStatus();
   dot.className = 'tb-sync-dot ' + s.status;
-  dot.title = s.status === 'idle' ? 'All changes saved' :
-              s.status === 'syncing' ? 'Syncing...' : 'Sync error — changes saved locally';
+  dot.title =
+    s.status === 'idle'
+      ? 'All changes saved'
+      : s.status === 'syncing'
+        ? 'Syncing...'
+        : 'Sync error — changes saved locally';
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -172,7 +178,7 @@ function _initCrossTab() {
   _crossTabAlerted = false;
   try {
     _crossTabChannel = new BroadcastChannel('td-data-sync');
-    _crossTabChannel.onmessage = function(e) {
+    _crossTabChannel.onmessage = function (e) {
       if (e.data && e.data.type === 'data-changed') {
         _handleCrossTabChange(e.data.cid, e.data.field);
       }
@@ -181,7 +187,7 @@ function _initCrossTab() {
     // BroadcastChannel not supported — fall back to storage event
   }
   // Fallback: storage event fires cross-tab when localStorage changes
-  window.addEventListener('storage', function(e) {
+  window.addEventListener('storage', function (e) {
     if (e.key && e.key.startsWith('gb-') && !_crossTabAlerted) {
       // Storage events don't carry field info — reload as fallback
       _crossTabAlerted = true;
@@ -193,14 +199,15 @@ function _initCrossTab() {
         toast.id = 'sync-toast';
         toast.setAttribute('role', 'alert');
         toast.setAttribute('aria-live', 'assertive');
-        toast.innerHTML = '<span>Data changed in another tab</span><button class="sync-toast-btn" data-action="reload-cross-tab">Reload</button>';
+        toast.innerHTML =
+          '<span>Data changed in another tab</span><button class="sync-toast-btn" data-action="reload-cross-tab">Reload</button>';
         document.body.appendChild(toast);
       }
     }
   });
 
   // Delegated click handler for cross-tab reload buttons (storage fallback only)
-  document.addEventListener('click', function(e) {
+  document.addEventListener('click', function (e) {
     var btn = e.target.closest('[data-action="reload-cross-tab"]');
     if (btn) {
       _crossTabAlerted = false;
@@ -226,7 +233,7 @@ async function _handleCrossTabChange(cid, field) {
         var result = await _selectCourseTable(sb, normTable, _teacherId, cid);
         if (!result.error && result.data) {
           if (_getConfigTableSet().has(normTable)) {
-            _cache[field][cid] = (result.data.length > 0) ? result.data[0].data : _defaultForField(field);
+            _cache[field][cid] = result.data.length > 0 ? result.data[0].data : _defaultForField(field);
           } else if (_BULK_LOAD_CONVERTERS[normTable]) {
             _cache[field][cid] = _BULK_LOAD_CONVERTERS[normTable](result.data);
           } else if (field === 'scores') {
@@ -243,35 +250,52 @@ async function _handleCrossTabChange(cid, field) {
             var newStudents = _studentRowsToBlob(result.data).map(migrateStudent);
             var curStudents = _cache[field][cid];
             // Never-shrink guard
-            if (Array.isArray(curStudents) && curStudents.length > 0 &&
-                newStudents.length < curStudents.length * 0.5) {
-              console.warn('Cross-tab students refetch returned', newStudents.length,
-                'vs', curStudents.length, 'in cache — skipping');
+            if (Array.isArray(curStudents) && curStudents.length > 0 && newStudents.length < curStudents.length * 0.5) {
+              console.warn(
+                'Cross-tab students refetch returned',
+                newStudents.length,
+                'vs',
+                curStudents.length,
+                'in cache — skipping',
+              );
             } else {
               _cache[field][cid] = newStudents;
             }
           }
         }
       }
-    } catch (e) { /* fall through — cache stays as-is */ }
+    } catch (e) {
+      /* fall through — cache stays as-is */
+    }
   }
 
   // Clear proficiency cache if relevant field changed
   if (_PROF_FIELDS.includes(field) && typeof clearProfCache === 'function') clearProfCache();
 
   // Clear tag/section caches if learning map changed
-  if (field === 'learningMaps') { _allTagsCache = {}; _tagToSectionCache = {}; }
+  if (field === 'learningMaps') {
+    _allTagsCache = {};
+    _tagToSectionCache = {};
+  }
 
   // Re-render current page if it has a render() method
-  var currentPage = (typeof Router !== 'undefined' && Router.getCurrentPage) ? Router.getCurrentPage() : null;
+  var currentPage = typeof Router !== 'undefined' && Router.getCurrentPage ? Router.getCurrentPage() : null;
   if (currentPage && currentPage.render) {
-    try { currentPage.render(); } catch (e) { /* page may not be ready */ }
+    try {
+      currentPage.render();
+    } catch (e) {
+      /* page may not be ready */
+    }
   }
 }
 
 function _broadcastChange(cid, field) {
   if (_crossTabChannel) {
-    try { _crossTabChannel.postMessage({ type: 'data-changed', cid: cid, field: field }); } catch (e) { /* fire-and-forget — channel may be closed */ }
+    try {
+      _crossTabChannel.postMessage({ type: 'data-changed', cid: cid, field: field });
+    } catch (e) {
+      /* fire-and-forget — channel may be closed */
+    }
   }
 }
 
@@ -279,7 +303,7 @@ function _broadcastChange(cid, field) {
    Supabase sync helpers (fire-and-forget with coalescing)
    ══════════════════════════════════════════════════════════════════ */
 let _hadSyncError = false;
-let _retryQueue = [];       // { table, key, data }
+let _retryQueue = []; // { table, key, data }
 let _retryTimer = null;
 let _lsQuotaWarned = false;
 let _beforeUnloadBound = false;
@@ -287,11 +311,11 @@ let _retryCount = 0;
 let _consecutiveFailures = 0;
 const _MAX_RETRIES = 6;
 const _MAX_RETRY_QUEUE = 100;
-const _SYNC_TIMEOUT_MS = 30000;  // 30s — bulk upserts of 2000+ rows need headroom on mobile
+const _SYNC_TIMEOUT_MS = 30000; // 30s — bulk upserts of 2000+ rows need headroom on mobile
 
 /* Track in-flight and pending syncs per key to coalesce rapid saves */
-const _inflightSyncs = new Map();   // syncKey → true (currently in-flight)
-const _pendingWrites = new Map();   // syncKey → { table, key, data } (queued behind in-flight)
+const _inflightSyncs = new Map(); // syncKey → true (currently in-flight)
+const _pendingWrites = new Map(); // syncKey → { table, key, data } (queued behind in-flight)
 
 function _hasDataChanged(a, b) {
   return JSON.stringify(a) !== JSON.stringify(b);
@@ -323,27 +347,33 @@ function _syncToSupabase(table, key, data) {
   // If a sync for this exact key is already in-flight, just update the pending data (latest wins)
   // Snapshot data so later in-place mutations can't corrupt the queued write
   if (_inflightSyncs.has(sk)) {
-    var pendingSnapshot = (typeof structuredClone === 'function') ? structuredClone(data) : JSON.parse(JSON.stringify(data));
+    var pendingSnapshot =
+      typeof structuredClone === 'function' ? structuredClone(data) : JSON.parse(JSON.stringify(data));
     _pendingWrites.set(sk, { table, key, data: pendingSnapshot });
     return;
   }
 
   _inflightSyncs.set(sk, true);
-  _doSync(table, key, data).catch(err => console.error(`Sync error (${sk}):`, err)).finally(() => {
-    _inflightSyncs.delete(sk);
-    // If a newer write arrived while we were in-flight, send it now
-    if (_pendingWrites.has(sk)) {
-      const next = _pendingWrites.get(sk);
-      _pendingWrites.delete(sk);
-      // Refresh echo guard so the queued sync's Realtime echoes are suppressed
-      if (next.key && next.key.cid) {
-        for (var _f in _NORMALIZED_TABLES) {
-          if (_NORMALIZED_TABLES[_f] === next.table) { _setEchoGuard(_f, next.key.cid); break; }
+  _doSync(table, key, data)
+    .catch(err => console.error(`Sync error (${sk}):`, err))
+    .finally(() => {
+      _inflightSyncs.delete(sk);
+      // If a newer write arrived while we were in-flight, send it now
+      if (_pendingWrites.has(sk)) {
+        const next = _pendingWrites.get(sk);
+        _pendingWrites.delete(sk);
+        // Refresh echo guard so the queued sync's Realtime echoes are suppressed
+        if (next.key && next.key.cid) {
+          for (var _f in _NORMALIZED_TABLES) {
+            if (_NORMALIZED_TABLES[_f] === next.table) {
+              _setEchoGuard(_f, next.key.cid);
+              break;
+            }
+          }
         }
+        _syncToSupabase(next.table, next.key, next.data);
       }
-      _syncToSupabase(next.table, next.key, next.data);
-    }
-  });
+    });
 }
 
 async function _doSync(table, key, data) {
@@ -377,9 +407,11 @@ async function _doSync(table, key, data) {
       const currentKeys = new Set(rows.map(r => r.student_id + ':' + r.assessment_id + ':' + r.tag_id));
 
       // 1. Fetch existing row keys from DB to find what to delete
-      const { data: existing, error: fetchErr } = await sb.from('scores')
+      const { data: existing, error: fetchErr } = await sb
+        .from('scores')
         .select('student_id,assessment_id,tag_id')
-        .eq('teacher_id', _teacherId).eq('course_id', key.cid)
+        .eq('teacher_id', _teacherId)
+        .eq('course_id', key.cid)
         .abortSignal(controller.signal);
       if (fetchErr) throw fetchErr;
 
@@ -388,31 +420,38 @@ async function _doSync(table, key, data) {
         // Batch in chunks of 500 to stay within Supabase payload limits
         for (let i = 0; i < rows.length; i += 500) {
           const chunk = rows.slice(i, i + 500);
-          const { error: upsertErr } = await sb.from('scores').upsert(chunk, {
-            onConflict: 'teacher_id,course_id,student_id,assessment_id,tag_id'
-          }).abortSignal(controller.signal);
+          const { error: upsertErr } = await sb
+            .from('scores')
+            .upsert(chunk, {
+              onConflict: 'teacher_id,course_id,student_id,assessment_id,tag_id',
+            })
+            .abortSignal(controller.signal);
           if (upsertErr) throw upsertErr;
         }
       }
 
       // 3. DELETE only rows that were removed — batch by (assessment_id, tag_id) to minimize requests
-      const toDelete = (existing || []).filter(r =>
-        !currentKeys.has(r.student_id + ':' + r.assessment_id + ':' + r.tag_id)
+      const toDelete = (existing || []).filter(
+        r => !currentKeys.has(r.student_id + ':' + r.assessment_id + ':' + r.tag_id),
       );
       if (toDelete.length > 0) {
         const deleteGroups = new Map();
         for (const d of toDelete) {
           const gk = d.assessment_id + ':' + d.tag_id;
-          if (!deleteGroups.has(gk)) deleteGroups.set(gk, { assessment_id: d.assessment_id, tag_id: d.tag_id, student_ids: [] });
+          if (!deleteGroups.has(gk))
+            deleteGroups.set(gk, { assessment_id: d.assessment_id, tag_id: d.tag_id, student_ids: [] });
           deleteGroups.get(gk).student_ids.push(d.student_id);
         }
         for (const g of deleteGroups.values()) {
           for (let i = 0; i < g.student_ids.length; i += 500) {
             const chunk = g.student_ids.slice(i, i + 500);
-            const { error: delErr } = await sb.from('scores')
+            const { error: delErr } = await sb
+              .from('scores')
               .delete()
-              .eq('teacher_id', _teacherId).eq('course_id', key.cid)
-              .eq('assessment_id', g.assessment_id).eq('tag_id', g.tag_id)
+              .eq('teacher_id', _teacherId)
+              .eq('course_id', key.cid)
+              .eq('assessment_id', g.assessment_id)
+              .eq('tag_id', g.tag_id)
               .in('student_id', chunk)
               .abortSignal(controller.signal);
             if (delErr) throw delErr;
@@ -424,18 +463,23 @@ async function _doSync(table, key, data) {
       const obsRows = _obsBlobToRows(key.cid, data);
       const currentIds = new Set(obsRows.map(r => r.id));
 
-      const { data: existingObs, error: fetchErr } = await sb.from('observations')
+      const { data: existingObs, error: fetchErr } = await sb
+        .from('observations')
         .select('id')
-        .eq('teacher_id', _teacherId).eq('course_id', key.cid)
+        .eq('teacher_id', _teacherId)
+        .eq('course_id', key.cid)
         .abortSignal(controller.signal);
       if (fetchErr) throw fetchErr;
 
       if (obsRows.length > 0) {
         for (let i = 0; i < obsRows.length; i += 500) {
           const chunk = obsRows.slice(i, i + 500);
-          const { error: upsertErr } = await sb.from('observations').upsert(chunk, {
-            onConflict: 'teacher_id,course_id,id'
-          }).abortSignal(controller.signal);
+          const { error: upsertErr } = await sb
+            .from('observations')
+            .upsert(chunk, {
+              onConflict: 'teacher_id,course_id,id',
+            })
+            .abortSignal(controller.signal);
           if (upsertErr) throw upsertErr;
         }
       }
@@ -443,22 +487,28 @@ async function _doSync(table, key, data) {
       const obsToDelete = (existingObs || []).filter(r => !currentIds.has(r.id));
       for (let i = 0; i < obsToDelete.length; i += 500) {
         const chunk = obsToDelete.slice(i, i + 500).map(r => r.id);
-        const { error: delErr } = await sb.from('observations')
+        const { error: delErr } = await sb
+          .from('observations')
           .delete()
-          .eq('teacher_id', _teacherId).eq('course_id', key.cid)
+          .eq('teacher_id', _teacherId)
+          .eq('course_id', key.cid)
           .in('id', chunk)
           .abortSignal(controller.signal);
         if (delErr) throw delErr;
       }
     } else if (table === 'obs_row') {
       // Single observation upsert
-      const { error } = await sb.from('observations').upsert(data, {
-        onConflict: 'teacher_id,course_id,id'
-      }).abortSignal(controller.signal);
+      const { error } = await sb
+        .from('observations')
+        .upsert(data, {
+          onConflict: 'teacher_id,course_id,id',
+        })
+        .abortSignal(controller.signal);
       if (error) throw error;
     } else if (table === 'obs_delete') {
       // Single observation delete
-      const { error } = await sb.from('observations')
+      const { error } = await sb
+        .from('observations')
         .delete()
         .eq('teacher_id', _teacherId)
         .eq('course_id', key.cid)
@@ -467,36 +517,46 @@ async function _doSync(table, key, data) {
       if (error) throw error;
     } else if (table === 'scores_row') {
       // Single score upsert — the efficient hot path
-      const { error } = await sb.from('scores').upsert(data, {
-        onConflict: 'teacher_id,course_id,student_id,assessment_id,tag_id'
-      }).abortSignal(controller.signal);
+      const { error } = await sb
+        .from('scores')
+        .upsert(data, {
+          onConflict: 'teacher_id,course_id,student_id,assessment_id,tag_id',
+        })
+        .abortSignal(controller.signal);
       if (error) throw error;
     } else if (table === 'assessments') {
       // Safe sync: UPSERT + targeted DELETE
       const aRows = _assessmentsBlobToRows(key.cid, data);
       const currentIds = new Set(aRows.map(r => r.id));
 
-      const { data: existingA, error: fetchErr } = await sb.from('assessments')
+      const { data: existingA, error: fetchErr } = await sb
+        .from('assessments')
         .select('id')
-        .eq('teacher_id', _teacherId).eq('course_id', key.cid)
+        .eq('teacher_id', _teacherId)
+        .eq('course_id', key.cid)
         .abortSignal(controller.signal);
       if (fetchErr) throw fetchErr;
 
       if (aRows.length > 0) {
         for (let i = 0; i < aRows.length; i += 500) {
           const chunk = aRows.slice(i, i + 500);
-          const { error: upsertErr } = await sb.from('assessments').upsert(chunk, {
-            onConflict: 'teacher_id,course_id,id'
-          }).abortSignal(controller.signal);
+          const { error: upsertErr } = await sb
+            .from('assessments')
+            .upsert(chunk, {
+              onConflict: 'teacher_id,course_id,id',
+            })
+            .abortSignal(controller.signal);
           if (upsertErr) throw upsertErr;
         }
       }
 
       const aToDelete = (existingA || []).filter(r => !currentIds.has(r.id));
       for (let i = 0; i < aToDelete.length; i++) {
-        const { error: delErr } = await sb.from('assessments')
+        const { error: delErr } = await sb
+          .from('assessments')
           .delete()
-          .eq('teacher_id', _teacherId).eq('course_id', key.cid)
+          .eq('teacher_id', _teacherId)
+          .eq('course_id', key.cid)
           .eq('id', aToDelete[i].id)
           .abortSignal(controller.signal);
         if (delErr) throw delErr;
@@ -506,27 +566,34 @@ async function _doSync(table, key, data) {
       const sRows = _studentsBlobToRows(key.cid, data);
       const currentIds = new Set(sRows.map(r => r.id));
 
-      const { data: existingS, error: fetchErr } = await sb.from('students')
+      const { data: existingS, error: fetchErr } = await sb
+        .from('students')
         .select('id')
-        .eq('teacher_id', _teacherId).eq('course_id', key.cid)
+        .eq('teacher_id', _teacherId)
+        .eq('course_id', key.cid)
         .abortSignal(controller.signal);
       if (fetchErr) throw fetchErr;
 
       if (sRows.length > 0) {
         for (let i = 0; i < sRows.length; i += 500) {
           const chunk = sRows.slice(i, i + 500);
-          const { error: upsertErr } = await sb.from('students').upsert(chunk, {
-            onConflict: 'teacher_id,course_id,id'
-          }).abortSignal(controller.signal);
+          const { error: upsertErr } = await sb
+            .from('students')
+            .upsert(chunk, {
+              onConflict: 'teacher_id,course_id,id',
+            })
+            .abortSignal(controller.signal);
           if (upsertErr) throw upsertErr;
         }
       }
 
       const sToDelete = (existingS || []).filter(r => !currentIds.has(r.id));
       for (let i = 0; i < sToDelete.length; i++) {
-        const { error: delErr } = await sb.from('students')
+        const { error: delErr } = await sb
+          .from('students')
           .delete()
-          .eq('teacher_id', _teacherId).eq('course_id', key.cid)
+          .eq('teacher_id', _teacherId)
+          .eq('course_id', key.cid)
           .eq('id', sToDelete[i].id)
           .abortSignal(controller.signal);
         if (delErr) throw delErr;
@@ -538,30 +605,55 @@ async function _doSync(table, key, data) {
 
       // Determine the primary key column(s) for this table
       const pkMap = {
-        'goals': { pk: 'student_id,tag_id', keyCols: ['student_id', 'tag_id'], keyFn: r => r.student_id + ':' + r.tag_id },
-        'reflections': { pk: 'student_id,tag_id', keyCols: ['student_id', 'tag_id'], keyFn: r => r.student_id + ':' + r.tag_id },
-        'overrides': { pk: 'student_id,tag_id', keyCols: ['student_id', 'tag_id'], keyFn: r => r.student_id + ':' + r.tag_id },
-        'statuses': { pk: 'student_id,assessment_id', keyCols: ['student_id', 'assessment_id'], keyFn: r => r.student_id + ':' + r.assessment_id },
-        'student_notes': { pk: 'student_id', keyCols: ['student_id'], keyFn: r => r.student_id },
-        'student_flags': { pk: 'student_id', keyCols: ['student_id'], keyFn: r => r.student_id },
-        'term_ratings': { pk: 'student_id,term_id', keyCols: ['student_id', 'term_id'], keyFn: r => r.student_id + ':' + r.term_id },
+        goals: {
+          pk: 'student_id,tag_id',
+          keyCols: ['student_id', 'tag_id'],
+          keyFn: r => r.student_id + ':' + r.tag_id,
+        },
+        reflections: {
+          pk: 'student_id,tag_id',
+          keyCols: ['student_id', 'tag_id'],
+          keyFn: r => r.student_id + ':' + r.tag_id,
+        },
+        overrides: {
+          pk: 'student_id,tag_id',
+          keyCols: ['student_id', 'tag_id'],
+          keyFn: r => r.student_id + ':' + r.tag_id,
+        },
+        statuses: {
+          pk: 'student_id,assessment_id',
+          keyCols: ['student_id', 'assessment_id'],
+          keyFn: r => r.student_id + ':' + r.assessment_id,
+        },
+        student_notes: { pk: 'student_id', keyCols: ['student_id'], keyFn: r => r.student_id },
+        student_flags: { pk: 'student_id', keyCols: ['student_id'], keyFn: r => r.student_id },
+        term_ratings: {
+          pk: 'student_id,term_id',
+          keyCols: ['student_id', 'term_id'],
+          keyFn: r => r.student_id + ':' + r.term_id,
+        },
       };
       const info = pkMap[table];
       if (info) {
         const currentKeys = new Set(bulkRows.map(info.keyFn));
         const selectCols = info.keyCols.join(',');
-        const { data: existingRows, error: fetchErr } = await sb.from(table)
+        const { data: existingRows, error: fetchErr } = await sb
+          .from(table)
           .select(selectCols)
-          .eq('teacher_id', _teacherId).eq('course_id', key.cid)
+          .eq('teacher_id', _teacherId)
+          .eq('course_id', key.cid)
           .abortSignal(controller.signal);
         if (fetchErr) throw fetchErr;
 
         if (bulkRows.length > 0) {
           for (let i = 0; i < bulkRows.length; i += 500) {
             const chunk = bulkRows.slice(i, i + 500);
-            const { error: upsertErr } = await sb.from(table).upsert(chunk, {
-              onConflict: 'teacher_id,course_id,' + info.pk
-            }).abortSignal(controller.signal);
+            const { error: upsertErr } = await sb
+              .from(table)
+              .upsert(chunk, {
+                onConflict: 'teacher_id,course_id,' + info.pk,
+              })
+              .abortSignal(controller.signal);
             if (upsertErr) throw upsertErr;
           }
         }
@@ -569,9 +661,10 @@ async function _doSync(table, key, data) {
         const rowsToDelete = (existingRows || []).filter(r => !currentKeys.has(info.keyFn(r)));
         for (let i = 0; i < rowsToDelete.length; i++) {
           const d = rowsToDelete[i];
-          let q = sb.from(table).delete()
-            .eq('teacher_id', _teacherId).eq('course_id', key.cid);
-          info.keyCols.forEach(col => { q = q.eq(col, d[col]); });
+          let q = sb.from(table).delete().eq('teacher_id', _teacherId).eq('course_id', key.cid);
+          info.keyCols.forEach(col => {
+            q = q.eq(col, d[col]);
+          });
           const { error: delErr } = await q.abortSignal(controller.signal);
           if (delErr) throw delErr;
         }
@@ -587,26 +680,43 @@ async function _doSync(table, key, data) {
       }
     } else if (_getConfigTableSet().has(table)) {
       // Config tables: single JSONB blob per course, upsert
-      const { error } = await sb.from(table).upsert({
-        teacher_id: _teacherId,
-        course_id: key.cid,
-        data: data,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'teacher_id,course_id' }).abortSignal(controller.signal);
+      const { error } = await sb
+        .from(table)
+        .upsert(
+          {
+            teacher_id: _teacherId,
+            course_id: key.cid,
+            data: data,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'teacher_id,course_id' },
+        )
+        .abortSignal(controller.signal);
       if (error) throw error;
     } else if (table === 'teacher_config') {
-      const { error } = await sb.from('teacher_config').upsert({
-        teacher_id: _teacherId,
-        config_key: key,
-        data: data,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'teacher_id,config_key' }).abortSignal(controller.signal);
+      const { error } = await sb
+        .from('teacher_config')
+        .upsert(
+          {
+            teacher_id: _teacherId,
+            config_key: key,
+            data: data,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'teacher_id,config_key' },
+        )
+        .abortSignal(controller.signal);
       if (error) throw error;
     }
     clearTimeout(timeoutId);
     _pendingSyncs--;
     _consecutiveFailures = 0;
-    if (_pendingSyncs <= 0) { _pendingSyncs = 0; _syncStatus = 'idle'; _retryCount = 0; _lastSyncedAt = new Date(); }
+    if (_pendingSyncs <= 0) {
+      _pendingSyncs = 0;
+      _syncStatus = 'idle';
+      _retryCount = 0;
+      _lastSyncedAt = new Date();
+    }
     _updateSyncIndicator();
     // Show recovery toast if we previously had an error
     if (_hadSyncError && _syncStatus === 'idle') {
@@ -626,7 +736,8 @@ async function _doSync(table, key, data) {
       if (typeof showSyncToast === 'function') showSyncToast('Sync failed \u2014 changes saved locally', 'error');
     }
     if (_consecutiveFailures >= 3) {
-      if (typeof showSyncToast === 'function') showSyncToast('Server overloaded \u2014 retries paused, data safe locally', 'error');
+      if (typeof showSyncToast === 'function')
+        showSyncToast('Server overloaded \u2014 retries paused, data safe locally', 'error');
     }
     _addToRetryQueue(table, key, data);
     // Only schedule retries if not in overload backoff
@@ -666,16 +777,23 @@ async function _retryFailedSyncs() {
   if (_retryCount > _MAX_RETRIES) {
     // Don't drop the queue — keep it in localStorage so it can be retried
     // on next page load or manual retry. Only reset counters.
-    console.error('[GUARD] Sync retry limit reached.', _retryQueue.length,
-      'items preserved in localStorage for recovery. Call retrySyncs() to retry.');
+    console.error(
+      '[GUARD] Sync retry limit reached.',
+      _retryQueue.length,
+      'items preserved in localStorage for recovery. Call retrySyncs() to retry.',
+    );
     _retryCount = 0;
     _consecutiveFailures = 0;
-    if (typeof showSyncToast === 'function') showSyncToast('Sync retries exhausted — data safe locally, will retry on reload', 'error');
+    if (typeof showSyncToast === 'function')
+      showSyncToast('Sync retries exhausted — data safe locally, will retry on reload', 'error');
     return;
   }
   // Process one at a time to avoid hammering the server
   const queue = _retryQueue.splice(0);
-  if (queue.length === 0) { localStorage.removeItem('gb-retry-queue'); return; }
+  if (queue.length === 0) {
+    localStorage.removeItem('gb-retry-queue');
+    return;
+  }
   for (let i = 0; i < queue.length; i++) {
     try {
       await _doSync(queue[i].table, queue[i].key, queue[i].data);
@@ -724,7 +842,9 @@ async function initAllCourses() {
     const sb = getSupabase();
     if (sb) {
       try {
-        const { data: { session } } = await sb.auth.getSession();
+        const {
+          data: { session },
+        } = await sb.auth.getSession();
         if (session && session.user) {
           _useSupabase = true;
           _teacherId = session.user.id;
@@ -744,17 +864,14 @@ async function initAllCourses() {
     try {
       const [prefsRes, coursesRes] = await Promise.all([
         sb.rpc('get_teacher_preferences'),
-        sb.rpc('list_teacher_courses')
+        sb.rpc('list_teacher_courses'),
       ]);
       if (prefsRes.error) throw prefsRes.error;
       if (coursesRes.error) throw coursesRes.error;
       const prefs = prefsRes.data || {};
       const courseList = coursesRes.data || [];
       _cache.courses = _canonicalCoursesToBlob(courseList);
-      _cache.config = Object.assign(
-        { activeCourse: prefs.activeCourseId || null },
-        prefs.uiPrefs || {}
-      );
+      _cache.config = Object.assign({ activeCourse: prefs.activeCourseId || null }, prefs.uiPrefs || {});
       // Mirror to localStorage so offline reloads (or transient Supabase failures)
       // can boot from cache instead of starting empty.
       _safeLSSet('gb-courses', JSON.stringify(_cache.courses));
@@ -778,19 +895,22 @@ async function initAllCourses() {
   if (!localStorage.getItem('gb-courses') && !_useSupabase) saveCourses(COURSES);
 
   try {
-    var savedQueue = JSON.parse(localStorage.getItem('gb-retry-queue') || '[]')
-      .filter(function(item) { return item && item.table && item.key; });
+    var savedQueue = JSON.parse(localStorage.getItem('gb-retry-queue') || '[]').filter(function (item) {
+      return item && item.table && item.key;
+    });
     if (savedQueue.length > 0 && _useSupabase) {
       _retryQueue = savedQueue;
       setTimeout(_retryFailedSyncs, 2000);
     } else {
       localStorage.removeItem('gb-retry-queue');
     }
-  } catch (e) { localStorage.removeItem('gb-retry-queue'); }
+  } catch (e) {
+    localStorage.removeItem('gb-retry-queue');
+  }
 
   if (!_beforeUnloadBound) {
     _beforeUnloadBound = true;
-    window.addEventListener('beforeunload', function() {
+    window.addEventListener('beforeunload', function () {
       if (_retryQueue.length > 0) _persistRetryQueue();
     });
   }
@@ -832,13 +952,13 @@ function _initRealtimeSync() {
     if (_isEchoGuarded(field, cid)) return;
     var key = field + ':' + cid;
     if (_realtimeRefetchTimers[key]) clearTimeout(_realtimeRefetchTimers[key]);
-    _realtimeRefetchTimers[key] = setTimeout(function() {
+    _realtimeRefetchTimers[key] = setTimeout(function () {
       delete _realtimeRefetchTimers[key];
       // Re-check guard (may have been set while debounce waited)
       if (_isEchoGuarded(field, cid)) return;
       var sb2 = getSupabase();
       if (!sb2) return;
-      _selectCourseTable(sb2, supabaseTable, _teacherId, cid).then(function(res) {
+      _selectCourseTable(sb2, supabaseTable, _teacherId, cid).then(function (res) {
         if (res.error || !res.data) return;
         var newData = converter(res.data);
         if (!_hasDataChanged(newData, _cache[field][cid])) return;
@@ -848,16 +968,25 @@ function _initRealtimeSync() {
         var existing = _cache[field][cid];
         if (Array.isArray(existing) && Array.isArray(newData)) {
           if (existing.length > 0 && newData.length < existing.length * 0.8) {
-            console.warn('[GUARD] Realtime refetch for', field, 'returned', newData.length,
-              'items vs', existing.length, 'in cache — skipping (likely mid-sync snapshot)');
+            console.warn(
+              '[GUARD] Realtime refetch for',
+              field,
+              'returned',
+              newData.length,
+              'items vs',
+              existing.length,
+              'in cache — skipping (likely mid-sync snapshot)',
+            );
             return;
           }
         }
         if (_shouldSkipEntryShrink(field, existing, newData, 'Realtime refetch')) return;
         if (field === 'students' || field === 'scores') {
-          console.warn('[DIAG] Realtime refetch replacing cache.' + field + '[' + cid + ']',
+          console.warn(
+            '[DIAG] Realtime refetch replacing cache.' + field + '[' + cid + ']',
             'old=' + _countFieldItems(field, existing),
-            'new=' + _countFieldItems(field, newData));
+            'new=' + _countFieldItems(field, newData),
+          );
         }
         _cache[field][cid] = newData;
         _invalidateAndRerender();
@@ -866,104 +995,132 @@ function _initRealtimeSync() {
   }
 
   try {
-    _realtimeChannel = sb.channel('course-data-sync')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'observations',
-        filter: 'teacher_id=eq.' + _teacherId
-      }, function(payload) {
-        var row = payload.new || payload.old;
-        if (!row || !row.course_id) return;
-        _debouncedRefetch('observations', 'observations', row.course_id, _obsRowsToBlob);
-      })
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'scores',
-        filter: 'teacher_id=eq.' + _teacherId
-      }, function(payload) {
-        var row = payload.new || payload.old;
-        if (!row || !row.course_id) return;
-        _debouncedRefetch('scores', 'scores', row.course_id, _scoreRowsToBlob);
-      })
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'assessments',
-        filter: 'teacher_id=eq.' + _teacherId
-      }, function(payload) {
-        var row = payload.new || payload.old;
-        if (!row || !row.course_id) return;
-        _debouncedRefetch('assessments', 'assessments', row.course_id, _assessmentRowsToBlob);
-      })
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'students',
-        filter: 'teacher_id=eq.' + _teacherId
-      }, function(payload) {
-        var row = payload.new || payload.old;
-        if (!row || !row.course_id) return;
-        _debouncedRefetch('students', 'students', row.course_id, function(rows) {
-          return _studentRowsToBlob(rows).map(migrateStudent);
-        });
-      });
+    _realtimeChannel = sb
+      .channel('course-data-sync')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'observations',
+          filter: 'teacher_id=eq.' + _teacherId,
+        },
+        function (payload) {
+          var row = payload.new || payload.old;
+          if (!row || !row.course_id) return;
+          _debouncedRefetch('observations', 'observations', row.course_id, _obsRowsToBlob);
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'scores',
+          filter: 'teacher_id=eq.' + _teacherId,
+        },
+        function (payload) {
+          var row = payload.new || payload.old;
+          if (!row || !row.course_id) return;
+          _debouncedRefetch('scores', 'scores', row.course_id, _scoreRowsToBlob);
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'assessments',
+          filter: 'teacher_id=eq.' + _teacherId,
+        },
+        function (payload) {
+          var row = payload.new || payload.old;
+          if (!row || !row.course_id) return;
+          _debouncedRefetch('assessments', 'assessments', row.course_id, _assessmentRowsToBlob);
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'students',
+          filter: 'teacher_id=eq.' + _teacherId,
+        },
+        function (payload) {
+          var row = payload.new || payload.old;
+          if (!row || !row.course_id) return;
+          _debouncedRefetch('students', 'students', row.course_id, function (rows) {
+            return _studentRowsToBlob(rows).map(migrateStudent);
+          });
+        },
+      );
 
     // Medium-frequency tables: on any change, re-fetch full table for course
     var _medTables = Object.values(_MEDIUM_FREQ_TABLES);
-    _medTables.forEach(function(tblName) {
-      _realtimeChannel = _realtimeChannel.on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: tblName,
-        filter: 'teacher_id=eq.' + _teacherId
-      }, function(payload) {
-        var row = payload.new || payload.old;
-        if (!row || !row.course_id) return;
-        var cid = row.course_id;
-        // Find the cache field for this table
-        var cacheField = null;
-        for (var f in _MEDIUM_FREQ_TABLES) {
-          if (_MEDIUM_FREQ_TABLES[f] === tblName) { cacheField = f; break; }
-        }
-        if (!cacheField) return;
-        // Re-fetch entire table for this course (medium-freq = small data, simple approach)
-        var sb2 = getSupabase();
-        if (!sb2) return;
-        _selectCourseTable(sb2, tblName, _teacherId, cid).then(function(res) {
-          if (res.error || !res.data) return;
-          var conv = _BULK_LOAD_CONVERTERS[tblName];
-          if (!conv) return;
-          var newBlob = conv(res.data);
-          if (!_hasDataChanged(newBlob, _cache[cacheField][cid])) return;
-          _cache[cacheField][cid] = newBlob;
-          _invalidateAndRerender();
-        });
-      });
+    _medTables.forEach(function (tblName) {
+      _realtimeChannel = _realtimeChannel.on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: tblName,
+          filter: 'teacher_id=eq.' + _teacherId,
+        },
+        function (payload) {
+          var row = payload.new || payload.old;
+          if (!row || !row.course_id) return;
+          var cid = row.course_id;
+          // Find the cache field for this table
+          var cacheField = null;
+          for (var f in _MEDIUM_FREQ_TABLES) {
+            if (_MEDIUM_FREQ_TABLES[f] === tblName) {
+              cacheField = f;
+              break;
+            }
+          }
+          if (!cacheField) return;
+          // Re-fetch entire table for this course (medium-freq = small data, simple approach)
+          var sb2 = getSupabase();
+          if (!sb2) return;
+          _selectCourseTable(sb2, tblName, _teacherId, cid).then(function (res) {
+            if (res.error || !res.data) return;
+            var conv = _BULK_LOAD_CONVERTERS[tblName];
+            if (!conv) return;
+            var newBlob = conv(res.data);
+            if (!_hasDataChanged(newBlob, _cache[cacheField][cid])) return;
+            _cache[cacheField][cid] = newBlob;
+            _invalidateAndRerender();
+          });
+        },
+      );
     });
 
     // Config tables: on any change, update cache from JSONB data column
-    Object.keys(_CONFIG_TABLES).forEach(function(cfgField) {
+    Object.keys(_CONFIG_TABLES).forEach(function (cfgField) {
       var cfgTblName = _CONFIG_TABLES[cfgField];
-      _realtimeChannel = _realtimeChannel.on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: cfgTblName,
-        filter: 'teacher_id=eq.' + _teacherId
-      }, function(payload) {
-        var row = payload.new || payload.old;
-        if (!row || !row.course_id) return;
-        var cid = row.course_id;
-        if (payload.eventType === 'DELETE') {
-          _cache[cfgField][cid] = _defaultForField(cfgField);
-        } else {
-          var newData = payload.new.data;
-          if (!_hasDataChanged(newData, _cache[cfgField][cid])) return;
-          _cache[cfgField][cid] = newData;
-        }
-        _invalidateAndRerender();
-      });
+      _realtimeChannel = _realtimeChannel.on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: cfgTblName,
+          filter: 'teacher_id=eq.' + _teacherId,
+        },
+        function (payload) {
+          var row = payload.new || payload.old;
+          if (!row || !row.course_id) return;
+          var cid = row.course_id;
+          if (payload.eventType === 'DELETE') {
+            _cache[cfgField][cid] = _defaultForField(cfgField);
+          } else {
+            var newData = payload.new.data;
+            if (!_hasDataChanged(newData, _cache[cfgField][cid])) return;
+            _cache[cfgField][cid] = newData;
+          }
+          _invalidateAndRerender();
+        },
+      );
     });
 
     _realtimeChannel.subscribe();
@@ -978,13 +1135,21 @@ function _invalidateAndRerender() {
   _allTagsCache = {};
   _tagToSectionCache = {};
   // Re-render current page (desktop)
-  var currentPage = (typeof Router !== 'undefined' && Router.getCurrentPage) ? Router.getCurrentPage() : null;
+  var currentPage = typeof Router !== 'undefined' && Router.getCurrentPage ? Router.getCurrentPage() : null;
   if (currentPage && currentPage.render) {
-    try { currentPage.render(); } catch (e) { /* page may not be ready */ }
+    try {
+      currentPage.render();
+    } catch (e) {
+      /* page may not be ready */
+    }
   }
   // Re-render current tab (mobile)
   if (window.__MOBILE && typeof _mobileRerender === 'function') {
-    try { _mobileRerender(); } catch (e) { /* mobile may not be ready */ }
+    try {
+      _mobileRerender();
+    } catch (e) {
+      /* mobile may not be ready */
+    }
   }
 }
 
@@ -997,7 +1162,7 @@ var _lastVisibilityRefresh = 0;
 var _VISIBILITY_DEBOUNCE = 3000; // Don't re-fetch more than once per 3 seconds
 
 function _initVisibilityRefresh() {
-  document.addEventListener('visibilitychange', function() {
+  document.addEventListener('visibilitychange', function () {
     if (document.visibilityState !== 'visible') return;
     var now = Date.now();
     if (now - _lastVisibilityRefresh < _VISIBILITY_DEBOUNCE) return;
@@ -1014,7 +1179,11 @@ async function _refreshFromSupabase() {
   return;
   // eslint-disable-next-line no-unreachable
   var cid = null;
-  try { cid = getActiveCourse(); } catch (e) { return; }
+  try {
+    cid = getActiveCourse();
+  } catch (e) {
+    return;
+  }
   if (!cid) return;
 
   var sb = getSupabase();
@@ -1031,7 +1200,9 @@ async function _refreshFromSupabase() {
       } else {
         return; // No valid session — can't refresh
       }
-    } catch (e) { return; }
+    } catch (e) {
+      return;
+    }
   }
 
   try {
@@ -1044,34 +1215,67 @@ async function _refreshFromSupabase() {
     function _rq(tbl, tsCol) {
       return _selectCourseTable(sb, tbl, _teacherId, cid, since ? { gtColumn: tsCol, gtValue: since } : null);
     }
-    var [scoreResult, obsResult, assessResult, studResult,
-         goalsRefRes, reflRefRes, overRefRes, statusRefRes, notesRefRes, flagsRefRes, trRefRes,
-         cfgLmRefRes, cfgCourseRefRes, cfgModRefRes, cfgRubRefRes, cfgTagRefRes, cfgRepRefRes] = await Promise.all([
-      _rq('scores', 'updated_at'), _rq('observations', 'modified_at'),
-      _rq('assessments', 'updated_at'), _rq('students', 'updated_at'),
-      _rq('goals', 'updated_at'), _rq('reflections', 'updated_at'),
-      _rq('overrides', 'updated_at'), _rq('statuses', 'updated_at'),
-      _rq('student_notes', 'updated_at'), _rq('student_flags', 'updated_at'),
+    var [
+      scoreResult,
+      obsResult,
+      assessResult,
+      studResult,
+      goalsRefRes,
+      reflRefRes,
+      overRefRes,
+      statusRefRes,
+      notesRefRes,
+      flagsRefRes,
+      trRefRes,
+      cfgLmRefRes,
+      cfgCourseRefRes,
+      cfgModRefRes,
+      cfgRubRefRes,
+      cfgTagRefRes,
+      cfgRepRefRes,
+    ] = await Promise.all([
+      _rq('scores', 'updated_at'),
+      _rq('observations', 'modified_at'),
+      _rq('assessments', 'updated_at'),
+      _rq('students', 'updated_at'),
+      _rq('goals', 'updated_at'),
+      _rq('reflections', 'updated_at'),
+      _rq('overrides', 'updated_at'),
+      _rq('statuses', 'updated_at'),
+      _rq('student_notes', 'updated_at'),
+      _rq('student_flags', 'updated_at'),
       _rq('term_ratings', 'updated_at'),
-      _rq('config_learning_maps', 'updated_at'), _rq('config_course', 'updated_at'),
-      _rq('config_modules', 'updated_at'), _rq('config_rubrics', 'updated_at'),
-      _rq('config_custom_tags', 'updated_at'), _rq('config_report', 'updated_at')
+      _rq('config_learning_maps', 'updated_at'),
+      _rq('config_course', 'updated_at'),
+      _rq('config_modules', 'updated_at'),
+      _rq('config_rubrics', 'updated_at'),
+      _rq('config_custom_tags', 'updated_at'),
+      _rq('config_report', 'updated_at'),
     ]);
 
     if (!scoreResult.error && scoreResult.data && scoreResult.data.length > 0) {
       var blob = _cache.scores[cid] || {};
-      scoreResult.data.forEach(function(r) {
+      scoreResult.data.forEach(function (r) {
         if (!blob[r.student_id]) blob[r.student_id] = [];
         var arr = blob[r.student_id];
-        var idx = arr.findIndex(function(e) { return e.assessmentId === r.assessment_id && e.tagId === r.tag_id; });
+        var idx = arr.findIndex(function (e) {
+          return e.assessmentId === r.assessment_id && e.tagId === r.tag_id;
+        });
         var entry = {
           id: r.student_id + ':' + r.assessment_id + ':' + r.tag_id,
-          assessmentId: r.assessment_id, tagId: r.tag_id,
-          score: r.score, date: r.date,
-          type: r.type || 'summative', note: r.note || '',
-          created: r.created_at || new Date().toISOString()
+          assessmentId: r.assessment_id,
+          tagId: r.tag_id,
+          score: r.score,
+          date: r.date,
+          type: r.type || 'summative',
+          note: r.note || '',
+          created: r.created_at || new Date().toISOString(),
         };
-        if (idx !== -1) { arr[idx] = entry; } else { arr.push(entry); }
+        if (idx !== -1) {
+          arr[idx] = entry;
+        } else {
+          arr.push(entry);
+        }
       });
       _cache.scores[cid] = blob;
       changed = true;
@@ -1080,16 +1284,22 @@ async function _refreshFromSupabase() {
 
     if (!obsResult.error && obsResult.data && obsResult.data.length > 0) {
       var obsBlob = _cache.observations[cid] || {};
-      obsResult.data.forEach(function(r) {
+      obsResult.data.forEach(function (r) {
         if (!obsBlob[r.student_id]) obsBlob[r.student_id] = [];
         var arr = obsBlob[r.student_id];
-        var idx = arr.findIndex(function(o) { return o.id === r.id; });
+        var idx = arr.findIndex(function (o) {
+          return o.id === r.id;
+        });
         var entry = { id: r.id, text: r.text || '', dims: r.dims || [], created: r.created_at, date: r.date };
         if (r.sentiment) entry.sentiment = r.sentiment;
         if (r.context) entry.context = r.context;
         if (r.assignment_context) entry.assignmentContext = r.assignment_context;
         if (r.modified_at) entry.modified = r.modified_at;
-        if (idx !== -1) { arr[idx] = entry; } else { arr.push(entry); }
+        if (idx !== -1) {
+          arr[idx] = entry;
+        } else {
+          arr.push(entry);
+        }
       });
       _cache.observations[cid] = obsBlob;
       changed = true;
@@ -1097,10 +1307,16 @@ async function _refreshFromSupabase() {
 
     if (!assessResult.error && assessResult.data && assessResult.data.length > 0) {
       var currentAssess = _cache.assessments[cid] || [];
-      assessResult.data.forEach(function(r) {
-        var idx = currentAssess.findIndex(function(a) { return a.id === r.id; });
+      assessResult.data.forEach(function (r) {
+        var idx = currentAssess.findIndex(function (a) {
+          return a.id === r.id;
+        });
         var entry = _assessmentRowsToBlob([r])[0];
-        if (idx !== -1) { currentAssess[idx] = entry; } else { currentAssess.push(entry); }
+        if (idx !== -1) {
+          currentAssess[idx] = entry;
+        } else {
+          currentAssess.push(entry);
+        }
       });
       _cache.assessments[cid] = currentAssess;
       changed = true;
@@ -1109,17 +1325,31 @@ async function _refreshFromSupabase() {
 
     if (!studResult.error && studResult.data && studResult.data.length > 0) {
       var currentStudents = _cache.students[cid] || [];
-      studResult.data.forEach(function(r) {
-        var idx = currentStudents.findIndex(function(s) { return s.id === r.id; });
+      studResult.data.forEach(function (r) {
+        var idx = currentStudents.findIndex(function (s) {
+          return s.id === r.id;
+        });
         var entry = _studentRowsToBlob([r])[0];
-        if (idx !== -1) { currentStudents[idx] = entry; } else { currentStudents.push(migrateStudent(entry)); }
+        if (idx !== -1) {
+          currentStudents[idx] = entry;
+        } else {
+          currentStudents.push(migrateStudent(entry));
+        }
       });
       _cache.students[cid] = currentStudents;
       changed = true;
     }
 
     // Refresh medium-frequency normalized tables (full replace on visibility change)
-    var _medRefResults = { goals: goalsRefRes, reflections: reflRefRes, overrides: overRefRes, statuses: statusRefRes, notes: notesRefRes, flags: flagsRefRes, termRatings: trRefRes };
+    var _medRefResults = {
+      goals: goalsRefRes,
+      reflections: reflRefRes,
+      overrides: overRefRes,
+      statuses: statusRefRes,
+      notes: notesRefRes,
+      flags: flagsRefRes,
+      termRatings: trRefRes,
+    };
     for (var _mrf in _MEDIUM_FREQ_TABLES) {
       var _mrTbl = _MEDIUM_FREQ_TABLES[_mrf];
       var _mrRes = _medRefResults[_mrf];
@@ -1134,7 +1364,14 @@ async function _refreshFromSupabase() {
     }
 
     // Refresh config tables
-    var _cfgRefResults = { learningMaps: cfgLmRefRes, courseConfigs: cfgCourseRefRes, modules: cfgModRefRes, rubrics: cfgRubRefRes, customTags: cfgTagRefRes, reportConfig: cfgRepRefRes };
+    var _cfgRefResults = {
+      learningMaps: cfgLmRefRes,
+      courseConfigs: cfgCourseRefRes,
+      modules: cfgModRefRes,
+      rubrics: cfgRubRefRes,
+      customTags: cfgTagRefRes,
+      reportConfig: cfgRepRefRes,
+    };
     for (var _crf in _CONFIG_TABLES) {
       var _crRes = _cfgRefResults[_crf];
       if (!_crRes.error && _crRes.data && _crRes.data.length > 0) {
@@ -1150,15 +1387,26 @@ async function _refreshFromSupabase() {
 
     if (changed) {
       if (profChanged && typeof clearProfCache === 'function') clearProfCache();
-      if (tagsChanged) { _allTagsCache = {}; _tagToSectionCache = {}; }
+      if (tagsChanged) {
+        _allTagsCache = {};
+        _tagToSectionCache = {};
+      }
       // Re-render current page (desktop)
-      var currentPage = (typeof Router !== 'undefined' && Router.getCurrentPage) ? Router.getCurrentPage() : null;
+      var currentPage = typeof Router !== 'undefined' && Router.getCurrentPage ? Router.getCurrentPage() : null;
       if (currentPage && currentPage.render) {
-        try { currentPage.render(); } catch (e) { /* page may not be ready */ }
+        try {
+          currentPage.render();
+        } catch (e) {
+          /* page may not be ready */
+        }
       }
       // Re-render current tab (mobile)
       if (window.__MOBILE && typeof _mobileRerender === 'function') {
-        try { _mobileRerender(); } catch (e) { /* mobile may not be ready */ }
+        try {
+          _mobileRerender();
+        } catch (e) {
+          /* mobile may not be ready */
+        }
       }
     }
     _lastSyncedAt = new Date();
@@ -1177,7 +1425,11 @@ async function initData(cid) {
   const p = _doInitData(cid);
   p._cid = cid;
   _initPromise = p;
-  try { await p; } finally { if (_initPromise === p) _initPromise = null; }
+  try {
+    await p;
+  } finally {
+    if (_initPromise === p) _initPromise = null;
+  }
 }
 
 /* Fetch all course rows for a table, paginating past PostgREST's 1000-row default cap. */
@@ -1191,8 +1443,7 @@ async function _selectCourseTable(sb, tbl, teacherId, cid, opts) {
   var allRows = [];
   var offset = 0;
   while (true) {
-    var q = sb.from(tbl).select(columns)
-      .eq('teacher_id', teacherId).eq('course_id', cid);
+    var q = sb.from(tbl).select(columns).eq('teacher_id', teacherId).eq('course_id', cid);
     if (gtColumn && gtValue && typeof q.gt === 'function') q = q.gt(gtColumn, gtValue);
     var supportsRange = typeof q.range === 'function';
     if (supportsRange) q = q.range(offset, offset + pageSize - 1);
@@ -1237,23 +1488,49 @@ async function _doInitData(cid) {
       // Load all normalized tables in parallel
       // Use paged fetches for every course table so fresh logins do not
       // truncate datasets at PostgREST's default 1000-row cap.
-      const _q = async function(tbl) {
+      const _q = async function (tbl) {
         try {
           return { data: await _pagedSelect(sb, tbl, _teacherId, cid), error: null };
         } catch (error) {
           return { data: null, error: error };
         }
       };
-      const [scoreRows, obsRows, assessRes, studentRes,
-             goalsRes, reflRes, overRes, statusRes, notesRes, flagsRes, trRes,
-             cfgLmRes, cfgCourseRes, cfgModRes, cfgRubRes, cfgTagRes, cfgRepRes] = await Promise.all([
+      const [
+        scoreRows,
+        obsRows,
+        assessRes,
+        studentRes,
+        goalsRes,
+        reflRes,
+        overRes,
+        statusRes,
+        notesRes,
+        flagsRes,
+        trRes,
+        cfgLmRes,
+        cfgCourseRes,
+        cfgModRes,
+        cfgRubRes,
+        cfgTagRes,
+        cfgRepRes,
+      ] = await Promise.all([
         _pagedSelect(sb, 'scores', _teacherId, cid),
         _pagedSelect(sb, 'observations', _teacherId, cid),
-        _q('assessments'), _q('students'),
-        _q('goals'), _q('reflections'), _q('overrides'), _q('statuses'),
-        _q('student_notes'), _q('student_flags'), _q('term_ratings'),
-        _q('config_learning_maps'), _q('config_course'), _q('config_modules'),
-        _q('config_rubrics'), _q('config_custom_tags'), _q('config_report')
+        _q('assessments'),
+        _q('students'),
+        _q('goals'),
+        _q('reflections'),
+        _q('overrides'),
+        _q('statuses'),
+        _q('student_notes'),
+        _q('student_flags'),
+        _q('term_ratings'),
+        _q('config_learning_maps'),
+        _q('config_course'),
+        _q('config_modules'),
+        _q('config_rubrics'),
+        _q('config_custom_tags'),
+        _q('config_report'),
       ]);
 
       _cache.scores[cid] = _scoreRowsToBlob(scoreRows);
@@ -1274,7 +1551,15 @@ async function _doInitData(cid) {
       _healFromLocalBackup(cid, 'observations', 'quick-obs');
 
       // Medium-frequency tables
-      var _medResults = { goals: goalsRes, reflections: reflRes, overrides: overRes, statuses: statusRes, notes: notesRes, flags: flagsRes, termRatings: trRes };
+      var _medResults = {
+        goals: goalsRes,
+        reflections: reflRes,
+        overrides: overRes,
+        statuses: statusRes,
+        notes: notesRes,
+        flags: flagsRes,
+        termRatings: trRes,
+      };
       for (var _mf in _MEDIUM_FREQ_TABLES) {
         var _tbl = _MEDIUM_FREQ_TABLES[_mf];
         var _res = _medResults[_mf];
@@ -1287,7 +1572,14 @@ async function _doInitData(cid) {
       }
 
       // Config tables: single JSONB blob per course
-      var _cfgResults = { learningMaps: cfgLmRes, courseConfigs: cfgCourseRes, modules: cfgModRes, rubrics: cfgRubRes, customTags: cfgTagRes, reportConfig: cfgRepRes };
+      var _cfgResults = {
+        learningMaps: cfgLmRes,
+        courseConfigs: cfgCourseRes,
+        modules: cfgModRes,
+        rubrics: cfgRubRes,
+        customTags: cfgTagRes,
+        reportConfig: cfgRepRes,
+      };
       for (var _cf in _CONFIG_TABLES) {
         var _cfTbl = _CONFIG_TABLES[_cf];
         var _cfRes = _cfgResults[_cf];
@@ -1295,7 +1587,7 @@ async function _doInitData(cid) {
           console.warn('Failed to load ' + _cfTbl + ' for', cid, _cfRes.error);
           _cache[_cf][cid] = _defaultForField(_cf);
         } else {
-          _cache[_cf][cid] = (_cfRes.data && _cfRes.data.length > 0) ? _cfRes.data[0].data : _defaultForField(_cf);
+          _cache[_cf][cid] = _cfRes.data && _cfRes.data.length > 0 ? _cfRes.data[0].data : _defaultForField(_cf);
         }
       }
 
@@ -1307,12 +1599,28 @@ async function _doInitData(cid) {
 
       // Migration: if Supabase returned all-empty but localStorage has data,
       // this is a post-normalization first load. Populate Supabase from localStorage.
-      var supabaseEmpty = scoreRows.length === 0 && obsRows.length === 0 &&
-        [assessRes, studentRes,
-        goalsRes, reflRes, overRes, statusRes, notesRes, flagsRes, trRes,
-        cfgLmRes, cfgCourseRes, cfgModRes, cfgRubRes, cfgTagRes, cfgRepRes].every(function(r) {
-        return !r.data || r.data.length === 0;
-      });
+      var supabaseEmpty =
+        scoreRows.length === 0 &&
+        obsRows.length === 0 &&
+        [
+          assessRes,
+          studentRes,
+          goalsRes,
+          reflRes,
+          overRes,
+          statusRes,
+          notesRes,
+          flagsRes,
+          trRes,
+          cfgLmRes,
+          cfgCourseRes,
+          cfgModRes,
+          cfgRubRes,
+          cfgTagRes,
+          cfgRepRes,
+        ].every(function (r) {
+          return !r.data || r.data.length === 0;
+        });
       if (supabaseEmpty && _safeParseLS('gb-students-' + cid, []).length > 0) {
         console.info('Migration: Supabase tables empty, uploading localStorage data for', cid);
         _loadCourseFromLS(cid);
@@ -1341,10 +1649,15 @@ function _healFromLocalBackup(cid, field, lsKey) {
   var supaCount = _countFieldItems(field, supaData);
   var lsCount = _countFieldItems(field, lsRaw);
 
-  var healThreshold = (field === 'scores' || field === 'observations') ? 0.8 : 0.5;
+  var healThreshold = field === 'scores' || field === 'observations' ? 0.8 : 0.5;
   if (lsCount > 0 && supaCount < lsCount * healThreshold) {
-    console.warn('Healing ' + field + ' from localStorage: Supabase had', supaCount,
-      'items vs', lsCount, 'locally — restoring and re-syncing');
+    console.warn(
+      'Healing ' + field + ' from localStorage: Supabase had',
+      supaCount,
+      'items vs',
+      lsCount,
+      'locally — restoring and re-syncing',
+    );
     // Restore cache from localStorage
     if (field === 'students') {
       _cache[field][cid] = (Array.isArray(lsRaw) ? lsRaw : []).map(migrateStudent);
@@ -1411,7 +1724,7 @@ function _countFieldItems(field, data) {
   if (!data) return 0;
   if (Array.isArray(data)) return data.length;
   if (field === 'scores' || field === 'observations') {
-    return Object.keys(data).reduce(function(total, sid) {
+    return Object.keys(data).reduce(function (total, sid) {
       return total + ((data[sid] || []).length || 0);
     }, 0);
   }
@@ -1423,8 +1736,17 @@ function _shouldSkipEntryShrink(field, existing, incoming, source) {
   var existingCount = _countFieldItems(field, existing);
   var incomingCount = _countFieldItems(field, incoming);
   if (existingCount > 0 && incomingCount < existingCount * 0.8) {
-    console.warn('[GUARD]', source, 'for', field, 'returned', incomingCount,
-      'entries vs', existingCount, 'in cache — skipping (likely partial snapshot)');
+    console.warn(
+      '[GUARD]',
+      source,
+      'for',
+      field,
+      'returned',
+      incomingCount,
+      'entries vs',
+      existingCount,
+      'in cache — skipping (likely partial snapshot)',
+    );
     return true;
   }
   return false;
@@ -1435,7 +1757,10 @@ function _safeParseLS(key, fallback) {
     const raw = localStorage.getItem(key);
     if (raw === null) return fallback;
     return JSON.parse(raw);
-  } catch (e) { console.warn('LS read fallback:', e); return fallback; }
+  } catch (e) {
+    console.warn('LS read fallback:', e);
+    return fallback;
+  }
 }
 
 function _safeLSSet(key, value) {
@@ -1456,7 +1781,9 @@ function _loadCoursesFromLS() {
   try {
     const stored = JSON.parse(localStorage.getItem('gb-courses'));
     if (stored && Object.keys(stored).length > 0) return stored;
-  } catch (e) { console.warn('Courses parse error:', e); }
+  } catch (e) {
+    console.warn('Courses parse error:', e);
+  }
   return structuredClone(DEFAULT_COURSES);
 }
 
@@ -1471,7 +1798,7 @@ const _BULK_SYNC_CONVERTERS = {
   statuses: _statusesBlobToRows,
   student_notes: _notesBlobToRows,
   student_flags: _flagsBlobToRows,
-  term_ratings: _termRatingsBlobToRows
+  term_ratings: _termRatingsBlobToRows,
 };
 
 /* Rows→blob converters for loading from normalized tables */
@@ -1482,7 +1809,7 @@ const _BULK_LOAD_CONVERTERS = {
   statuses: _statusesRowsToBlob,
   student_notes: _notesRowsToBlob,
   student_flags: _flagsRowsToBlob,
-  term_ratings: _termRatingsRowsToBlob
+  term_ratings: _termRatingsRowsToBlob,
 };
 
 /* Cache field → table name for medium-frequency normalized tables */
@@ -1493,7 +1820,7 @@ const _MEDIUM_FREQ_TABLES = {
   statuses: 'statuses',
   notes: 'student_notes',
   flags: 'student_flags',
-  termRatings: 'term_ratings'
+  termRatings: 'term_ratings',
 };
 
 /* Config tables: single JSONB blob per course, teacher_id in PK */
@@ -1503,7 +1830,7 @@ const _CONFIG_TABLES = {
   modules: 'config_modules',
   rubrics: 'config_rubrics',
   customTags: 'config_custom_tags',
-  reportConfig: 'config_report'
+  reportConfig: 'config_report',
 };
 
 /* Fields stored in their own normalized tables */
@@ -1524,7 +1851,7 @@ const _NORMALIZED_TABLES = {
   modules: 'config_modules',
   rubrics: 'config_rubrics',
   customTags: 'config_custom_tags',
-  reportConfig: 'config_report'
+  reportConfig: 'config_report',
 };
 
 /* Helper: write to cache + sync */
@@ -1538,7 +1865,7 @@ function _saveCourseField(field, cid, value) {
   if (_useSupabase) {
     _setEchoGuard(field, cid);
     // Deep-clone so in-flight sync is immune to later in-place mutations
-    var snapshot = (typeof structuredClone === 'function') ? structuredClone(value) : JSON.parse(JSON.stringify(value));
+    var snapshot = typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value));
     _syncToSupabase(_NORMALIZED_TABLES[field], { cid }, snapshot);
   }
   _broadcastChange(cid, field);
@@ -1548,7 +1875,7 @@ function _saveCourseField(field, cid, value) {
 function _scoreBlobToRows(cid, scoresObj) {
   const rows = [];
   for (const sid in scoresObj) {
-    (scoresObj[sid] || []).forEach(function(e) {
+    (scoresObj[sid] || []).forEach(function (e) {
       rows.push({
         teacher_id: _teacherId,
         course_id: cid,
@@ -1559,7 +1886,7 @@ function _scoreBlobToRows(cid, scoresObj) {
         date: e.date || null,
         type: e.type || 'summative',
         note: e.note || '',
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       });
     });
   }
@@ -1569,7 +1896,7 @@ function _scoreBlobToRows(cid, scoresObj) {
 /* Convert flat score rows → blob format { sid: [...entries] } */
 function _scoreRowsToBlob(rows) {
   const blob = {};
-  (rows || []).forEach(function(r) {
+  (rows || []).forEach(function (r) {
     if (!blob[r.student_id]) blob[r.student_id] = [];
     blob[r.student_id].push({
       id: r.student_id + ':' + r.assessment_id + ':' + r.tag_id,
@@ -1579,7 +1906,7 @@ function _scoreRowsToBlob(rows) {
       date: r.date,
       type: r.type || 'summative',
       note: r.note || '',
-      created: r.created_at || new Date().toISOString()
+      created: r.created_at || new Date().toISOString(),
     });
   });
   return blob;
@@ -1589,7 +1916,7 @@ function _scoreRowsToBlob(rows) {
 function _obsBlobToRows(cid, obsObj) {
   const rows = [];
   for (const sid in obsObj) {
-    (obsObj[sid] || []).forEach(function(e) {
+    (obsObj[sid] || []).forEach(function (e) {
       rows.push({
         teacher_id: _teacherId,
         course_id: cid,
@@ -1602,7 +1929,7 @@ function _obsBlobToRows(cid, obsObj) {
         assignment_context: e.assignmentContext || null,
         date: e.date || null,
         created_at: e.created || new Date().toISOString(),
-        modified_at: e.modified || null
+        modified_at: e.modified || null,
       });
     });
   }
@@ -1612,14 +1939,14 @@ function _obsBlobToRows(cid, obsObj) {
 /* Convert flat observation rows → blob format { sid: [...entries] } */
 function _obsRowsToBlob(rows) {
   const blob = {};
-  (rows || []).forEach(function(r) {
+  (rows || []).forEach(function (r) {
     if (!blob[r.student_id]) blob[r.student_id] = [];
     var entry = {
       id: r.id,
       text: r.text || '',
       dims: r.dims || [],
       created: r.created_at || new Date().toISOString(),
-      date: r.date
+      date: r.date,
     };
     if (r.sentiment) entry.sentiment = r.sentiment;
     if (r.context) entry.context = r.context;
@@ -1632,7 +1959,7 @@ function _obsRowsToBlob(rows) {
 
 /* Convert assessments array → flat array of table rows */
 function _assessmentsBlobToRows(cid, arr) {
-  return (arr || []).map(function(a) {
+  return (arr || []).map(function (a) {
     return {
       teacher_id: _teacherId,
       course_id: cid,
@@ -1654,14 +1981,14 @@ function _assessmentsBlobToRows(cid, arr) {
       pairs: a.pairs || [],
       groups: a.groups || [],
       excluded_students: a.excludedStudents || [],
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     };
   });
 }
 
 /* Convert flat assessment rows → app array format */
 function _assessmentRowsToBlob(rows) {
-  return (rows || []).map(function(r) {
+  return (rows || []).map(function (r) {
     var a = {
       id: r.id,
       title: r.title || '',
@@ -1669,7 +1996,7 @@ function _assessmentRowsToBlob(rows) {
       type: r.type || 'summative',
       tagIds: r.tag_ids || [],
       weight: r.weight !== undefined ? r.weight : 1,
-      collaboration: r.collaboration || 'individual'
+      collaboration: r.collaboration || 'individual',
     };
     if (r.evidence_type) a.evidenceType = r.evidence_type;
     if (r.notes) a.notes = r.notes;
@@ -1695,7 +2022,7 @@ function _assessmentRowsToBlob(rows) {
    getCourseConfig(cid) → get_course_policy(uuid) when a course becomes active. */
 function _canonicalCoursesToBlob(rows) {
   var out = {};
-  (rows || []).forEach(function(r) {
+  (rows || []).forEach(function (r) {
     if (!r || !r.course_offering_id) return;
     out[r.course_offering_id] = {
       id: r.course_offering_id,
@@ -1705,7 +2032,7 @@ function _canonicalCoursesToBlob(rows) {
       subjectCode: r.subject_code || '',
       schoolYear: r.school_year || '',
       termCode: r.term_code || '',
-      archived: r.status === 'archived'
+      archived: r.status === 'archived',
     };
   });
   return out;
@@ -1713,7 +2040,7 @@ function _canonicalCoursesToBlob(rows) {
 
 /* Convert students array → flat array of table rows */
 function _studentsBlobToRows(cid, arr) {
-  return (arr || []).map(function(s) {
+  return (arr || []).map(function (s) {
     return {
       teacher_id: _teacherId,
       course_id: cid,
@@ -1729,14 +2056,14 @@ function _studentsBlobToRows(cid, arr) {
       enrolled_date: s.enrolledDate || '',
       attendance: s.attendance || [],
       sort_name: s.sortName || '',
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     };
   });
 }
 
 /* Convert flat student rows → app array format */
 function _studentRowsToBlob(rows) {
-  return (rows || []).map(function(r) {
+  return (rows || []).map(function (r) {
     return {
       id: r.id,
       firstName: r.first_name || '',
@@ -1749,7 +2076,7 @@ function _studentRowsToBlob(rows) {
       designations: r.designations || [],
       enrolledDate: r.enrolled_date || '',
       attendance: r.attendance || [],
-      sortName: r.sort_name || ''
+      sortName: r.sort_name || '',
     };
   });
 }
@@ -1761,14 +2088,21 @@ function _goalsBlobToRows(cid, obj) {
   var rows = [];
   for (var sid in obj) {
     for (var tagId in obj[sid]) {
-      rows.push({ teacher_id: _teacherId, course_id: cid, student_id: sid, tag_id: tagId, text: obj[sid][tagId] || '', updated_at: new Date().toISOString() });
+      rows.push({
+        teacher_id: _teacherId,
+        course_id: cid,
+        student_id: sid,
+        tag_id: tagId,
+        text: obj[sid][tagId] || '',
+        updated_at: new Date().toISOString(),
+      });
     }
   }
   return rows;
 }
 function _goalsRowsToBlob(rows) {
   var blob = {};
-  (rows || []).forEach(function(r) {
+  (rows || []).forEach(function (r) {
     if (!blob[r.student_id]) blob[r.student_id] = {};
     blob[r.student_id][r.tag_id] = r.text || '';
   });
@@ -1781,14 +2115,23 @@ function _reflectionsBlobToRows(cid, obj) {
   for (var sid in obj) {
     for (var tagId in obj[sid]) {
       var v = obj[sid][tagId] || {};
-      rows.push({ teacher_id: _teacherId, course_id: cid, student_id: sid, tag_id: tagId, confidence: v.confidence || 0, text: v.text || '', date: v.date || '', updated_at: new Date().toISOString() });
+      rows.push({
+        teacher_id: _teacherId,
+        course_id: cid,
+        student_id: sid,
+        tag_id: tagId,
+        confidence: v.confidence || 0,
+        text: v.text || '',
+        date: v.date || '',
+        updated_at: new Date().toISOString(),
+      });
     }
   }
   return rows;
 }
 function _reflectionsRowsToBlob(rows) {
   var blob = {};
-  (rows || []).forEach(function(r) {
+  (rows || []).forEach(function (r) {
     if (!blob[r.student_id]) blob[r.student_id] = {};
     blob[r.student_id][r.tag_id] = { confidence: r.confidence || 0, text: r.text || '', date: r.date || '' };
   });
@@ -1801,14 +2144,24 @@ function _overridesBlobToRows(cid, obj) {
   for (var sid in obj) {
     for (var tagId in obj[sid]) {
       var v = obj[sid][tagId] || {};
-      rows.push({ teacher_id: _teacherId, course_id: cid, student_id: sid, tag_id: tagId, level: v.level || 0, reason: v.reason || '', date: v.date || '', calculated: v.calculated || 0, updated_at: new Date().toISOString() });
+      rows.push({
+        teacher_id: _teacherId,
+        course_id: cid,
+        student_id: sid,
+        tag_id: tagId,
+        level: v.level || 0,
+        reason: v.reason || '',
+        date: v.date || '',
+        calculated: v.calculated || 0,
+        updated_at: new Date().toISOString(),
+      });
     }
   }
   return rows;
 }
 function _overridesRowsToBlob(rows) {
   var blob = {};
-  (rows || []).forEach(function(r) {
+  (rows || []).forEach(function (r) {
     if (!blob[r.student_id]) blob[r.student_id] = {};
     var entry = { level: r.level || 0, reason: r.reason || '' };
     if (r.date) entry.date = r.date;
@@ -1824,13 +2177,20 @@ function _statusesBlobToRows(cid, obj) {
   for (var compositeKey in obj) {
     var parts = compositeKey.split(':');
     if (parts.length < 2) continue;
-    rows.push({ teacher_id: _teacherId, course_id: cid, student_id: parts[0], assessment_id: parts.slice(1).join(':'), status: obj[compositeKey] || '', updated_at: new Date().toISOString() });
+    rows.push({
+      teacher_id: _teacherId,
+      course_id: cid,
+      student_id: parts[0],
+      assessment_id: parts.slice(1).join(':'),
+      status: obj[compositeKey] || '',
+      updated_at: new Date().toISOString(),
+    });
   }
   return rows;
 }
 function _statusesRowsToBlob(rows) {
   var blob = {};
-  (rows || []).forEach(function(r) {
+  (rows || []).forEach(function (r) {
     blob[r.student_id + ':' + r.assessment_id] = r.status || '';
   });
   return blob;
@@ -1840,13 +2200,21 @@ function _statusesRowsToBlob(rows) {
 function _notesBlobToRows(cid, obj) {
   var rows = [];
   for (var sid in obj) {
-    rows.push({ teacher_id: _teacherId, course_id: cid, student_id: sid, text: obj[sid] || '', updated_at: new Date().toISOString() });
+    rows.push({
+      teacher_id: _teacherId,
+      course_id: cid,
+      student_id: sid,
+      text: obj[sid] || '',
+      updated_at: new Date().toISOString(),
+    });
   }
   return rows;
 }
 function _notesRowsToBlob(rows) {
   var blob = {};
-  (rows || []).forEach(function(r) { blob[r.student_id] = r.text || ''; });
+  (rows || []).forEach(function (r) {
+    blob[r.student_id] = r.text || '';
+  });
   return blob;
 }
 
@@ -1854,13 +2222,16 @@ function _notesRowsToBlob(rows) {
 function _flagsBlobToRows(cid, obj) {
   var rows = [];
   for (var sid in obj) {
-    if (obj[sid]) rows.push({ teacher_id: _teacherId, course_id: cid, student_id: sid, updated_at: new Date().toISOString() });
+    if (obj[sid])
+      rows.push({ teacher_id: _teacherId, course_id: cid, student_id: sid, updated_at: new Date().toISOString() });
   }
   return rows;
 }
 function _flagsRowsToBlob(rows) {
   var blob = {};
-  (rows || []).forEach(function(r) { blob[r.student_id] = true; });
+  (rows || []).forEach(function (r) {
+    blob[r.student_id] = true;
+  });
   return blob;
 }
 
@@ -1870,14 +2241,24 @@ function _termRatingsBlobToRows(cid, obj) {
   for (var sid in obj) {
     for (var termId in obj[sid]) {
       var v = obj[sid][termId] || {};
-      rows.push({ teacher_id: _teacherId, course_id: cid, student_id: sid, term_id: termId, dims: v.dims || {}, narrative: v.narrative || '', created_at: v.created || new Date().toISOString(), modified_at: v.modified || null, updated_at: new Date().toISOString() });
+      rows.push({
+        teacher_id: _teacherId,
+        course_id: cid,
+        student_id: sid,
+        term_id: termId,
+        dims: v.dims || {},
+        narrative: v.narrative || '',
+        created_at: v.created || new Date().toISOString(),
+        modified_at: v.modified || null,
+        updated_at: new Date().toISOString(),
+      });
     }
   }
   return rows;
 }
 function _termRatingsRowsToBlob(rows) {
   var blob = {};
-  (rows || []).forEach(function(r) {
+  (rows || []).forEach(function (r) {
     if (!blob[r.student_id]) blob[r.student_id] = {};
     var entry = { dims: r.dims || {}, narrative: r.narrative || '', created: r.created_at || new Date().toISOString() };
     if (r.modified_at) entry.modified = r.modified_at;
@@ -1891,7 +2272,9 @@ function upsertScore(cid, sid, aid, tid, scoreVal, date, type, note) {
   // Update cache blob
   const scores = getScores(cid);
   if (!scores[sid]) scores[sid] = [];
-  const existing = scores[sid].find(function(e) { return e.assessmentId === aid && e.tagId === tid; });
+  const existing = scores[sid].find(function (e) {
+    return e.assessmentId === aid && e.tagId === tid;
+  });
   if (existing) {
     if (existing.score === scoreVal) return; // no change
     existing.score = scoreVal;
@@ -1900,10 +2283,13 @@ function upsertScore(cid, sid, aid, tid, scoreVal, date, type, note) {
   } else {
     scores[sid].push({
       id: sid + ':' + aid + ':' + tid,
-      assessmentId: aid, tagId: tid, score: scoreVal,
+      assessmentId: aid,
+      tagId: tid,
+      score: scoreVal,
       date: date || new Date().toISOString().slice(0, 10),
-      type: type || 'summative', note: note || '',
-      created: new Date().toISOString()
+      type: type || 'summative',
+      note: note || '',
+      created: new Date().toISOString(),
     });
   }
   _cache.scores[cid] = scores;
@@ -1932,9 +2318,9 @@ function _persistScoreToCanonical(cid, sid, aid, tid, scoreVal, note) {
       enrollmentId: sid,
       outcomeId: tid,
       score: scoreVal != null ? String(scoreVal) : '',
-      comment: note || ''
-    }
-  }).then(function(res) {
+      comment: note || '',
+    },
+  }).then(function (res) {
     if (res.error) console.warn('save_course_score failed:', res.error);
   });
 }
@@ -1942,69 +2328,109 @@ function _persistScoreToCanonical(cid, sid, aid, tid, scoreVal, note) {
 /* ══════════════════════════════════════════════════════════════════
    Utilities (unchanged)
    ══════════════════════════════════════════════════════════════════ */
-function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-function escJs(s) { return (s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"'); }
+function esc(s) {
+  return (s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+function escJs(s) {
+  return (s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"');
+}
 function initials(st) {
   if (!st) return '??';
   if (typeof st === 'string') {
-    const p = (st||'').trim().split(/\s+/);
-    if (p.length >= 2) return (p[0][0] + p[p.length-1][0]).toUpperCase();
-    return (p[0]||'?').slice(0,2).toUpperCase();
+    const p = (st || '').trim().split(/\s+/);
+    if (p.length >= 2) return (p[0][0] + p[p.length - 1][0]).toUpperCase();
+    return (p[0] || '?').slice(0, 2).toUpperCase();
   }
-  const f = (st.firstName||'').trim(), l = (st.lastName||'').trim();
+  const f = (st.firstName || '').trim(),
+    l = (st.lastName || '').trim();
   if (f && l) return (f[0] + l[0]).toUpperCase();
-  return (f||l||'?').slice(0,2).toUpperCase();
+  return (f || l || '?').slice(0, 2).toUpperCase();
 }
 
 /* ── Student Display Helpers ───────────────────────────────── */
 function pronounsSelect(id, selected, attrs) {
-  return '<select id="'+id+'" class="cm-input cm-pronoun-select" '+(attrs||'')+'>'+
-    '<option value="">—</option>'+
-    PRONOUNS_OPTIONS.map(function(p){ return '<option'+(p===selected?' selected':'')+'>'+esc(p)+'</option>'; }).join('')+
-    '</select>';
+  return (
+    '<select id="' +
+    id +
+    '" class="cm-input cm-pronoun-select" ' +
+    (attrs || '') +
+    '>' +
+    '<option value="">—</option>' +
+    PRONOUNS_OPTIONS.map(function (p) {
+      return '<option' + (p === selected ? ' selected' : '') + '>' + esc(p) + '</option>';
+    }).join('') +
+    '</select>'
+  );
 }
-function fullName(st) { return ((st.firstName||'') + ' ' + (st.lastName||'')).trim(); }
-function displayName(st) { return st.preferred || fullName(st); }
-function displayNameFirst(st) { return st.preferred || st.firstName || st.lastName || ''; }
+function fullName(st) {
+  return ((st.firstName || '') + ' ' + (st.lastName || '')).trim();
+}
+function displayName(st) {
+  return st.preferred || fullName(st);
+}
+function displayNameFirst(st) {
+  return st.preferred || st.firstName || st.lastName || '';
+}
 
 function sortStudents(arr, mode, cid) {
   var c = arr.slice();
   if (mode === 'firstName') {
-    return c.sort(function(a,b){ return (a.firstName||'').localeCompare(b.firstName||'') || (a.lastName||'').localeCompare(b.lastName||''); });
+    return c.sort(function (a, b) {
+      return (a.firstName || '').localeCompare(b.firstName || '') || (a.lastName || '').localeCompare(b.lastName || '');
+    });
   }
   if (mode === 'proficiency' && cid) {
     var profMap = {};
-    c.forEach(function(st) { profMap[st.id] = getOverallProficiency(cid, st.id) || 0; });
-    return c.sort(function(a,b){ return profMap[b.id] - profMap[a.id]; });
+    c.forEach(function (st) {
+      profMap[st.id] = getOverallProficiency(cid, st.id) || 0;
+    });
+    return c.sort(function (a, b) {
+      return profMap[b.id] - profMap[a.id];
+    });
   }
   if (mode === 'missing' && cid) {
     var statuses = getAssignmentStatuses(cid);
     var assessments = getAssessments(cid);
     var missingMap = {};
-    c.forEach(function(st) {
-      missingMap[st.id] = assessments.filter(function(a){ return statuses[st.id + ':' + a.id] === 'NS'; }).length;
+    c.forEach(function (st) {
+      missingMap[st.id] = assessments.filter(function (a) {
+        return statuses[st.id + ':' + a.id] === 'NS';
+      }).length;
     });
-    return c.sort(function(a,b){ return missingMap[b.id] - missingMap[a.id]; });
+    return c.sort(function (a, b) {
+      return missingMap[b.id] - missingMap[a.id];
+    });
   }
   if (mode === 'lastObserved' && cid) {
     var lastObsMap = {};
-    c.forEach(function(st) {
+    c.forEach(function (st) {
       var obs = getStudentQuickObs(cid, st.id);
       lastObsMap[st.id] = obs.length ? obs[0].created : '';
     });
-    return c.sort(function(a,b){ return (lastObsMap[b.id]||'').localeCompare(lastObsMap[a.id]||''); });
+    return c.sort(function (a, b) {
+      return (lastObsMap[b.id] || '').localeCompare(lastObsMap[a.id] || '');
+    });
   }
-  return c.sort(function(a,b){ return (a.lastName||'').localeCompare(b.lastName||'') || (a.firstName||'').localeCompare(b.firstName||''); });
+  return c.sort(function (a, b) {
+    return (a.lastName || '').localeCompare(b.lastName || '') || (a.firstName || '').localeCompare(b.firstName || '');
+  });
 }
 
 function anonymizeStudents(students) {
   var shuffled = students.slice();
   for (var i = shuffled.length - 1; i > 0; i--) {
     var j = Math.floor(Math.random() * (i + 1));
-    var tmp = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = tmp;
+    var tmp = shuffled[i];
+    shuffled[i] = shuffled[j];
+    shuffled[j] = tmp;
   }
-  return shuffled.map(function(st, idx) {
-    return Object.assign({}, st, { _anonLabel: 'Student ' + String(idx+1).padStart(3,'0') });
+  return shuffled.map(function (st, idx) {
+    return Object.assign({}, st, { _anonLabel: 'Student ' + String(idx + 1).padStart(3, '0') });
   });
 }
 
@@ -2020,7 +2446,7 @@ function migrateLearningMap(map) {
   if (!map || !map.sections || map._flatVersion >= 2) return map;
   // Build sectionId → tagId mapping for override/goal/reflection migration
   var sectionToTag = {};
-  map.sections.forEach(function(sec) {
+  map.sections.forEach(function (sec) {
     if (!sec.tags || sec.tags.length === 0) return;
     var tag = sec.tags[0];
     // Promote section properties onto the tag
@@ -2043,10 +2469,10 @@ function migrateOverridesForFlatMap(cid, sectionToTag) {
   if (!sectionToTag || Object.keys(sectionToTag).length === 0) return;
   var overrides = getOverrides(cid);
   var changed = false;
-  Object.keys(overrides).forEach(function(studentId) {
+  Object.keys(overrides).forEach(function (studentId) {
     var studentOverrides = overrides[studentId];
     if (!studentOverrides) return;
-    Object.keys(studentOverrides).forEach(function(key) {
+    Object.keys(studentOverrides).forEach(function (key) {
       if (sectionToTag[key] && key !== sectionToTag[key]) {
         studentOverrides[sectionToTag[key]] = studentOverrides[key];
         delete studentOverrides[key];
@@ -2061,10 +2487,10 @@ function migrateGoalsForFlatMap(cid, sectionToTag) {
   if (!sectionToTag || Object.keys(sectionToTag).length === 0) return;
   var goals = getGoals(cid);
   var changed = false;
-  Object.keys(goals).forEach(function(studentId) {
+  Object.keys(goals).forEach(function (studentId) {
     var studentGoals = goals[studentId];
     if (!studentGoals || typeof studentGoals !== 'object') return;
-    Object.keys(studentGoals).forEach(function(key) {
+    Object.keys(studentGoals).forEach(function (key) {
       if (sectionToTag[key] && key !== sectionToTag[key]) {
         studentGoals[sectionToTag[key]] = studentGoals[key];
         delete studentGoals[key];
@@ -2079,10 +2505,10 @@ function migrateReflectionsForFlatMap(cid, sectionToTag) {
   if (!sectionToTag || Object.keys(sectionToTag).length === 0) return;
   var reflections = getReflections(cid);
   var changed = false;
-  Object.keys(reflections).forEach(function(studentId) {
+  Object.keys(reflections).forEach(function (studentId) {
     var studentRefs = reflections[studentId];
     if (!studentRefs || typeof studentRefs !== 'object') return;
-    Object.keys(studentRefs).forEach(function(key) {
+    Object.keys(studentRefs).forEach(function (key) {
       if (sectionToTag[key] && key !== sectionToTag[key]) {
         studentRefs[sectionToTag[key]] = studentRefs[key];
         delete studentRefs[key];
@@ -2113,9 +2539,14 @@ function migrateStudent(st) {
   return st;
 }
 function migrateAllStudents() {
-  Object.keys(COURSES).forEach(function(cid) {
+  Object.keys(COURSES).forEach(function (cid) {
     var students = getStudents(cid);
-    if (students.length && students.some(function(s){ return s.firstName === undefined; })) {
+    if (
+      students.length &&
+      students.some(function (s) {
+        return s.firstName === undefined;
+      })
+    ) {
       _backupBeforeMigration(cid, 'students');
       saveStudents(cid, students.map(migrateStudent));
     }
@@ -2124,19 +2555,26 @@ function migrateAllStudents() {
 function formatTs(ts) {
   if (!ts) return '';
   const d = new Date(ts);
-  return d.toLocaleDateString('en-CA', { weekday:'short', month:'short', day:'numeric' })
-    + ' at ' + d.toLocaleTimeString('en-CA', { hour:'numeric', minute:'2-digit' });
+  return (
+    d.toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' }) +
+    ' at ' +
+    d.toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' })
+  );
 }
 function formatDate(ts) {
   if (!ts) return '';
-  return new Date(ts).toLocaleDateString('en-CA', { month:'short', day:'numeric', year:'numeric' });
+  return new Date(ts).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' });
 }
-function uid() { return 's' + Date.now() + Math.random().toString(36).slice(2,10); }
-function getParam(key) { return new URLSearchParams(window.location.search).get(key); }
+function uid() {
+  return 's' + Date.now() + Math.random().toString(36).slice(2, 10);
+}
+function getParam(key) {
+  return new URLSearchParams(window.location.search).get(key);
+}
 
 function getTodayStr() {
   const d = new Date();
-  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -2164,7 +2602,7 @@ if (!localStorage.getItem('gb-courses') && !_useSupabase) saveCourses(COURSES);
    default course_policy row. Falls back to a local-only stub if Supabase is
    unavailable so offline-mode teachers can still scaffold a course. */
 function createCourse(data) {
-  const localId = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+  const localId = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
   const course = {
     id: localId,
     name: data.name || 'Untitled Class',
@@ -2172,21 +2610,26 @@ function createCourse(data) {
     calcMethod: data.calcMethod || 'mostRecent',
     decayWeight: data.decayWeight || 0.65,
     description: data.description || '',
-    gradeLevel: data.gradeLevel || ''
+    gradeLevel: data.gradeLevel || '',
   };
   COURSES[localId] = course;
   _safeLSSet('gb-courses', JSON.stringify(COURSES));
-  saveLearningMap(localId, { subjects:[], sections:[], _customized:true, _version:1 });
+  saveLearningMap(localId, { subjects: [], sections: [], _customized: true, _version: 1 });
 
   if (_useSupabase) {
     const sb = getSupabase();
     if (sb) {
-      sb.rpc('create_course', { p_payload: {
-        name: course.name,
-        description: course.description,
-        gradeLevel: course.gradeLevel
-      }}).then(function(res) {
-        if (res.error) { console.warn('create_course RPC failed:', res.error); return; }
+      sb.rpc('create_course', {
+        p_payload: {
+          name: course.name,
+          description: course.description,
+          gradeLevel: course.gradeLevel,
+        },
+      }).then(function (res) {
+        if (res.error) {
+          console.warn('create_course RPC failed:', res.error);
+          return;
+        }
         const row = res.data || {};
         const canonicalId = row.course_offering_id;
         if (!canonicalId || canonicalId === localId) return;
@@ -2199,7 +2642,7 @@ function createCourse(data) {
           subjectCode: row.subject_code || '',
           schoolYear: row.school_year || '',
           termCode: row.term_code || '',
-          archived: row.status === 'archived'
+          archived: row.status === 'archived',
         });
         delete COURSES[localId];
         COURSES[canonicalId] = migrated;
@@ -2211,9 +2654,9 @@ function createCourse(data) {
           p_payload: {
             gradingSystem: course.gradingSystem,
             calcMethod: course.calcMethod,
-            decayWeight: course.decayWeight
-          }
-        }).then(function(pr) {
+            decayWeight: course.decayWeight,
+          },
+        }).then(function (pr) {
           if (pr.error) console.warn('save_course_policy RPC failed:', pr.error);
         });
       });
@@ -2240,17 +2683,21 @@ function updateCourse(id, updates) {
       if (updates.termCode !== undefined) payload.termCode = updates.termCode;
       if (updates.archived !== undefined) payload.archived = !!updates.archived;
       if (Object.keys(payload).length > 0) {
-        sb.rpc('update_course', { p_course_offering_id: id, p_payload: payload })
-          .then(function(res) { if (res.error) console.warn('update_course RPC failed:', res.error); });
+        sb.rpc('update_course', { p_course_offering_id: id, p_payload: payload }).then(function (res) {
+          if (res.error) console.warn('update_course RPC failed:', res.error);
+        });
       }
       // Policy fields write through save_course_policy.
-      const policyKeys = ['gradingSystem','calcMethod','decayWeight'];
+      const policyKeys = ['gradingSystem', 'calcMethod', 'decayWeight'];
       const policyPatch = {};
-      policyKeys.forEach(function(k) { if (updates[k] !== undefined) policyPatch[k] = updates[k]; });
+      policyKeys.forEach(function (k) {
+        if (updates[k] !== undefined) policyPatch[k] = updates[k];
+      });
       if (Object.keys(policyPatch).length > 0) {
         const merged = Object.assign({}, getCourseConfig(id), policyPatch);
-        sb.rpc('save_course_policy', { p_course_offering_id: id, p_payload: merged })
-          .then(function(res) { if (res.error) console.warn('save_course_policy RPC failed:', res.error); });
+        sb.rpc('save_course_policy', { p_course_offering_id: id, p_payload: merged }).then(function (res) {
+          if (res.error) console.warn('save_course_policy RPC failed:', res.error);
+        });
       }
     }
   }
@@ -2263,17 +2710,32 @@ async function deleteCourseData(id) {
     const sb = getSupabase();
     if (sb) {
       const tables = Object.values(_NORMALIZED_TABLES);
-      await Promise.all(tables.map(tbl =>
-        sb.from(tbl).delete().eq('teacher_id', _teacherId).eq('course_id', id)
-      )).catch(err => console.error('Failed to delete course data from Supabase:', err));
+      await Promise.all(
+        tables.map(tbl => sb.from(tbl).delete().eq('teacher_id', _teacherId).eq('course_id', id)),
+      ).catch(err => console.error('Failed to delete course data from Supabase:', err));
     }
   }
 
   // Clear localStorage
-  ['students','assessments','scores','overrides','courseconfig','learningmap',
-   'modules','rubrics','statuses','quick-obs','term-ratings','notes',
-   'flags','goals','reflections','custom-tags','report-config']
-    .forEach(k => localStorage.removeItem('gb-'+k+'-'+id));
+  [
+    'students',
+    'assessments',
+    'scores',
+    'overrides',
+    'courseconfig',
+    'learningmap',
+    'modules',
+    'rubrics',
+    'statuses',
+    'quick-obs',
+    'term-ratings',
+    'notes',
+    'flags',
+    'goals',
+    'reflections',
+    'custom-tags',
+    'report-config',
+  ].forEach(k => localStorage.removeItem('gb-' + k + '-' + id));
 
   // Clear cache
   for (const field of Object.keys(_DATA_KEYS)) {
@@ -2333,7 +2795,7 @@ function getCoursesByGrade(grade) {
   for (const [shortTag, course] of Object.entries(CURRICULUM_INDEX)) {
     if (course.grade === grade) {
       let competencyCount = 0;
-      for (const cat of (course.categories || [])) {
+      for (const cat of course.categories || []) {
         competencyCount += (cat.competencies || []).length;
       }
       results.push({
@@ -2342,7 +2804,7 @@ function getCoursesByGrade(grade) {
         subject: course.subject,
         competencyCount: competencyCount,
         categoryCount: (course.categories || []).length,
-        statementCount: competencyCount
+        statementCount: competencyCount,
       });
     }
   }
@@ -2386,12 +2848,15 @@ function buildLearningMapFromTags(shortTags) {
         seenCategoryNames[category.name] = courseTag;
       }
 
-      const shortName = category.name.replace(/\s*\(.*?\)\s*/g, '').split(/\s+and\s+/i)[0].trim();
+      const shortName = category.name
+        .replace(/\s*\(.*?\)\s*/g, '')
+        .split(/\s+and\s+/i)[0]
+        .trim();
       const truncShortName = shortName.length > 20 ? shortName.slice(0, 18) + '\u2026' : shortName;
 
       // Flat format: one section per competency (1:1 section-to-tag)
       for (const comp of category.competencies) {
-        let baseId = isHybrid ? (courseTag + '_' + comp.tag) : comp.tag;
+        let baseId = isHybrid ? courseTag + '_' + comp.tag : comp.tag;
         if (usedTagIds[baseId]) {
           usedTagIds[baseId]++;
           baseId = baseId + usedTagIds[baseId];
@@ -2406,7 +2871,7 @@ function buildLearningMapFromTags(shortTags) {
           color: colour,
           subject: courseTag,
           name: sectionName,
-          shortName: truncShortName
+          shortName: truncShortName,
         };
         sections.push({
           id: baseId,
@@ -2414,7 +2879,7 @@ function buildLearningMapFromTags(shortTags) {
           name: sectionName,
           shortName: truncShortName,
           color: colour,
-          tags: [tag]
+          tags: [tag],
         });
         addedSections = true;
       }
@@ -2437,13 +2902,15 @@ function getLearningMap(cid) {
   try {
     const custom = JSON.parse(localStorage.getItem('gb-learningmap-' + cid));
     if (custom && custom._customized) map = custom;
-  } catch (e) { console.warn('LearningMap parse error:', e); }
+  } catch (e) {
+    console.warn('LearningMap parse error:', e);
+  }
   if (!map) map = structuredClone(LEARNING_MAP[cid] || { subjects: [], sections: [] });
   // Migrate old nested section/tag format to flat format
   if (!map._flatVersion || map._flatVersion < 2) {
     var sectionToTag = {};
     if (map.sections) {
-      map.sections.forEach(function(sec) {
+      map.sections.forEach(function (sec) {
         if (sec.tags && sec.tags.length > 0) sectionToTag[sec.id] = sec.tags[0].id;
       });
     }
@@ -2493,63 +2960,122 @@ function getModules(cid) {
     let data = JSON.parse(localStorage.getItem('gb-modules-' + cid));
     if (!data) {
       data = JSON.parse(localStorage.getItem('gb-units-' + cid));
-      if (data) { _safeLSSet('gb-modules-' + cid, JSON.stringify(data)); localStorage.removeItem('gb-units-' + cid); }
+      if (data) {
+        _safeLSSet('gb-modules-' + cid, JSON.stringify(data));
+        localStorage.removeItem('gb-units-' + cid);
+      }
     }
     return data || [];
-  } catch (e) { console.warn('Modules parse fallback:', e); return []; }
+  } catch (e) {
+    console.warn('Modules parse fallback:', e);
+    return [];
+  }
 }
-function saveModules(cid, arr) { _saveCourseField('modules', cid, arr); }
-function getModuleById(cid, moduleId) { return getModules(cid).find(u => u.id === moduleId); }
+function saveModules(cid, arr) {
+  _saveCourseField('modules', cid, arr);
+}
+function getModuleById(cid, moduleId) {
+  return getModules(cid).find(u => u.id === moduleId);
+}
 
 /* ── Assignment Statuses (excused / not-submitted) ─────────── */
 function getAssignmentStatuses(cid) {
   if (_cache.statuses[cid] !== undefined) return _cache.statuses[cid];
-  try { return JSON.parse(localStorage.getItem('gb-statuses-' + cid)) || {}; } catch (e) { console.warn('Statuses parse fallback:', e); return {}; }
+  try {
+    return JSON.parse(localStorage.getItem('gb-statuses-' + cid)) || {};
+  } catch (e) {
+    console.warn('Statuses parse fallback:', e);
+    return {};
+  }
 }
-function saveAssignmentStatuses(cid, obj) { _saveCourseField('statuses', cid, obj); }
-function getAssignmentStatus(cid, sid, aid) { return getAssignmentStatuses(cid)[sid + ':' + aid] || null; }
+function saveAssignmentStatuses(cid, obj) {
+  _saveCourseField('statuses', cid, obj);
+}
+function getAssignmentStatus(cid, sid, aid) {
+  return getAssignmentStatuses(cid)[sid + ':' + aid] || null;
+}
 function setAssignmentStatus(cid, sid, aid, status) {
   const st = getAssignmentStatuses(cid);
   const key = sid + ':' + aid;
-  if (status) st[key] = status; else delete st[key];
+  if (status) st[key] = status;
+  else delete st[key];
   saveAssignmentStatuses(cid, st);
+  if (_useSupabase && localStorage.getItem('gb-demo-mode') !== '1') {
+    var sb = getSupabase();
+    if (sb) {
+      sb.rpc('save_assignment_status', {
+        p_course_offering_id: cid,
+        p_student_id: sid,
+        p_assessment_id: aid,
+        p_status: status || null,
+      }).then(function (res) {
+        if (res.error) console.warn('save_assignment_status RPC failed:', res.error);
+      });
+    }
+  }
 }
 
 /* ── Rubrics ───────────────────────────────────────────────── */
 function getRubrics(cid) {
   if (_cache.rubrics[cid] !== undefined) return _cache.rubrics[cid];
-  try { return JSON.parse(localStorage.getItem('gb-rubrics-' + cid)) || []; } catch (e) { console.warn('Rubrics parse fallback:', e); return []; }
+  try {
+    return JSON.parse(localStorage.getItem('gb-rubrics-' + cid)) || [];
+  } catch (e) {
+    console.warn('Rubrics parse fallback:', e);
+    return [];
+  }
 }
-function saveRubrics(cid, arr) { _saveCourseField('rubrics', cid, arr); }
-function getRubricById(cid, rubricId) { return getRubrics(cid).find(r => r.id === rubricId); }
+function saveRubrics(cid, arr) {
+  _saveCourseField('rubrics', cid, arr);
+}
+function getRubricById(cid, rubricId) {
+  return getRubrics(cid).find(r => r.id === rubricId);
+}
 function deleteRubric(cid, rubricId) {
-  saveRubrics(cid, getRubrics(cid).filter(r => r.id !== rubricId));
+  saveRubrics(
+    cid,
+    getRubrics(cid).filter(r => r.id !== rubricId),
+  );
   const assessments = getAssessments(cid);
   let changed = false;
-  assessments.forEach(a => { if (a.rubricId === rubricId) { delete a.rubricId; changed = true; } });
+  assessments.forEach(a => {
+    if (a.rubricId === rubricId) {
+      delete a.rubricId;
+      changed = true;
+    }
+  });
   if (changed) saveAssessments(cid, assessments);
 }
 
 /* ── Competency Groups ─────────────────────────────────────── */
-function getCompetencyGroups(cid) { return getLearningMap(cid).competencyGroups || []; }
+function getCompetencyGroups(cid) {
+  return getLearningMap(cid).competencyGroups || [];
+}
 function saveCompetencyGroups(cid, groups) {
   var map = ensureCustomLearningMap(cid);
   map.competencyGroups = groups;
   saveLearningMap(cid, map);
 }
-function getCompetencyGroupById(cid, gid) { return getCompetencyGroups(cid).find(g => g.id === gid); }
+function getCompetencyGroupById(cid, gid) {
+  return getCompetencyGroups(cid).find(g => g.id === gid);
+}
 function setSectionGroup(cid, sectionId, groupId) {
   var map = ensureCustomLearningMap(cid);
   var sec = (map.sections || []).find(s => s.id === sectionId);
   if (!sec) return;
-  if (groupId) sec.groupId = groupId; else delete sec.groupId;
+  if (groupId) sec.groupId = groupId;
+  else delete sec.groupId;
   saveLearningMap(cid, map);
 }
 function getGroupedSections(cid) {
-  var groups = getCompetencyGroups(cid).slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  var groups = getCompetencyGroups(cid)
+    .slice()
+    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
   var sections = getSections(cid);
   var groupMap = {};
-  groups.forEach(g => { groupMap[g.id] = { group: g, sections: [] }; });
+  groups.forEach(g => {
+    groupMap[g.id] = { group: g, sections: [] };
+  });
   var ungrouped = [];
   sections.forEach(sec => {
     if (sec.groupId && groupMap[sec.groupId]) groupMap[sec.groupId].sections.push(sec);
@@ -2560,17 +3086,27 @@ function getGroupedSections(cid) {
 function addCustomSection(cid, opts) {
   var map = ensureCustomLearningMap(cid);
   var id = 'custom_' + uid();
-  var sub = (map.subjects && map.subjects[0]) ? map.subjects[0].id : '';
-  var color = (map.subjects && map.subjects[0]) ? map.subjects[0].color : '#6366f1';
+  var sub = map.subjects && map.subjects[0] ? map.subjects[0].id : '';
+  var color = map.subjects && map.subjects[0] ? map.subjects[0].color : '#6366f1';
   var sec = {
-    id: id, subject: opts.subject || sub, name: opts.label || 'Custom Standard',
-    shortName: opts.label || 'Custom', color: opts.color || color,
-    _custom: true, tags: [{
-      id: id, label: opts.label || 'Custom Standard', text: opts.text || '',
-      color: opts.color || color, subject: opts.subject || sub,
-      name: opts.label || 'Custom Standard', shortName: opts.label || 'Custom',
-      i_can_statements: opts.i_can_statements || []
-    }]
+    id: id,
+    subject: opts.subject || sub,
+    name: opts.label || 'Custom Standard',
+    shortName: opts.label || 'Custom',
+    color: opts.color || color,
+    _custom: true,
+    tags: [
+      {
+        id: id,
+        label: opts.label || 'Custom Standard',
+        text: opts.text || '',
+        color: opts.color || color,
+        subject: opts.subject || sub,
+        name: opts.label || 'Custom Standard',
+        shortName: opts.label || 'Custom',
+        i_can_statements: opts.i_can_statements || [],
+      },
+    ],
   };
   if (opts.groupId) sec.groupId = opts.groupId;
   if (!map.sections) map.sections = [];
@@ -2588,12 +3124,16 @@ function removeSection(cid, sectionId) {
 }
 
 /* ── Helpers: get sections/tags for a course ─────────────────── */
-function getSections(cid) { return getLearningMap(cid).sections || []; }
-function getSubjects(cid) { return getLearningMap(cid).subjects || []; }
+function getSections(cid) {
+  return getLearningMap(cid).sections || [];
+}
+function getSubjects(cid) {
+  return getLearningMap(cid).subjects || [];
+}
 
 // Cached flat tag list — keyed by learning map object reference so any direct
 // write to _cache.learningMaps[cid] (including test setup) naturally busts the cache.
-var _allTagsCache = {};    // cid → { mapRef, tags }
+var _allTagsCache = {}; // cid → { mapRef, tags }
 function getAllTags(cid) {
   const map = getLearningMap(cid);
   const c = _allTagsCache[cid];
@@ -2602,19 +3142,23 @@ function getAllTags(cid) {
   _allTagsCache[cid] = { mapRef: map, tags };
   return tags;
 }
-function getTagById(cid, tagId) { return getAllTags(cid).find(t => t.id === tagId); }
+function getTagById(cid, tagId) {
+  return getAllTags(cid).find(t => t.id === tagId);
+}
 
 // Cached tag→section index — O(1) lookup vs O(sections × tags) find() per call.
 // getFocusAreas() calls this once per tag; without the index it was O(tags² × sections).
 // Same reference-based invalidation as _allTagsCache.
-var _tagToSectionCache = {};  // cid → { mapRef, index: { tagId: section } }
+var _tagToSectionCache = {}; // cid → { mapRef, index: { tagId: section } }
 function getSectionForTag(cid, tagId) {
   const map = getLearningMap(cid);
   const c = _tagToSectionCache[cid];
   if (!c || c.mapRef !== map) {
     const index = {};
-    (map.sections || []).forEach(function(s) {
-      s.tags.forEach(function(t) { index[t.id] = s; });
+    (map.sections || []).forEach(function (s) {
+      s.tags.forEach(function (t) {
+        index[t.id] = s;
+      });
     });
     _tagToSectionCache[cid] = { mapRef: map, index };
   }
@@ -2626,7 +3170,12 @@ function getSectionForTag(cid, tagId) {
    ══════════════════════════════════════════════════════════════════ */
 function getConfig() {
   if (_cache.config !== null) return _cache.config;
-  try { return JSON.parse(localStorage.getItem('gb-config'))||{}; } catch (e) { console.warn('Config parse fallback:', e); return {}; }
+  try {
+    return JSON.parse(localStorage.getItem('gb-config')) || {};
+  } catch (e) {
+    console.warn('Config parse fallback:', e);
+    return {};
+  }
 }
 function saveConfig(obj) {
   _cache.config = obj;
@@ -2640,8 +3189,8 @@ function saveConfig(obj) {
       delete uiPrefs.activeCourse;
       sb.rpc('save_teacher_preferences', {
         p_active_course_offering_id: activeCourse,
-        p_ui_prefs: uiPrefs
-      }).then(function(res) {
+        p_ui_prefs: uiPrefs,
+      }).then(function (res) {
         if (res.error) console.warn('save_teacher_preferences RPC failed:', res.error);
       });
     }
@@ -2649,21 +3198,32 @@ function saveConfig(obj) {
 }
 function getCourseConfig(cid) {
   if (_cache.courseConfigs[cid] !== undefined) return _cache.courseConfigs[cid];
-  try { return JSON.parse(localStorage.getItem('gb-courseconfig-'+cid))||{}; } catch (e) { console.warn('CourseConfig parse fallback:', e); return {}; }
+  try {
+    return JSON.parse(localStorage.getItem('gb-courseconfig-' + cid)) || {};
+  } catch (e) {
+    console.warn('CourseConfig parse fallback:', e);
+    return {};
+  }
 }
 function saveCourseConfig(cid, obj) {
   _saveCourseField('courseConfigs', cid, obj);
   if (_useSupabase && cid) {
     const sb = getSupabase();
     if (sb) {
-      sb.rpc('save_course_policy', { p_course_offering_id: cid, p_payload: obj || {} })
-        .then(function(res) { if (res.error) console.warn('save_course_policy RPC failed:', res.error); });
+      sb.rpc('save_course_policy', { p_course_offering_id: cid, p_payload: obj || {} }).then(function (res) {
+        if (res.error) console.warn('save_course_policy RPC failed:', res.error);
+      });
     }
   }
 }
 function getStudents(cid) {
   if (_cache.students[cid] !== undefined) return _cache.students[cid];
-  try { return (JSON.parse(localStorage.getItem('gb-students-'+cid))||[]).map(migrateStudent); } catch (e) { console.warn('Students parse fallback:', e); return []; }
+  try {
+    return (JSON.parse(localStorage.getItem('gb-students-' + cid)) || []).map(migrateStudent);
+  } catch (e) {
+    console.warn('Students parse fallback:', e);
+    return [];
+  }
 }
 function saveStudents(cid, arr) {
   var prev = (_cache.students[cid] || []).slice();
@@ -2676,10 +3236,12 @@ function saveStudents(cid, arr) {
 
 /* UUID detection — distinguishes canonical enrollment_ids from local uid()s */
 var _UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-function _isUuid(v) { return typeof v === 'string' && _UUID_RE.test(v); }
+function _isUuid(v) {
+  return typeof v === 'string' && _UUID_RE.test(v);
+}
 
 /* Per-course save lock so rapid saves don't double-enroll the same student */
-var _studentSaveQueue = {};   // cid → Promise tail
+var _studentSaveQueue = {}; // cid → Promise tail
 
 /* Diff arr vs prev and translate to canonical RPC calls.
    - student.id matching UUID → already enrolled → update_enrollment + update_student
@@ -2689,28 +3251,32 @@ function _persistStudentsToCanonical(cid, prev, arr) {
   var sb = getSupabase();
   if (!sb) return;
   var tail = _studentSaveQueue[cid] || Promise.resolve();
-  var next = tail.then(function() {
+  var next = tail.then(function () {
     var prevById = {};
-    prev.forEach(function(s) { if (s && s.id) prevById[s.id] = s; });
+    prev.forEach(function (s) {
+      if (s && s.id) prevById[s.id] = s;
+    });
     var arrById = {};
-    arr.forEach(function(s) { if (s && s.id) arrById[s.id] = s; });
+    arr.forEach(function (s) {
+      if (s && s.id) arrById[s.id] = s;
+    });
 
     var ops = [];
 
     // Adds (any id not in prev)
-    arr.forEach(function(s, idx) {
+    arr.forEach(function (s, idx) {
       if (s && s.id && !prevById[s.id]) {
         ops.push(_canonicalEnrollStudent(sb, cid, s, idx));
       }
     });
     // Withdrawals (in prev, not in arr) — only if we have a canonical enrollment id
-    prev.forEach(function(s) {
+    prev.forEach(function (s) {
       if (s && s.id && !arrById[s.id] && _isUuid(s.id)) {
         ops.push(_canonicalWithdrawEnrollment(sb, s.id));
       }
     });
     // Updates (in both, with field changes)
-    arr.forEach(function(s, idx) {
+    arr.forEach(function (s, idx) {
       var p = s && s.id ? prevById[s.id] : null;
       if (!p || !_isUuid(s.id)) return;
       if (_studentEnrollmentChanged(p, s) || _studentRosterPositionChanged(idx, prev, p, s)) {
@@ -2721,7 +3287,7 @@ function _persistStudentsToCanonical(cid, prev, arr) {
       }
     });
 
-    return Promise.all(ops).catch(function(err) {
+    return Promise.all(ops).catch(function (err) {
       console.warn('Student sync to canonical RPCs failed for one or more rows:', err);
     });
   });
@@ -2729,98 +3295,122 @@ function _persistStudentsToCanonical(cid, prev, arr) {
 }
 
 function _studentEnrollmentChanged(a, b) {
-  return (a.studentNumber || '') !== (b.studentNumber || '')
-      || (a.enrolledDate || '') !== (b.enrolledDate || '')
-      || JSON.stringify(a.designations || []) !== JSON.stringify(b.designations || []);
+  return (
+    (a.studentNumber || '') !== (b.studentNumber || '') ||
+    (a.enrolledDate || '') !== (b.enrolledDate || '') ||
+    JSON.stringify(a.designations || []) !== JSON.stringify(b.designations || [])
+  );
 }
 function _studentRosterPositionChanged(idx, prevArr, prevStudent, newStudent) {
   // Detect a real reorder: prev index of this student differs from new index
-  var prevIdx = prevArr.findIndex(function(p) { return p && p.id === newStudent.id; });
+  var prevIdx = prevArr.findIndex(function (p) {
+    return p && p.id === newStudent.id;
+  });
   return prevIdx !== -1 && prevIdx !== idx;
 }
 function _studentIdentityChanged(a, b) {
-  return (a.firstName || '') !== (b.firstName || '')
-      || (a.lastName || '') !== (b.lastName || '')
-      || (a.preferred || '') !== (b.preferred || '')
-      || (a.pronouns || '') !== (b.pronouns || '')
-      || (a.email || '') !== (b.email || '')
-      || (a.dateOfBirth || '') !== (b.dateOfBirth || '');
+  return (
+    (a.firstName || '') !== (b.firstName || '') ||
+    (a.lastName || '') !== (b.lastName || '') ||
+    (a.preferred || '') !== (b.preferred || '') ||
+    (a.pronouns || '') !== (b.pronouns || '') ||
+    (a.email || '') !== (b.email || '') ||
+    (a.dateOfBirth || '') !== (b.dateOfBirth || '')
+  );
 }
 
 function _canonicalEnrollStudent(sb, cid, s, idx) {
-  return sb.rpc('enroll_student', {
-    p_course_offering_id: cid,
-    p_payload: {
-      student: {
+  return sb
+    .rpc('enroll_student', {
+      p_course_offering_id: cid,
+      p_payload: {
+        student: {
+          firstName: s.firstName || '',
+          lastName: s.lastName || '',
+          preferred: s.preferred || '',
+          pronouns: s.pronouns || '',
+          email: s.email || '',
+          dateOfBirth: s.dateOfBirth || '',
+        },
+        rosterPosition: idx + 1,
+        studentNumber: s.studentNumber || '',
+        enrolledDate: s.enrolledDate || '',
+        designations: s.designations || [],
+      },
+    })
+    .then(function (res) {
+      if (res.error) {
+        console.warn('enroll_student failed:', res.error, s);
+        return;
+      }
+      var row = res.data || {};
+      // roster_entry_json returns canonical ids — patch the cached student in place
+      var cached = (_cache.students[cid] || []).find(function (c) {
+        return c.id === s.id;
+      });
+      if (cached && row.enrollment_id) {
+        cached.id = row.enrollment_id;
+        cached.personId = row.student_id;
+      }
+      // Persist the patched cache so the canonical id sticks across reloads
+      if (_cache.students[cid]) {
+        _safeLSSet('gb-students-' + cid, JSON.stringify(_cache.students[cid]));
+      }
+    });
+}
+
+function _canonicalUpdateEnrollment(sb, enrollmentId, s, idx) {
+  return sb
+    .rpc('update_enrollment', {
+      p_enrollment_id: enrollmentId,
+      p_payload: {
+        studentNumber: s.studentNumber || '',
+        rosterPosition: idx + 1,
+        enrolledDate: s.enrolledDate || '',
+        designations: s.designations || [],
+      },
+    })
+    .then(function (res) {
+      if (res.error) console.warn('update_enrollment failed:', res.error, enrollmentId);
+    });
+}
+
+function _canonicalUpdateStudent(sb, studentId, s) {
+  return sb
+    .rpc('update_student', {
+      p_student_id: studentId,
+      p_payload: {
         firstName: s.firstName || '',
         lastName: s.lastName || '',
         preferred: s.preferred || '',
         pronouns: s.pronouns || '',
         email: s.email || '',
-        dateOfBirth: s.dateOfBirth || ''
+        dateOfBirth: s.dateOfBirth || '',
       },
-      rosterPosition: idx + 1,
-      studentNumber: s.studentNumber || '',
-      enrolledDate: s.enrolledDate || '',
-      designations: s.designations || []
-    }
-  }).then(function(res) {
-    if (res.error) { console.warn('enroll_student failed:', res.error, s); return; }
-    var row = res.data || {};
-    // roster_entry_json returns canonical ids — patch the cached student in place
-    var cached = (_cache.students[cid] || []).find(function(c) { return c.id === s.id; });
-    if (cached && row.enrollment_id) {
-      cached.id = row.enrollment_id;
-      cached.personId = row.student_id;
-    }
-    // Persist the patched cache so the canonical id sticks across reloads
-    if (_cache.students[cid]) {
-      _safeLSSet('gb-students-' + cid, JSON.stringify(_cache.students[cid]));
-    }
-  });
-}
-
-function _canonicalUpdateEnrollment(sb, enrollmentId, s, idx) {
-  return sb.rpc('update_enrollment', {
-    p_enrollment_id: enrollmentId,
-    p_payload: {
-      studentNumber: s.studentNumber || '',
-      rosterPosition: idx + 1,
-      enrolledDate: s.enrolledDate || '',
-      designations: s.designations || []
-    }
-  }).then(function(res) {
-    if (res.error) console.warn('update_enrollment failed:', res.error, enrollmentId);
-  });
-}
-
-function _canonicalUpdateStudent(sb, studentId, s) {
-  return sb.rpc('update_student', {
-    p_student_id: studentId,
-    p_payload: {
-      firstName: s.firstName || '',
-      lastName: s.lastName || '',
-      preferred: s.preferred || '',
-      pronouns: s.pronouns || '',
-      email: s.email || '',
-      dateOfBirth: s.dateOfBirth || ''
-    }
-  }).then(function(res) {
-    if (res.error) console.warn('update_student failed:', res.error, studentId);
-  });
+    })
+    .then(function (res) {
+      if (res.error) console.warn('update_student failed:', res.error, studentId);
+    });
 }
 
 function _canonicalWithdrawEnrollment(sb, enrollmentId) {
-  return sb.rpc('withdraw_enrollment', {
-    enrollment_id: enrollmentId,
-    withdrawn_on: new Date().toISOString().slice(0, 10)
-  }).then(function(res) {
-    if (res.error) console.warn('withdraw_enrollment failed:', res.error, enrollmentId);
-  });
+  return sb
+    .rpc('withdraw_enrollment', {
+      enrollment_id: enrollmentId,
+      withdrawn_on: new Date().toISOString().slice(0, 10),
+    })
+    .then(function (res) {
+      if (res.error) console.warn('withdraw_enrollment failed:', res.error, enrollmentId);
+    });
 }
 function getAssessments(cid) {
   if (_cache.assessments[cid] !== undefined) return _cache.assessments[cid];
-  try { return JSON.parse(localStorage.getItem('gb-assessments-'+cid))||[]; } catch (e) { console.warn('Assessments parse fallback:', e); return []; }
+  try {
+    return JSON.parse(localStorage.getItem('gb-assessments-' + cid)) || [];
+  } catch (e) {
+    console.warn('Assessments parse fallback:', e);
+    return [];
+  }
 }
 function saveAssessments(cid, arr) {
   var prev = ((_cache.assessments && _cache.assessments[cid]) || []).slice();
@@ -2838,28 +3428,32 @@ function _persistAssessmentsToCanonical(cid, prev, arr) {
   var sb = getSupabase();
   if (!sb) return;
   var tail = _assessmentSaveQueue[cid] || Promise.resolve();
-  var next = tail.then(function() {
+  var next = tail.then(function () {
     var prevById = {};
-    prev.forEach(function(a) { if (a && a.id) prevById[a.id] = a; });
+    prev.forEach(function (a) {
+      if (a && a.id) prevById[a.id] = a;
+    });
     var arrById = {};
-    arr.forEach(function(a) { if (a && a.id) arrById[a.id] = a; });
+    arr.forEach(function (a) {
+      if (a && a.id) arrById[a.id] = a;
+    });
 
     var ops = [];
 
     // Adds
-    arr.forEach(function(a) {
+    arr.forEach(function (a) {
       if (a && a.id && !prevById[a.id]) {
         ops.push(_canonicalCreateAssessment(sb, cid, a));
       }
     });
     // Deletes (canonical-id removals only)
-    prev.forEach(function(a) {
+    prev.forEach(function (a) {
       if (a && a.id && !arrById[a.id] && _isUuid(a.id)) {
         ops.push(_canonicalDeleteAssessment(sb, cid, a.id));
       }
     });
     // Updates
-    arr.forEach(function(a) {
+    arr.forEach(function (a) {
       var p = a && a.id ? prevById[a.id] : null;
       if (!p || !_isUuid(a.id)) return;
       if (_assessmentChanged(p, a)) {
@@ -2867,7 +3461,7 @@ function _persistAssessmentsToCanonical(cid, prev, arr) {
       }
     });
 
-    return Promise.all(ops).catch(function(err) {
+    return Promise.all(ops).catch(function (err) {
       console.warn('Assessment sync to canonical RPCs failed for one or more rows:', err);
     });
   });
@@ -2875,17 +3469,19 @@ function _persistAssessmentsToCanonical(cid, prev, arr) {
 }
 
 function _assessmentChanged(a, b) {
-  return (a.title || '') !== (b.title || '')
-      || (a.date || '') !== (b.date || '')
-      || (a.type || '') !== (b.type || '')
-      || (a.scoreMode || '') !== (b.scoreMode || '')
-      || (a.collaboration || '') !== (b.collaboration || '')
-      || (a.maxPoints || 0) !== (b.maxPoints || 0)
-      || (a.weight || 1) !== (b.weight || 1)
-      || (a.notes || '') !== (b.notes || '')
-      || (a.rubricId || '') !== (b.rubricId || '')
-      || (a.moduleId || '') !== (b.moduleId || '')
-      || JSON.stringify(a.tagIds || []) !== JSON.stringify(b.tagIds || []);
+  return (
+    (a.title || '') !== (b.title || '') ||
+    (a.date || '') !== (b.date || '') ||
+    (a.type || '') !== (b.type || '') ||
+    (a.scoreMode || '') !== (b.scoreMode || '') ||
+    (a.collaboration || '') !== (b.collaboration || '') ||
+    (a.maxPoints || 0) !== (b.maxPoints || 0) ||
+    (a.weight || 1) !== (b.weight || 1) ||
+    (a.notes || '') !== (b.notes || '') ||
+    (a.rubricId || '') !== (b.rubricId || '') ||
+    (a.moduleId || '') !== (b.moduleId || '') ||
+    JSON.stringify(a.tagIds || []) !== JSON.stringify(b.tagIds || [])
+  );
 }
 
 function _assessmentPayload(a) {
@@ -2905,66 +3501,97 @@ function _assessmentPayload(a) {
     moduleId: a.moduleId || '',
     date: a.date || '',
     dateAssigned: a.dateAssigned || '',
-    tagIds: tagIds
+    tagIds: tagIds,
   };
 }
 
 function _canonicalCreateAssessment(sb, cid, a) {
-  return sb.rpc('create_assessment', {
-    p_course_offering_id: cid,
-    p_payload: _assessmentPayload(a)
-  }).then(function(res) {
-    if (res.error) { console.warn('create_assessment failed:', res.error, a); return; }
-    var row = res.data || {};
-    var cached = (_cache.assessments[cid] || []).find(function(c) { return c.id === a.id; });
-    if (cached && row.assessment_id) cached.id = row.assessment_id;
-    if (_cache.assessments[cid]) {
-      _safeLSSet('gb-assessments-' + cid, JSON.stringify(_cache.assessments[cid]));
-    }
-  });
+  return sb
+    .rpc('create_assessment', {
+      p_course_offering_id: cid,
+      p_payload: _assessmentPayload(a),
+    })
+    .then(function (res) {
+      if (res.error) {
+        console.warn('create_assessment failed:', res.error, a);
+        return;
+      }
+      var row = res.data || {};
+      var cached = (_cache.assessments[cid] || []).find(function (c) {
+        return c.id === a.id;
+      });
+      if (cached && row.assessment_id) cached.id = row.assessment_id;
+      if (_cache.assessments[cid]) {
+        _safeLSSet('gb-assessments-' + cid, JSON.stringify(_cache.assessments[cid]));
+      }
+    });
 }
 
 function _canonicalUpdateAssessment(sb, cid, assessmentId, a) {
-  return sb.rpc('update_assessment', {
-    p_course_offering_id: cid,
-    p_assessment_id: assessmentId,
-    p_payload: _assessmentPayload(a)
-  }).then(function(res) {
-    if (res.error) console.warn('update_assessment failed:', res.error, assessmentId);
-  });
+  return sb
+    .rpc('update_assessment', {
+      p_course_offering_id: cid,
+      p_assessment_id: assessmentId,
+      p_payload: _assessmentPayload(a),
+    })
+    .then(function (res) {
+      if (res.error) console.warn('update_assessment failed:', res.error, assessmentId);
+    });
 }
 
 function _canonicalDeleteAssessment(sb, cid, assessmentId) {
-  return sb.rpc('delete_assessment', {
-    p_course_offering_id: cid,
-    p_assessment_id: assessmentId
-  }).then(function(res) {
-    if (res.error) console.warn('delete_assessment failed:', res.error, assessmentId);
-  });
+  return sb
+    .rpc('delete_assessment', {
+      p_course_offering_id: cid,
+      p_assessment_id: assessmentId,
+    })
+    .then(function (res) {
+      if (res.error) console.warn('delete_assessment failed:', res.error, assessmentId);
+    });
 }
 
 function _cleanOrphanedScores(cid, validArr) {
-  var validIds = new Set(validArr.map(function(a) { return a.id; }));
+  var validIds = new Set(
+    validArr.map(function (a) {
+      return a.id;
+    }),
+  );
   var scores = getScores(cid);
   var changed = false;
-  Object.keys(scores).forEach(function(sid) {
+  Object.keys(scores).forEach(function (sid) {
     if (!Array.isArray(scores[sid])) return;
     var before = scores[sid].length;
-    scores[sid] = scores[sid].filter(function(e) { return validIds.has(e.assessmentId); });
+    scores[sid] = scores[sid].filter(function (e) {
+      return validIds.has(e.assessmentId);
+    });
     if (scores[sid].length !== before) changed = true;
   });
   if (changed) saveScores(cid, scores);
 }
 function getOverrides(cid) {
   if (_cache.overrides[cid] !== undefined) return _cache.overrides[cid];
-  try { return JSON.parse(localStorage.getItem('gb-overrides-'+cid))||{}; } catch (e) { console.warn('Overrides parse fallback:', e); return {}; }
+  try {
+    return JSON.parse(localStorage.getItem('gb-overrides-' + cid)) || {};
+  } catch (e) {
+    console.warn('Overrides parse fallback:', e);
+    return {};
+  }
 }
-function saveOverrides(cid, obj) { _saveCourseField('overrides', cid, obj); }
+function saveOverrides(cid, obj) {
+  _saveCourseField('overrides', cid, obj);
+}
 function getNotes(cid) {
   if (_cache.notes[cid] !== undefined) return _cache.notes[cid];
-  try { return JSON.parse(localStorage.getItem('gb-notes-'+cid))||{}; } catch (e) { console.warn('Notes parse fallback:', e); return {}; }
+  try {
+    return JSON.parse(localStorage.getItem('gb-notes-' + cid)) || {};
+  } catch (e) {
+    console.warn('Notes parse fallback:', e);
+    return {};
+  }
 }
-function saveNotes(cid, obj) { _saveCourseField('notes', cid, obj); }
+function saveNotes(cid, obj) {
+  _saveCourseField('notes', cid, obj);
+}
 
 /*
   Score storage: gb-scores-{courseId}
@@ -2974,7 +3601,12 @@ function saveNotes(cid, obj) { _saveCourseField('notes', cid, obj); }
 */
 function getScores(cid) {
   if (_cache.scores[cid] !== undefined) return _cache.scores[cid];
-  try { return JSON.parse(localStorage.getItem('gb-scores-'+cid))||{}; } catch (e) { console.warn('Scores parse fallback:', e); return {}; }
+  try {
+    return JSON.parse(localStorage.getItem('gb-scores-' + cid)) || {};
+  } catch (e) {
+    console.warn('Scores parse fallback:', e);
+    return {};
+  }
 }
 function saveScores(cid, obj) {
   var prev = _cache.scores[cid];
@@ -2983,18 +3615,31 @@ function saveScores(cid, obj) {
   // Block catastrophic saves: if student-count drops >50%, refuse to save.
   // This prevents empty/partial objects from wiping all grades.
   if (prevCount > 2 && newCount < prevCount * 0.5) {
-    console.error('[GUARD] BLOCKED scores save — student-count dropped from', prevCount, 'to', newCount,
-      '(>50% loss). This likely indicates a bug or corrupted state. Stack:', new Error().stack);
+    console.error(
+      '[GUARD] BLOCKED scores save — student-count dropped from',
+      prevCount,
+      'to',
+      newCount,
+      '(>50% loss). This likely indicates a bug or corrupted state. Stack:',
+      new Error().stack,
+    );
     if (typeof showSyncToast === 'function') showSyncToast('Score save blocked — data loss prevented', 'error');
     return;
   }
   // Also count total score entries for a more granular check
-  var prevEntries = 0, newEntries = 0;
+  var prevEntries = 0,
+    newEntries = 0;
   if (prev) for (var _ps in prev) prevEntries += (prev[_ps] || []).length;
   if (obj) for (var _ns in obj) newEntries += (obj[_ns] || []).length;
   if (prevEntries > 10 && newEntries < prevEntries * 0.3) {
-    console.error('[GUARD] BLOCKED scores save — entry-count dropped from', prevEntries, 'to', newEntries,
-      '(>70% loss). Stack:', new Error().stack);
+    console.error(
+      '[GUARD] BLOCKED scores save — entry-count dropped from',
+      prevEntries,
+      'to',
+      newEntries,
+      '(>70% loss). Stack:',
+      new Error().stack,
+    );
     if (typeof showSyncToast === 'function') showSyncToast('Score save blocked — data loss prevented', 'error');
     return;
   }
@@ -3018,9 +3663,21 @@ function setPointsScore(cid, sid, aid, rawScore) {
   tagIds.forEach(tid => {
     const entry = scores[sid].find(e => e.assessmentId === aid && e.tagId === tid);
     if (entry) {
-      if (entry.score !== rawScore) { entry.score = rawScore; changed = true; }
+      if (entry.score !== rawScore) {
+        entry.score = rawScore;
+        changed = true;
+      }
     } else if (rawScore >= 0) {
-      scores[sid].push({ id: uid(), assessmentId: aid, tagId: tid, score: rawScore, date: assess.date || new Date().toISOString().slice(0,10), type: assess.type || 'summative', note: '', created: new Date().toISOString() });
+      scores[sid].push({
+        id: uid(),
+        assessmentId: aid,
+        tagId: tid,
+        score: rawScore,
+        date: assess.date || new Date().toISOString().slice(0, 10),
+        type: assess.type || 'summative',
+        note: '',
+        created: new Date().toISOString(),
+      });
       changed = true;
     }
   });
@@ -3035,44 +3692,77 @@ function getActiveCourse() {
   const ids = Object.keys(COURSES);
   return ids.length > 0 ? ids[0] : null;
 }
-function setActiveCourse(cid) { saveConfig({ ...getConfig(), activeCourse: cid }); }
+function setActiveCourse(cid) {
+  saveConfig({ ...getConfig(), activeCourse: cid });
+}
 
 /* ── Flags ──────────────────────────────────────────────────── */
 function getFlags(cid) {
   if (_cache.flags[cid] !== undefined) return _cache.flags[cid];
-  try { return JSON.parse(localStorage.getItem('gb-flags-'+cid))||{}; } catch (e) { console.warn('Flags parse fallback:', e); return {}; }
+  try {
+    return JSON.parse(localStorage.getItem('gb-flags-' + cid)) || {};
+  } catch (e) {
+    console.warn('Flags parse fallback:', e);
+    return {};
+  }
 }
-function saveFlags(cid, obj) { _saveCourseField('flags', cid, obj); }
-function isStudentFlagged(cid, sid) { return !!getFlags(cid)[sid]; }
+function saveFlags(cid, obj) {
+  _saveCourseField('flags', cid, obj);
+}
+function isStudentFlagged(cid, sid) {
+  return !!getFlags(cid)[sid];
+}
 function toggleFlag(cid, sid) {
   const flags = getFlags(cid);
-  if (flags[sid]) delete flags[sid]; else flags[sid] = true;
+  if (flags[sid]) delete flags[sid];
+  else flags[sid] = true;
   saveFlags(cid, flags);
 }
 
 /* ── Goals & Reflections Storage ───────────────────────────── */
 function getGoals(cid) {
   if (_cache.goals[cid] !== undefined) return _cache.goals[cid];
-  try { return JSON.parse(localStorage.getItem('gb-goals-'+cid))||{}; } catch (e) { console.warn('Goals parse fallback:', e); return {}; }
+  try {
+    return JSON.parse(localStorage.getItem('gb-goals-' + cid)) || {};
+  } catch (e) {
+    console.warn('Goals parse fallback:', e);
+    return {};
+  }
 }
-function saveGoals(cid, obj) { _saveCourseField('goals', cid, obj); }
+function saveGoals(cid, obj) {
+  _saveCourseField('goals', cid, obj);
+}
 
 function getReflections(cid) {
   if (_cache.reflections[cid] !== undefined) return _cache.reflections[cid];
-  try { return JSON.parse(localStorage.getItem('gb-reflections-'+cid))||{}; } catch (e) { console.warn('Reflections parse fallback:', e); return {}; }
+  try {
+    return JSON.parse(localStorage.getItem('gb-reflections-' + cid)) || {};
+  } catch (e) {
+    console.warn('Reflections parse fallback:', e);
+    return {};
+  }
 }
-function saveReflections(cid, obj) { _saveCourseField('reflections', cid, obj); }
+function saveReflections(cid, obj) {
+  _saveCourseField('reflections', cid, obj);
+}
 
 /* ── Quick Observations — in-the-moment capture ─────────── */
 function getQuickObs(cid) {
   if (_cache.observations[cid] !== undefined) return _cache.observations[cid];
-  try { return JSON.parse(localStorage.getItem('gb-quick-obs-'+cid))||{}; } catch (e) { console.warn('Observations parse fallback:', e); return {}; }
+  try {
+    return JSON.parse(localStorage.getItem('gb-quick-obs-' + cid)) || {};
+  } catch (e) {
+    console.warn('Observations parse fallback:', e);
+    return {};
+  }
 }
-function saveQuickObs(cid, obj) { _saveCourseField('observations', cid, obj); }
+function saveQuickObs(cid, obj) {
+  _saveCourseField('observations', cid, obj);
+}
 
 function getStudentQuickObs(cid, sid) {
   const all = getQuickObs(cid);
-  return (all[sid] || []).sort((a,b) => (b.created||'').localeCompare(a.created||''));
+  return (all[sid] || []).sort((a, b) => (b.created || '').localeCompare(a.created || ''));
 }
 
 function getAllQuickObs(cid) {
@@ -3081,18 +3771,18 @@ function getAllQuickObs(cid) {
   for (const sid of Object.keys(all)) {
     (all[sid] || []).forEach(ob => flat.push({ ...ob, studentId: sid }));
   }
-  return flat.sort((a,b) => (b.created||'').localeCompare(a.created||''));
+  return flat.sort((a, b) => (b.created || '').localeCompare(a.created || ''));
 }
 
 function addQuickOb(cid, sid, text, dims, sentiment, context, assignmentContext) {
   const all = getQuickObs(cid);
   if (!all[sid]) all[sid] = [];
   const entry = {
-    id: 'qo_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5),
+    id: 'qo_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
     text: text.trim(),
     dims: dims || [],
     created: new Date().toISOString(),
-    date: getTodayStr()
+    date: getTodayStr(),
   };
   if (sentiment) entry.sentiment = sentiment;
   if (context) entry.context = context;
@@ -3150,16 +3840,21 @@ function _persistObservationCreate(cid, sid, entry) {
       sentiment: entry.sentiment || '',
       context: entry.context || '',
       text: entry.text || '',
-      dims: entry.dims || []
+      dims: entry.dims || [],
+    },
+  }).then(function (res) {
+    if (res.error) {
+      console.warn('create_observation failed:', res.error);
+      return;
     }
-  }).then(function(res) {
-    if (res.error) { console.warn('create_observation failed:', res.error); return; }
     var row = res.data || {};
     // Patch the cached entry's id to the canonical observation_id so future
     // updates/deletes can reference it.
     var arr = (_cache.observations[cid] || {})[sid];
     if (Array.isArray(arr)) {
-      var cached = arr.find(function(o) { return o.id === entry.id; });
+      var cached = arr.find(function (o) {
+        return o.id === entry.id;
+      });
       if (cached && row.observation_id) {
         cached.id = row.observation_id;
         _safeLSSet('gb-quick-obs-' + cid, JSON.stringify(_cache.observations[cid]));
@@ -3179,9 +3874,9 @@ function _persistObservationUpdate(cid, ob) {
       sentiment: ob.sentiment || '',
       context: ob.context || '',
       text: ob.text || '',
-      dims: ob.dims || []
-    }
-  }).then(function(res) {
+      dims: ob.dims || [],
+    },
+  }).then(function (res) {
     if (res.error) console.warn('update_observation failed:', res.error);
   });
 }
@@ -3192,8 +3887,8 @@ function _persistObservationDelete(cid, obId) {
   if (!sb) return;
   sb.rpc('delete_observation', {
     p_course_offering_id: cid,
-    p_observation_id: obId
-  }).then(function(res) {
+    p_observation_id: obId,
+  }).then(function (res) {
     if (res.error) console.warn('delete_observation failed:', res.error);
   });
 }
@@ -3215,44 +3910,61 @@ function hasAssignmentFeedback(cid, sid, assessId) {
 /* ── Custom Tags — user-defined observation tags ─────────── */
 function getCustomTags(cid) {
   if (_cache.customTags[cid] !== undefined) return _cache.customTags[cid];
-  try { return JSON.parse(localStorage.getItem('gb-custom-tags-'+cid))||[]; } catch (e) { console.warn('CustomTags parse fallback:', e); return []; }
+  try {
+    return JSON.parse(localStorage.getItem('gb-custom-tags-' + cid)) || [];
+  } catch (e) {
+    console.warn('CustomTags parse fallback:', e);
+    return [];
+  }
 }
-function saveCustomTags(cid, arr) { _saveCourseField('customTags', cid, arr); }
+function saveCustomTags(cid, arr) {
+  _saveCourseField('customTags', cid, arr);
+}
 function addCustomTag(cid, label) {
   const tags = getCustomTags(cid);
   const norm = label.trim();
   if (!norm || tags.includes(norm)) return norm;
   tags.push(norm);
-  tags.sort((a,b) => a.localeCompare(b));
+  tags.sort((a, b) => a.localeCompare(b));
   saveCustomTags(cid, tags);
   return norm;
 }
 function removeCustomTag(cid, label) {
-  saveCustomTags(cid, getCustomTags(cid).filter(t => t !== label));
+  saveCustomTags(
+    cid,
+    getCustomTags(cid).filter(t => t !== label),
+  );
 }
 
 /* ── Tag resolver — unified display info for any tag type ── */
 function resolveTag(tagStr) {
   if (tagStr.startsWith('cc:')) {
     const cc = getCoreCompetency(tagStr.slice(3));
-    if (cc) return { key:tagStr, label:cc.label, group:cc.group, color:cc.color, type:'cc' };
-    return { key:tagStr, label:tagStr.slice(3), group:'', color:'var(--text-3)', type:'cc' };
+    if (cc) return { key: tagStr, label: cc.label, group: cc.group, color: cc.color, type: 'cc' };
+    return { key: tagStr, label: tagStr.slice(3), group: '', color: 'var(--text-3)', type: 'cc' };
   }
   if (tagStr.startsWith('tag:')) {
-    return { key:tagStr, label:tagStr.slice(4), group:'Custom', color:'#8b5cf6', type:'custom' };
+    return { key: tagStr, label: tagStr.slice(4), group: 'Custom', color: '#8b5cf6', type: 'custom' };
   }
   if (OBS_LABELS[tagStr]) {
-    return { key:tagStr, label:OBS_LABELS[tagStr], icon:OBS_ICONS[tagStr], color:'var(--text-2)', type:'dim' };
+    return { key: tagStr, label: OBS_LABELS[tagStr], icon: OBS_ICONS[tagStr], color: 'var(--text-2)', type: 'dim' };
   }
-  return { key:tagStr, label:tagStr, group:'', color:'var(--text-3)', type:'unknown' };
+  return { key: tagStr, label: tagStr, group: '', color: 'var(--text-3)', type: 'unknown' };
 }
 
 /* ── Term Ratings — end-of-term learner profile ─────────── */
 function getTermRatings(cid) {
   if (_cache.termRatings[cid] !== undefined) return _cache.termRatings[cid];
-  try { return JSON.parse(localStorage.getItem('gb-term-ratings-'+cid))||{}; } catch (e) { console.warn('TermRatings parse fallback:', e); return {}; }
+  try {
+    return JSON.parse(localStorage.getItem('gb-term-ratings-' + cid)) || {};
+  } catch (e) {
+    console.warn('TermRatings parse fallback:', e);
+    return {};
+  }
 }
-function saveTermRatings(cid, obj) { _saveCourseField('termRatings', cid, obj); }
+function saveTermRatings(cid, obj) {
+  _saveCourseField('termRatings', cid, obj);
+}
 
 function getStudentTermRating(cid, sid, termId) {
   const all = getTermRatings(cid);
@@ -3272,24 +3984,49 @@ function upsertTermRating(cid, sid, termId, data) {
       narrative: '',
       created: now,
       modified: now,
-      ...data
+      ...data,
     };
   }
   saveTermRatings(cid, all);
+  if (_useSupabase && localStorage.getItem('gb-demo-mode') !== '1' && _isUuid(cid)) {
+    var student = getStudents(cid).find(function (s) {
+      return s.id === sid;
+    });
+    var canonicalStudentId = student && _isUuid(student.personId) ? student.personId : null;
+    if (canonicalStudentId) {
+      var sb = getSupabase();
+      if (sb) {
+        sb.rpc('upsert_term_rating', {
+          p_course_offering_id: cid,
+          p_student_id: canonicalStudentId,
+          p_term_id: termId,
+          p_patch: all[sid][termId],
+        }).then(function (res) {
+          if (res.error) console.warn('upsert_term_rating RPC failed:', res.error);
+        });
+      }
+    }
+  }
 }
 
 /* ── Report Config ─────────────────────────────────────────── */
 function getReportConfig(cid) {
   if (_cache.reportConfig[cid] !== undefined) return _cache.reportConfig[cid];
-  try { return JSON.parse(localStorage.getItem('gb-report-config-'+cid)) || null; } catch (e) { console.warn('ReportConfig parse fallback:', e); return null; }
+  try {
+    return JSON.parse(localStorage.getItem('gb-report-config-' + cid)) || null;
+  } catch (e) {
+    console.warn('ReportConfig parse fallback:', e);
+    return null;
+  }
 }
 function saveReportConfig(cid, config) {
   _saveCourseField('reportConfig', cid, config);
   if (_useSupabase && cid) {
     const sb = getSupabase();
     if (sb) {
-      sb.rpc('save_report_config', { p_course_offering_id: cid, p_config: config || {} })
-        .then(function(res) { if (res.error) console.warn('save_report_config RPC failed:', res.error); });
+      sb.rpc('save_report_config', { p_course_offering_id: cid, p_config: config || {} }).then(function (res) {
+        if (res.error) console.warn('save_report_config RPC failed:', res.error);
+      });
     }
   }
 }
@@ -3298,7 +4035,7 @@ function saveReportConfig(cid, config) {
 function _defaultWidgetConfig() {
   var order = [];
   var disabled = [];
-  WIDGET_REGISTRY.forEach(function(w) {
+  WIDGET_REGISTRY.forEach(function (w) {
     if (w.defaultOn) order.push(w.key);
     else disabled.push(w.key);
   });
@@ -3311,14 +4048,18 @@ function getCardWidgetConfig() {
 
   // Filter out unknown keys
   var validKeys = new Set(WIDGET_KEYS);
-  var order = raw.order.filter(function(k) { return validKeys.has(k); });
+  var order = raw.order.filter(function (k) {
+    return validKeys.has(k);
+  });
   var disabled = Array.isArray(raw.disabled)
-    ? raw.disabled.filter(function(k) { return validKeys.has(k); })
+    ? raw.disabled.filter(function (k) {
+        return validKeys.has(k);
+      })
     : [];
 
   // Find any registry keys missing from both arrays (future-proofing)
   var present = new Set(order.concat(disabled));
-  WIDGET_KEYS.forEach(function(k) {
+  WIDGET_KEYS.forEach(function (k) {
     if (!present.has(k)) disabled.push(k);
   });
 
@@ -3330,7 +4071,11 @@ function saveCardWidgetConfig(config) {
 }
 
 function clearCardWidgetConfig() {
-  try { localStorage.removeItem('m-card-widgets'); } catch (e) { /* storage error */ }
+  try {
+    localStorage.removeItem('m-card-widgets');
+  } catch (e) {
+    /* storage error */
+  }
 }
 
 /* ── Namespace ──────────────────────────────────────────────── */
@@ -3341,7 +4086,9 @@ window.GB = {
   getLastSyncedAt,
   retrySyncs,
   refreshFromSupabase: _refreshFromSupabase,
-  registerMobileRerender: function(fn) { _mobileRerender = fn; },
+  registerMobileRerender: function (fn) {
+    _mobileRerender = fn;
+  },
   initAllCourses,
   initData,
   esc,
@@ -3414,7 +4161,8 @@ window.GB = {
   getNotes,
   saveNotes,
   getScores,
-  saveScores, upsertScore,
+  saveScores,
+  upsertScore,
   getPointsScore,
   setPointsScore,
   getActiveCourse,
@@ -3460,16 +4208,22 @@ window.GB = {
  * Existing teachers with data already in localStorage never trigger the fetch.
  * Safe to call from any portal — seed-data.js has its own internal guards.
  */
-window.loadSeedIfNeeded = function() {
+window.loadSeedIfNeeded = function () {
   // Already loaded this session — call directly (handles re-seed after data reset)
-  if (typeof seedIfNeeded === 'function') { seedIfNeeded(); return Promise.resolve(); }
+  if (typeof seedIfNeeded === 'function') {
+    seedIfNeeded();
+    return Promise.resolve();
+  }
   // User deliberately wiped all data — never auto-seed
   if (localStorage.getItem('gb-data-wiped') === '1') return Promise.resolve();
   // Lazy-load the script, then seed
-  return new Promise(function(resolve) {
+  return new Promise(function (resolve) {
     var s = document.createElement('script');
     s.src = '/shared/seed-data.js';
-    s.onload = function() { if (typeof seedIfNeeded === 'function') seedIfNeeded(); resolve(); };
+    s.onload = function () {
+      if (typeof seedIfNeeded === 'function') seedIfNeeded();
+      resolve();
+    };
     s.onerror = resolve;
     document.head.appendChild(s);
   });
