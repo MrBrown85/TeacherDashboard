@@ -601,6 +601,17 @@
 .tq-panel[data-panel-id="academic-snapshot"]     { grid-column:span 6; }
 .tq-panel[data-panel-id="narrative-comment"]     { grid-column:span 6; }
 
+/* Match heights within each row. Row 1 (dispositions / relational /
+   quick-profile) and Row 3 (academic-snapshot / narrative-comment) each
+   stretch their siblings to the tallest panel in the row. Overrides the
+   container's align-items:start for these five only; observations (alone
+   on Row 2) stays at natural content height. */
+.tq-panel[data-panel-id="learning-dispositions"],
+.tq-panel[data-panel-id="relational-identity"],
+.tq-panel[data-panel-id="quick-profile"],
+.tq-panel[data-panel-id="academic-snapshot"],
+.tq-panel[data-panel-id="narrative-comment"] { align-self:stretch; }
+
 /* Internal scroll caps — panels flow, but long lists cap their own height.
    Observations list splits into two columns at wide widths (the observations
    panel is span-12 full-bleed; a single-column list wastes the width).
