@@ -576,23 +576,70 @@
   font-family:'SF Mono', ui-monospace, 'Menlo', monospace; font-size:0.45rem; font-weight:700; color:var(--text-2);
 }
 
-/* ── Full-bleed 3-column workboard ── */
+/* ── Flow-based 12-column grid ──
+   Panels are direct children of .tq-wrap. Each panel sets its own
+   grid-column span via its [data-panel-id] selector below. The page
+   scrolls as a whole — no fixed workboard height. */
 .tq-wrap {
-  --tq-top-panel-height: 1020px;
-  --tq-bottom-panel-height: 180px;
-  display:grid; grid-template-columns:minmax(0, 1.12fr) minmax(0, 0.86fr) minmax(0, 1fr);
-  grid-template-rows:auto minmax(var(--tq-top-panel-height), auto) auto auto;
-  grid-template-areas:
-    "header  header  header"
-    "rateTop data    write"
-    "rateBottom obs  obs"
-    "footer  footer  footer";
-  gap:12px; padding:12px 2px 4px;
-  align-items:stretch;
+  display:grid;
+  grid-template-columns:repeat(12, minmax(0, 1fr));
+  gap:12px;
+  padding:12px 2px 4px;
+  grid-auto-flow:dense;
+  align-items:start;
 }
 
-/* ── Header bar — grid-area override for shared student header ── */
-.student-header-top { grid-area:header; margin-bottom:4px; }
+/* Full-bleed header + footer above/below the grid */
+.student-header-top { grid-column:1 / -1; margin-bottom:4px; }
+.tq-nav-footer { grid-column:1 / -1; }
+
+/* Panel spans (of 12) */
+.tq-panel[data-panel-id="learning-dispositions"] { grid-column:span 4; }
+.tq-panel[data-panel-id="relational-identity"]   { grid-column:span 4; }
+.tq-panel[data-panel-id="quick-profile"]         { grid-column:span 4; }
+.tq-panel[data-panel-id="observations"]          { grid-column:span 12; }
+.tq-panel[data-panel-id="academic-snapshot"]     { grid-column:span 6; }
+.tq-panel[data-panel-id="narrative-comment"]     { grid-column:span 6; }
+
+/* Internal scroll caps — panels flow, but long lists cap their own height */
+.tq-panel[data-panel-id="observations"] .tq-evidence-list {
+  max-height:420px; overflow-y:auto;
+}
+.tq-panel[data-panel-id="academic-snapshot"] .tq-assignment-list {
+  max-height:360px; overflow-y:auto;
+}
+.tq-narrative-editor { min-height:420px; }
+
+/* Self-reflections folded inside academic-snapshot */
+.tq-reflections-subsection { margin-top:14px; padding-top:12px; border-top:0.5px solid var(--divider-subtle); }
+.tq-reflections-subsection > summary {
+  cursor:pointer; list-style:none; user-select:none;
+  font-family:var(--font-base); font-size:var(--text-sm);
+  font-weight:650; text-transform:uppercase; letter-spacing:var(--tracking-wide);
+  color:var(--text-2); display:flex; align-items:center; gap:6px;
+}
+.tq-reflections-subsection > summary::-webkit-details-marker { display:none; }
+.tq-reflections-subsection > summary::before {
+  content:'▸'; font-size:var(--text-xs); color:var(--text-3);
+  transition:transform 0.15s ease;
+}
+.tq-reflections-subsection[open] > summary::before { transform:rotate(90deg); }
+.tq-reflections-subsection > .tq-reflections-body { margin-top:10px; }
+
+/* Responsive collapse */
+@media (max-width: 1280px) {
+  .tq-wrap { grid-template-columns:repeat(8, minmax(0, 1fr)); }
+  .tq-panel[data-panel-id="learning-dispositions"] { grid-column:span 4; }
+  .tq-panel[data-panel-id="relational-identity"]   { grid-column:span 4; }
+  .tq-panel[data-panel-id="quick-profile"]         { grid-column:span 8; }
+  .tq-panel[data-panel-id="observations"]          { grid-column:span 8; }
+  .tq-panel[data-panel-id="academic-snapshot"]     { grid-column:span 8; }
+  .tq-panel[data-panel-id="narrative-comment"]     { grid-column:span 8; }
+}
+@media (max-width: 900px) {
+  .tq-wrap { grid-template-columns:1fr; }
+  .tq-panel[data-panel-id] { grid-column:1 / -1; }
+}
 
 /* ── Panel cards (shared) ── */
 /* ═══════════════════════════════════════════════════════════════
@@ -611,7 +658,9 @@
   font-weight:650; text-transform:uppercase; letter-spacing:var(--tracking-wide);
   color:var(--text-2); margin-bottom:10px; display:flex; align-items:center; gap:8px;
 }
-.tq-panel.fill { flex:1; min-height:0; }
+/* .tq-panel.fill rule removed — was used by the old flex-column layout
+   to make a panel stretch to fill its column. No longer needed in the
+   12-col grid; panels size to their content. */
 .tq-panel-title.spread { justify-content:space-between; }
 .tq-panel-title .tq-panel-badge {
   font-family:var(--font-base);
@@ -619,21 +668,8 @@
   background:var(--overlay-hover); color:var(--text-3);
 }
 
-/* ── Column 1: Rate ── */
-.tq-col-rate-top {
-  grid-area:rateTop;
-  display:flex;
-  flex-direction:column;
-  gap:14px;
-  align-self:start;
-}
-.tq-col-rate-bottom {
-  grid-area:rateBottom;
-  display:flex;
-  flex-direction:column;
-  gap:14px;
-  align-self:stretch;
-}
+/* (Old column wrappers .tq-col-rate-top/.tq-col-rate-bottom removed —
+   panels are now direct grid children of .tq-wrap.) */
 
 /* Dimension rows — stacked label + segmented control */
 .tq-dim-row {
@@ -731,37 +767,9 @@
   border-top:0.5px solid var(--divider-subtle); margin:4px 0;
 }
 
-/* ── Column 2: Data — auto-populated panels ── */
-.tq-col-data,
-.tq-col-write,
-.tq-col-observations {
-  display:flex;
-  flex-direction:column;
-}
-.tq-col-data { grid-area:data; gap:12px; align-self:stretch; min-height:100%; }
-.tq-col-write { grid-area:write; gap:12px; align-self:stretch; min-height:100%; }
-.tq-col-observations { grid-area:obs; align-self:stretch; justify-content:flex-end; }
-.tq-col-data > .tq-panel.fill { flex:1 1 auto; min-height:100%; }
-.tq-col-write > .tq-panel.fill { flex:1 1 auto; min-height:100%; }
-.tq-col-observations > .tq-panel.fill { flex:0 0 auto; }
-.tq-col-data > .tq-panel[data-panel-id="academic-snapshot"] {
-  display:flex;
-  flex-direction:column;
-  height:var(--tq-top-panel-height);
-  max-height:var(--tq-top-panel-height);
-  min-height:var(--tq-top-panel-height);
-}
-.tq-col-write > .tq-panel[data-panel-id="narrative-comment"] {
-  height:var(--tq-top-panel-height);
-  max-height:var(--tq-top-panel-height);
-  min-height:var(--tq-top-panel-height);
-}
-.tq-col-observations > .tq-panel {
-  width:100%;
-  height:var(--tq-bottom-panel-height);
-  max-height:var(--tq-bottom-panel-height);
-}
-.tq-col-observations .tq-evidence-list { flex:1; min-height:0; overflow-y:auto; }
+/* (Old column wrappers .tq-col-data/.tq-col-write/.tq-col-observations and
+   their fixed-height rules removed — layout now flows via the 12-col grid
+   above. Observations list has its own max-height, set there.) */
 
 /* Snapshot rows */
 .tq-snapshot-grid { display:flex; flex-direction:column; gap:3px; }
