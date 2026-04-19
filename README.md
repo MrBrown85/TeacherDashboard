@@ -175,13 +175,39 @@ npm test               # Run full suite
 npm run test:watch     # Watch mode
 ```
 
-655 tests covering the calculation engine, data layer, and mobile UI components.
+~655 tests covering the calculation engine, data layer, and mobile UI components. See [`tests/`](tests/) and [`e2e/`](e2e/).
+
+---
+
+## Commands
+
+| Command                   | What it does                                                         |
+| ------------------------- | -------------------------------------------------------------------- |
+| `npm run dev`             | Local dev server on port 8347                                        |
+| `npm test`                | Vitest unit suite (one-shot)                                         |
+| `npm run test:watch`      | Vitest in watch mode                                                 |
+| `npm run test:e2e`        | Playwright E2E suite (headless)                                      |
+| `npm run test:e2e:headed` | Playwright with visible browser                                      |
+| `npm run format`          | Format all code with Prettier                                        |
+| `npm run format:check`    | Check formatting without writing                                     |
+| `npm run build`           | `bash scripts/build.sh` — copies public files to `dist/` for Netlify |
+
+First-time Playwright setup: `npx playwright install chromium`.
 
 ---
 
 ## Deployment
 
-Push to `main` — Netlify deploys automatically. `bash scripts/build.sh` copies the static site into `dist/`, Netlify publishes `dist/`, and the edge function injects Supabase credentials into HTML responses at request time.
+Push to `main` — Netlify deploys automatically. `bash scripts/build.sh` copies the static site into `dist/`, Netlify publishes `dist/`, and [`netlify/edge-functions/inject-env.js`](netlify/edge-functions/inject-env.js) injects Supabase credentials + per-request CSP nonce into HTML responses at request time.
+
+Env vars to set on the Netlify site (Settings → Environment variables):
+
+| Variable       | Source                                               |
+| -------------- | ---------------------------------------------------- |
+| `SUPABASE_URL` | Supabase → Project Settings → API                    |
+| `SUPABASE_KEY` | Supabase → Project Settings → API Keys → publishable |
+
+**Bump `CACHE_NAME` in [`sw.js`](sw.js) on every deploy** so installed PWAs evict the stale cache and pick up the new JS on next load.
 
 ---
 
