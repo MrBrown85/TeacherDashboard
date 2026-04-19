@@ -9,9 +9,7 @@ export default defineConfig({
     headless: true,
     screenshot: 'only-on-failure',
   },
-  projects: [
-    { name: 'chromium', use: { browserName: 'chromium' } },
-  ],
+  projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
   webServer: {
     command: 'python3 -m http.server 8347',
     port: 8347,

@@ -20,8 +20,8 @@
         --accent: #d4b15d;
         --shadow: 0 22px 60px rgba(19, 27, 47, 0.12);
         --radius: 26px;
-        --sans: "Avenir Next", "Segoe UI", sans-serif;
-        --mono: "SFMono-Regular", "SF Mono", "Consolas", monospace;
+        --sans: 'Avenir Next', 'Segoe UI', sans-serif;
+        --mono: 'SFMono-Regular', 'SF Mono', 'Consolas', monospace;
       }
 
       * {
@@ -45,7 +45,7 @@
       }
 
       body::before {
-        content: "";
+        content: '';
         position: fixed;
         inset: 0;
         pointer-events: none;
@@ -91,7 +91,7 @@
       }
 
       .hero-panel::after {
-        content: "";
+        content: '';
         position: absolute;
         right: -70px;
         top: -80px;
@@ -112,7 +112,7 @@
       }
 
       .eyebrow::before {
-        content: "";
+        content: '';
         width: 24px;
         height: 1px;
         background: currentColor;
@@ -149,7 +149,9 @@
         font: inherit;
         color: var(--ink);
         cursor: pointer;
-        transition: transform 180ms ease, background 180ms ease;
+        transition:
+          transform 180ms ease,
+          background 180ms ease;
       }
 
       .chip:hover,
@@ -293,7 +295,11 @@
         border-radius: 22px;
         background: rgba(255, 255, 255, 0.54);
         border: 1px solid rgba(22, 35, 61, 0.08);
-        transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, opacity 180ms ease;
+        transition:
+          transform 180ms ease,
+          border-color 180ms ease,
+          background 180ms ease,
+          opacity 180ms ease;
       }
 
       .step:hover,
@@ -322,19 +328,19 @@
         color: #fff;
       }
 
-      .step[data-tone="entry"] .step-index {
+      .step[data-tone='entry'] .step-index {
         background: var(--entry);
       }
 
-      .step[data-tone="runtime"] .step-index {
+      .step[data-tone='runtime'] .step-index {
         background: var(--runtime);
       }
 
-      .step[data-tone="state"] .step-index {
+      .step[data-tone='state'] .step-index {
         background: var(--state);
       }
 
-      .step[data-tone="backend"] .step-index {
+      .step[data-tone='backend'] .step-index {
         background: var(--backend);
       }
 
@@ -349,7 +355,7 @@
       }
 
       .step-body small::before {
-        content: "";
+        content: '';
         width: 8px;
         height: 8px;
         border-radius: 50%;
@@ -460,7 +466,7 @@
       }
 
       .detail-kicker::before {
-        content: "";
+        content: '';
         width: 10px;
         height: 10px;
         border-radius: 50%;
@@ -598,7 +604,9 @@
             </div>
             <div class="summary-item">
               <strong>Click any step</strong>
-              <span>The right-hand panel will explain what the teacher is doing, why it matters, and where it lives.</span>
+              <span
+                >The right-hand panel will explain what the teacher is doing, why it matters, and where it lives.</span
+              >
             </div>
           </div>
         </aside>
@@ -621,7 +629,10 @@
             <div class="section-head">
               <div>
                 <h2>User Flowcharts</h2>
-                <p>These are the teacher-facing journeys. Read these first if the goal is to understand actual use of the product.</p>
+                <p>
+                  These are the teacher-facing journeys. Read these first if the goal is to understand actual use of the
+                  product.
+                </p>
               </div>
             </div>
 
@@ -635,57 +646,105 @@
                 </div>
 
                 <div class="primary-flow">
-                  <article class="step" data-step="user-first-login" data-tone="entry" data-tags="user first time login sign in dashboard landing first run">
+                  <article
+                    class="step"
+                    data-step="user-first-login"
+                    data-tone="entry"
+                    data-tags="user first time login sign in dashboard landing first run"
+                  >
                     <div class="step-index">1</div>
                     <div class="step-body">
                       <small>Start</small>
                       <h3>Log in and land on the teacher dashboard</h3>
-                      <p>The teacher signs in, enters the teacher interface, and sees the desktop dashboard as the home base.</p>
+                      <p>
+                        The teacher signs in, enters the teacher interface, and sees the desktop dashboard as the home
+                        base.
+                      </p>
                     </div>
                   </article>
 
-                  <article class="step" data-step="user-first-class" data-tone="runtime" data-tags="user first time class setup roster course students import">
+                  <article
+                    class="step"
+                    data-step="user-first-class"
+                    data-tone="runtime"
+                    data-tags="user first time class setup roster course students import"
+                  >
                     <div class="step-index">2</div>
                     <div class="step-body">
                       <small>Class Setup</small>
                       <h3>Create or import the class roster</h3>
-                      <p>The teacher confirms the active course, adds students manually or imports a roster, and makes sure the class list is usable.</p>
+                      <p>
+                        The teacher confirms the active course, adds students manually or imports a roster, and makes
+                        sure the class list is usable.
+                      </p>
                     </div>
                   </article>
 
-                  <article class="step" data-step="user-first-assessment" data-tone="runtime" data-tags="user first time assignments assessment create learning targets tags">
+                  <article
+                    class="step"
+                    data-step="user-first-assessment"
+                    data-tone="runtime"
+                    data-tags="user first time assignments assessment create learning targets tags"
+                  >
                     <div class="step-index">3</div>
                     <div class="step-body">
                       <small>Assessment Setup</small>
                       <h3>Create the first assignment and connect it to learning targets</h3>
-                      <p>The teacher creates an assignment, picks the assessment type, and links it to the right tags or sections.</p>
+                      <p>
+                        The teacher creates an assignment, picks the assessment type, and links it to the right tags or
+                        sections.
+                      </p>
                     </div>
                   </article>
 
-                  <article class="step" data-step="user-first-evidence" data-tone="state" data-tags="user first time observations grades comments evidence entry">
+                  <article
+                    class="step"
+                    data-step="user-first-evidence"
+                    data-tone="state"
+                    data-tags="user first time observations grades comments evidence entry"
+                  >
                     <div class="step-index">4</div>
                     <div class="step-body">
                       <small>Evidence Entry</small>
                       <h3>Enter scores, notes, or observations for students</h3>
-                      <p>The teacher begins building evidence by grading work, marking proficiency, and recording comments or observations.</p>
+                      <p>
+                        The teacher begins building evidence by grading work, marking proficiency, and recording
+                        comments or observations.
+                      </p>
                     </div>
                   </article>
 
-                  <article class="step" data-step="user-first-report-build" data-tone="state" data-tags="user first time reports build preview questionnaire narrative">
+                  <article
+                    class="step"
+                    data-step="user-first-report-build"
+                    data-tone="state"
+                    data-tags="user first time reports build preview questionnaire narrative"
+                  >
                     <div class="step-index">5</div>
                     <div class="step-body">
                       <small>Reporting</small>
                       <h3>Open the reports page and build the report view</h3>
-                      <p>The teacher goes to reports, chooses the report structure, reviews narratives, and checks that each student’s report looks right.</p>
+                      <p>
+                        The teacher goes to reports, chooses the report structure, reviews narratives, and checks that
+                        each student’s report looks right.
+                      </p>
                     </div>
                   </article>
 
-                  <article class="step" data-step="user-first-print" data-tone="backend" data-tags="user first time print reports export final output">
+                  <article
+                    class="step"
+                    data-step="user-first-print"
+                    data-tone="backend"
+                    data-tags="user first time print reports export final output"
+                  >
                     <div class="step-index">6</div>
                     <div class="step-body">
                       <small>Output</small>
                       <h3>Print or export the finished reports</h3>
-                      <p>The teacher produces the final parent-facing output after reviewing the report content and layout.</p>
+                      <p>
+                        The teacher produces the final parent-facing output after reviewing the report content and
+                        layout.
+                      </p>
                     </div>
                   </article>
                 </div>
@@ -700,57 +759,104 @@
                 </div>
 
                 <div class="primary-flow">
-                  <article class="step" data-step="user-assign-open" data-tone="runtime" data-tags="teacher workflow assignments page open planning">
+                  <article
+                    class="step"
+                    data-step="user-assign-open"
+                    data-tone="runtime"
+                    data-tags="teacher workflow assignments page open planning"
+                  >
                     <div class="step-index">1</div>
                     <div class="step-body">
                       <small>Planning</small>
                       <h3>Open the assignments area for the current course</h3>
-                      <p>The teacher enters the assignments workflow for the active course and reviews existing assessment items.</p>
+                      <p>
+                        The teacher enters the assignments workflow for the active course and reviews existing
+                        assessment items.
+                      </p>
                     </div>
                   </article>
 
-                  <article class="step" data-step="user-assign-create" data-tone="runtime" data-tags="teacher workflow create assignment title date type rubric tags">
+                  <article
+                    class="step"
+                    data-step="user-assign-create"
+                    data-tone="runtime"
+                    data-tags="teacher workflow create assignment title date type rubric tags"
+                  >
                     <div class="step-index">2</div>
                     <div class="step-body">
                       <small>Assignment Setup</small>
                       <h3>Create or edit the assignment details</h3>
-                      <p>The teacher adds the title, date, type, tags, rubric, and any weight or scoring mode for the task.</p>
+                      <p>
+                        The teacher adds the title, date, type, tags, rubric, and any weight or scoring mode for the
+                        task.
+                      </p>
                     </div>
                   </article>
 
-                  <article class="step" data-step="user-assign-grade" data-tone="state" data-tags="teacher workflow enter grades scores proficiency points gradebook speed grader">
+                  <article
+                    class="step"
+                    data-step="user-assign-grade"
+                    data-tone="state"
+                    data-tags="teacher workflow enter grades scores proficiency points gradebook speed grader"
+                  >
                     <div class="step-index">3</div>
                     <div class="step-body">
                       <small>Grading</small>
                       <h3>Enter grades or proficiency for each student</h3>
-                      <p>The teacher records grades in the assignment view, gradebook, or mobile grading surface depending on context.</p>
+                      <p>
+                        The teacher records grades in the assignment view, gradebook, or mobile grading surface
+                        depending on context.
+                      </p>
                     </div>
                   </article>
 
-                  <article class="step" data-step="user-assign-comment" data-tone="state" data-tags="teacher workflow comments feedback notes observation narrative">
+                  <article
+                    class="step"
+                    data-step="user-assign-comment"
+                    data-tone="state"
+                    data-tags="teacher workflow comments feedback notes observation narrative"
+                  >
                     <div class="step-index">4</div>
                     <div class="step-body">
                       <small>Comments</small>
                       <h3>Add comments, observations, or feedback</h3>
-                      <p>The teacher records comment-level evidence that gives context beyond a score and helps with later reporting.</p>
+                      <p>
+                        The teacher records comment-level evidence that gives context beyond a score and helps with
+                        later reporting.
+                      </p>
                     </div>
                   </article>
 
-                  <article class="step" data-step="user-assign-review" data-tone="state" data-tags="teacher workflow review gradebook dashboard student profile check progress">
+                  <article
+                    class="step"
+                    data-step="user-assign-review"
+                    data-tone="state"
+                    data-tags="teacher workflow review gradebook dashboard student profile check progress"
+                  >
                     <div class="step-index">5</div>
                     <div class="step-body">
                       <small>Review</small>
                       <h3>Review progress in gradebook, dashboard, or student view</h3>
-                      <p>The teacher checks whether the evidence looks complete, which students need attention, and how proficiency is trending.</p>
+                      <p>
+                        The teacher checks whether the evidence looks complete, which students need attention, and how
+                        proficiency is trending.
+                      </p>
                     </div>
                   </article>
 
-                  <article class="step" data-step="user-assign-report" data-tone="backend" data-tags="teacher workflow report output share print comments grades narrative">
+                  <article
+                    class="step"
+                    data-step="user-assign-report"
+                    data-tone="backend"
+                    data-tags="teacher workflow report output share print comments grades narrative"
+                  >
                     <div class="step-index">6</div>
                     <div class="step-body">
                       <small>Reuse</small>
                       <h3>Carry that evidence into reports</h3>
-                      <p>The same assignments, grades, and comments later feed the reporting workflow without re-entry.</p>
+                      <p>
+                        The same assignments, grades, and comments later feed the reporting workflow without re-entry.
+                      </p>
                     </div>
                   </article>
                 </div>
@@ -762,12 +868,19 @@
             <div class="section-head">
               <div>
                 <h2>Main Flow</h2>
-                <p>The shortest correct mental model of the whole system. If this part makes sense, the app makes sense.</p>
+                <p>
+                  The shortest correct mental model of the whole system. If this part makes sense, the app makes sense.
+                </p>
               </div>
             </div>
 
             <div class="primary-flow">
-              <article class="step" data-step="enter" data-tone="entry" data-tags="entry auth netlify browser login shell mobile desktop">
+              <article
+                class="step"
+                data-step="enter"
+                data-tone="entry"
+                data-tags="entry auth netlify browser login shell mobile desktop"
+              >
                 <div class="step-index">1</div>
                 <div class="step-body">
                   <small>Entry + Delivery</small>
@@ -785,7 +898,12 @@
                 </div>
               </article>
 
-              <article class="step" data-step="shell" data-tone="runtime" data-tags="runtime router shell ui desktop mobile pages tabs">
+              <article
+                class="step"
+                data-step="shell"
+                data-tone="runtime"
+                data-tags="runtime router shell ui desktop mobile pages tabs"
+              >
                 <div class="step-index">2</div>
                 <div class="step-body">
                   <small>UI Runtime</small>
@@ -801,15 +919,20 @@
                 </div>
               </article>
 
-              <article class="step" data-step="local" data-tone="state" data-tags="state data cache localstorage offline sync write read">
+              <article
+                class="step"
+                data-step="local"
+                data-tone="state"
+                data-tags="state data cache localstorage offline sync write read"
+              >
                 <div class="step-index">3</div>
                 <div class="step-body">
                   <small>Local-First State</small>
                   <h3>The app reads and writes locally first</h3>
                   <p>
                     <code>shared/data.js</code> is the center of gravity. Screens read synchronously from memory and
-                    localStorage. When a teacher changes data, the app updates locally immediately so the interface stays
-                    fast and resilient.
+                    localStorage. When a teacher changes data, the app updates locally immediately so the interface
+                    stays fast and resilient.
                   </p>
                   <div class="step-actions">
                     <a class="link-chip" href="../shared/data.js">shared/data.js</a>
@@ -818,7 +941,12 @@
                 </div>
               </article>
 
-              <article class="step" data-step="logic" data-tone="state" data-tags="calc report observations proficiency logic state interpretation">
+              <article
+                class="step"
+                data-step="logic"
+                data-tone="state"
+                data-tags="calc report observations proficiency logic state interpretation"
+              >
                 <div class="step-index">4</div>
                 <div class="step-body">
                   <small>Interpretation Layer</small>
@@ -835,7 +963,12 @@
                 </div>
               </article>
 
-              <article class="step" data-step="backend" data-tone="backend" data-tags="supabase rpc database canonical backend auth schema">
+              <article
+                class="step"
+                data-step="backend"
+                data-tone="backend"
+                data-tags="supabase rpc database canonical backend auth schema"
+              >
                 <div class="step-index">5</div>
                 <div class="step-body">
                   <small>Cloud Canon</small>
@@ -999,264 +1132,232 @@
 
     <script>
       const stepMeta = {
-        "user-first-login": {
-          label: "User Flowchart",
-          title: "1. Log in and land on the teacher dashboard",
+        'user-first-login': {
+          label: 'User Flowchart',
+          title: '1. Log in and land on the teacher dashboard',
           engineer:
-            "After authentication and portal routing, the teacher lands in the teacher shell and starts from the dashboard, which acts as the operational home screen for the active course.",
-          plain:
-            "The teacher gets into the app and starts from the main working surface.",
-          why:
-            "This is the point where the teacher stops thinking about access and starts thinking about class work.",
+            'After authentication and portal routing, the teacher lands in the teacher shell and starts from the dashboard, which acts as the operational home screen for the active course.',
+          plain: 'The teacher gets into the app and starts from the main working surface.',
+          why: 'This is the point where the teacher stops thinking about access and starts thinking about class work.',
           links: [
-            ["login-auth.js", "../login-auth.js"],
-            ["teacher/app.html", "../teacher/app.html"],
-            ["page-dashboard.js", "../teacher/page-dashboard.js"]
-          ]
+            ['login-auth.js', '../login-auth.js'],
+            ['teacher/app.html', '../teacher/app.html'],
+            ['page-dashboard.js', '../teacher/page-dashboard.js'],
+          ],
         },
-        "user-first-class": {
-          label: "User Flowchart",
-          title: "2. Create or import the class roster",
+        'user-first-class': {
+          label: 'User Flowchart',
+          title: '2. Create or import the class roster',
           engineer:
-            "The teacher either creates students manually or imports them through the roster tooling, establishing the course roster that later grading and reporting depend on.",
-          plain:
-            "Before anything meaningful can happen, the teacher needs a real class list.",
-          why:
-            "Roster setup is the first dependency for assignments, observations, gradebook views, and reports.",
+            'The teacher either creates students manually or imports them through the roster tooling, establishing the course roster that later grading and reporting depend on.',
+          plain: 'Before anything meaningful can happen, the teacher needs a real class list.',
+          why: 'Roster setup is the first dependency for assignments, observations, gradebook views, and reports.',
           links: [
-            ["dash-class-manager.js", "../teacher/dash-class-manager.js"],
-            ["teams-import.js", "../teacher/teams-import.js"],
-            ["shared/data.js", "../shared/data.js"]
-          ]
+            ['dash-class-manager.js', '../teacher/dash-class-manager.js'],
+            ['teams-import.js', '../teacher/teams-import.js'],
+            ['shared/data.js', '../shared/data.js'],
+          ],
         },
-        "user-first-assessment": {
-          label: "User Flowchart",
-          title: "3. Create the first assignment and connect it to learning targets",
+        'user-first-assessment': {
+          label: 'User Flowchart',
+          title: '3. Create the first assignment and connect it to learning targets',
           engineer:
-            "The teacher creates an assessment record, configures its metadata, and links it to the relevant tags or learning targets so future scores have instructional meaning.",
-          plain:
-            "The teacher defines what students are being assessed on, not just what the assignment is called.",
-          why:
-            "This is the bridge between classroom tasks and proficiency-based reporting.",
+            'The teacher creates an assessment record, configures its metadata, and links it to the relevant tags or learning targets so future scores have instructional meaning.',
+          plain: 'The teacher defines what students are being assessed on, not just what the assignment is called.',
+          why: 'This is the bridge between classroom tasks and proficiency-based reporting.',
           links: [
-            ["page-assignments.js", "../teacher/page-assignments.js"],
-            ["shared/calc.js", "../shared/calc.js"]
-          ]
+            ['page-assignments.js', '../teacher/page-assignments.js'],
+            ['shared/calc.js', '../shared/calc.js'],
+          ],
         },
-        "user-first-evidence": {
-          label: "User Flowchart",
-          title: "4. Enter scores, notes, or observations for students",
+        'user-first-evidence': {
+          label: 'User Flowchart',
+          title: '4. Enter scores, notes, or observations for students',
           engineer:
-            "The teacher starts populating the evidence model with scores, statuses, and qualitative observations, which are stored locally first and later synced canonically.",
-          plain:
-            "This is where the teacher starts recording real evidence of student learning.",
-          why:
-            "Without this step, reports remain structure without substance.",
+            'The teacher starts populating the evidence model with scores, statuses, and qualitative observations, which are stored locally first and later synced canonically.',
+          plain: 'This is where the teacher starts recording real evidence of student learning.',
+          why: 'Without this step, reports remain structure without substance.',
           links: [
-            ["page-gradebook.js", "../teacher/page-gradebook.js"],
-            ["page-observations.js", "../teacher/page-observations.js"],
-            ["shared/data.js", "../shared/data.js"]
-          ]
+            ['page-gradebook.js', '../teacher/page-gradebook.js'],
+            ['page-observations.js', '../teacher/page-observations.js'],
+            ['shared/data.js', '../shared/data.js'],
+          ],
         },
-        "user-first-report-build": {
-          label: "User Flowchart",
-          title: "5. Open reports and build the report view",
+        'user-first-report-build': {
+          label: 'User Flowchart',
+          title: '5. Open reports and build the report view',
           engineer:
-            "The reports page combines configuration, ratings, observations, and calculated proficiency into a teacher-reviewable report composition surface.",
-          plain:
-            "The teacher turns accumulated evidence into a report that families can understand.",
-          why:
-            "This is where the system starts producing outward-facing communication instead of internal tracking.",
+            'The reports page combines configuration, ratings, observations, and calculated proficiency into a teacher-reviewable report composition surface.',
+          plain: 'The teacher turns accumulated evidence into a report that families can understand.',
+          why: 'This is where the system starts producing outward-facing communication instead of internal tracking.',
           links: [
-            ["page-reports.js", "../teacher/page-reports.js"],
-            ["report-blocks.js", "../teacher/report-blocks.js"],
-            ["report-questionnaire.js", "../teacher/report-questionnaire.js"]
-          ]
+            ['page-reports.js', '../teacher/page-reports.js'],
+            ['report-blocks.js', '../teacher/report-blocks.js'],
+            ['report-questionnaire.js', '../teacher/report-questionnaire.js'],
+          ],
         },
-        "user-first-print": {
-          label: "User Flowchart",
-          title: "6. Print or export the finished reports",
+        'user-first-print': {
+          label: 'User Flowchart',
+          title: '6. Print or export the finished reports',
           engineer:
-            "After report review, the teacher moves from editable report composition into final output generation for printing or sharing.",
-          plain:
-            "The teacher produces the final deliverable.",
-          why:
-            "This is the end of the first-run value chain: from login to a real parent-facing artifact.",
+            'After report review, the teacher moves from editable report composition into final output generation for printing or sharing.',
+          plain: 'The teacher produces the final deliverable.',
+          why: 'This is the end of the first-run value chain: from login to a real parent-facing artifact.',
           links: [
-            ["page-reports.js", "../teacher/page-reports.js"],
-            ["report-blocks.js", "../teacher/report-blocks.js"]
-          ]
+            ['page-reports.js', '../teacher/page-reports.js'],
+            ['report-blocks.js', '../teacher/report-blocks.js'],
+          ],
         },
-        "user-assign-open": {
-          label: "User Flowchart",
-          title: "1. Open the assignments area for the current course",
+        'user-assign-open': {
+          label: 'User Flowchart',
+          title: '1. Open the assignments area for the current course',
           engineer:
-            "The teacher enters the assignment-management surface for the active course and sees the current assessment set for planning or editing.",
-          plain:
-            "This is the control room for assignment work.",
-          why:
-            "It anchors the recurring workflow in one predictable place.",
+            'The teacher enters the assignment-management surface for the active course and sees the current assessment set for planning or editing.',
+          plain: 'This is the control room for assignment work.',
+          why: 'It anchors the recurring workflow in one predictable place.',
           links: [
-            ["page-assignments.js", "../teacher/page-assignments.js"],
-            ["teacher/router.js", "../teacher/router.js"]
-          ]
+            ['page-assignments.js', '../teacher/page-assignments.js'],
+            ['teacher/router.js', '../teacher/router.js'],
+          ],
         },
-        "user-assign-create": {
-          label: "User Flowchart",
-          title: "2. Create or edit the assignment details",
+        'user-assign-create': {
+          label: 'User Flowchart',
+          title: '2. Create or edit the assignment details',
           engineer:
-            "The teacher configures the assessment object: title, date, type, rubric, tags, collaboration mode, and any scoring rules such as points or proficiency.",
-          plain:
-            "The teacher defines how the assignment should behave before entering any student results.",
-          why:
-            "Good setup makes later grading and reporting cleaner and more consistent.",
+            'The teacher configures the assessment object: title, date, type, rubric, tags, collaboration mode, and any scoring rules such as points or proficiency.',
+          plain: 'The teacher defines how the assignment should behave before entering any student results.',
+          why: 'Good setup makes later grading and reporting cleaner and more consistent.',
           links: [
-            ["page-assignments.js", "../teacher/page-assignments.js"],
-            ["assign-collab.js", "../teacher/assign-collab.js"]
-          ]
+            ['page-assignments.js', '../teacher/page-assignments.js'],
+            ['assign-collab.js', '../teacher/assign-collab.js'],
+          ],
         },
-        "user-assign-grade": {
-          label: "User Flowchart",
-          title: "3. Enter grades or proficiency for each student",
+        'user-assign-grade': {
+          label: 'User Flowchart',
+          title: '3. Enter grades or proficiency for each student',
           engineer:
-            "The teacher records student-level results through assignment views, gradebook surfaces, or mobile grade flows, feeding the shared score model.",
-          plain:
-            "This is the main grade-entry step.",
-          why:
-            "It creates the structured evidence the app can calculate from.",
+            'The teacher records student-level results through assignment views, gradebook surfaces, or mobile grade flows, feeding the shared score model.',
+          plain: 'This is the main grade-entry step.',
+          why: 'It creates the structured evidence the app can calculate from.',
           links: [
-            ["page-gradebook.js", "../teacher/page-gradebook.js"],
-            ["teacher-mobile/tab-grade.js", "../teacher-mobile/tab-grade.js"],
-            ["shared/data.js", "../shared/data.js"]
-          ]
+            ['page-gradebook.js', '../teacher/page-gradebook.js'],
+            ['teacher-mobile/tab-grade.js', '../teacher-mobile/tab-grade.js'],
+            ['shared/data.js', '../shared/data.js'],
+          ],
         },
-        "user-assign-comment": {
-          label: "User Flowchart",
-          title: "4. Add comments, observations, or feedback",
+        'user-assign-comment': {
+          label: 'User Flowchart',
+          title: '4. Add comments, observations, or feedback',
           engineer:
-            "The teacher captures qualitative evidence alongside numerical or proficiency-based grading so the record includes context, not just scores.",
-          plain:
-            "This is where teacher judgment and narrative context get added.",
-          why:
-            "Comments and observations are often what make reports useful rather than merely accurate.",
+            'The teacher captures qualitative evidence alongside numerical or proficiency-based grading so the record includes context, not just scores.',
+          plain: 'This is where teacher judgment and narrative context get added.',
+          why: 'Comments and observations are often what make reports useful rather than merely accurate.',
           links: [
-            ["page-observations.js", "../teacher/page-observations.js"],
-            ["page-student.js", "../teacher/page-student.js"],
-            ["shared/data.js", "../shared/data.js"]
-          ]
+            ['page-observations.js', '../teacher/page-observations.js'],
+            ['page-student.js', '../teacher/page-student.js'],
+            ['shared/data.js', '../shared/data.js'],
+          ],
         },
-        "user-assign-review": {
-          label: "User Flowchart",
-          title: "5. Review progress in gradebook, dashboard, or student view",
+        'user-assign-review': {
+          label: 'User Flowchart',
+          title: '5. Review progress in gradebook, dashboard, or student view',
           engineer:
-            "The teacher inspects how recently entered evidence propagates into dashboards, gradebook summaries, and student-level views, verifying completeness and identifying follow-up needs.",
-          plain:
-            "The teacher checks whether the class picture now makes sense.",
-          why:
-            "Review closes the loop between entry and instructional decision-making.",
+            'The teacher inspects how recently entered evidence propagates into dashboards, gradebook summaries, and student-level views, verifying completeness and identifying follow-up needs.',
+          plain: 'The teacher checks whether the class picture now makes sense.',
+          why: 'Review closes the loop between entry and instructional decision-making.',
           links: [
-            ["page-dashboard.js", "../teacher/page-dashboard.js"],
-            ["page-gradebook.js", "../teacher/page-gradebook.js"],
-            ["page-student.js", "../teacher/page-student.js"]
-          ]
+            ['page-dashboard.js', '../teacher/page-dashboard.js'],
+            ['page-gradebook.js', '../teacher/page-gradebook.js'],
+            ['page-student.js', '../teacher/page-student.js'],
+          ],
         },
-        "user-assign-report": {
-          label: "User Flowchart",
-          title: "6. Carry assignments, grades, and comments into reports",
+        'user-assign-report': {
+          label: 'User Flowchart',
+          title: '6. Carry assignments, grades, and comments into reports',
           engineer:
-            "Previously entered assessment and comment data becomes reusable reporting input, so the teacher does not have to reconstruct the story at report time.",
-          plain:
-            "The work done during teaching becomes report-ready later.",
-          why:
-            "This is the payoff for consistent entry during the term.",
+            'Previously entered assessment and comment data becomes reusable reporting input, so the teacher does not have to reconstruct the story at report time.',
+          plain: 'The work done during teaching becomes report-ready later.',
+          why: 'This is the payoff for consistent entry during the term.',
           links: [
-            ["page-reports.js", "../teacher/page-reports.js"],
-            ["report-blocks.js", "../teacher/report-blocks.js"],
-            ["shared/calc.js", "../shared/calc.js"]
-          ]
+            ['page-reports.js', '../teacher/page-reports.js'],
+            ['report-blocks.js', '../teacher/report-blocks.js'],
+            ['shared/calc.js', '../shared/calc.js'],
+          ],
         },
         enter: {
-          label: "Main Flow",
-          title: "1. Teacher opens the app",
+          label: 'Main Flow',
+          title: '1. Teacher opens the app',
           engineer:
-            "A request hits Netlify, the edge function injects environment placeholders and CSP nonce into HTML, then login routing and viewport/device logic determine whether the user lands in the login page, desktop shell, or mobile shell.",
-          plain:
-            "The app first figures out who the teacher is and which front door they should use.",
-          why:
-            "This explains why login, device behavior, and environment injection belong in the same first step.",
+            'A request hits Netlify, the edge function injects environment placeholders and CSP nonce into HTML, then login routing and viewport/device logic determine whether the user lands in the login page, desktop shell, or mobile shell.',
+          plain: 'The app first figures out who the teacher is and which front door they should use.',
+          why: 'This explains why login, device behavior, and environment injection belong in the same first step.',
           links: [
-            ["inject-env.js", "../netlify/edge-functions/inject-env.js"],
-            ["login-auth.js", "../login-auth.js"],
-            ["teacher/app.html", "../teacher/app.html"],
-            ["teacher-mobile/index.html", "../teacher-mobile/index.html"]
-          ]
+            ['inject-env.js', '../netlify/edge-functions/inject-env.js'],
+            ['login-auth.js', '../login-auth.js'],
+            ['teacher/app.html', '../teacher/app.html'],
+            ['teacher-mobile/index.html', '../teacher-mobile/index.html'],
+          ],
         },
         shell: {
-          label: "Main Flow",
-          title: "2. The shell takes over",
+          label: 'Main Flow',
+          title: '2. The shell takes over',
           engineer:
-            "Desktop and mobile are separate runtime shells. Desktop uses router-driven page modules; mobile uses a tab shell and stacked touch flows. Both are consumers of the same shared domain model.",
-          plain:
-            "There are two different user interfaces, but they are looking at the same underlying class data.",
-          why:
-            "This is the cleanest way to understand why the product feels different across devices without being two different products.",
+            'Desktop and mobile are separate runtime shells. Desktop uses router-driven page modules; mobile uses a tab shell and stacked touch flows. Both are consumers of the same shared domain model.',
+          plain: 'There are two different user interfaces, but they are looking at the same underlying class data.',
+          why: 'This is the cleanest way to understand why the product feels different across devices without being two different products.',
           links: [
-            ["teacher/router.js", "../teacher/router.js"],
-            ["teacher-mobile/shell.js", "../teacher-mobile/shell.js"]
-          ]
+            ['teacher/router.js', '../teacher/router.js'],
+            ['teacher-mobile/shell.js', '../teacher-mobile/shell.js'],
+          ],
         },
         local: {
-          label: "Main Flow",
-          title: "3. The app works locally first",
+          label: 'Main Flow',
+          title: '3. The app works locally first',
           engineer:
-            "The in-memory cache and localStorage mirror allow synchronous reads and immediate writes. The UI is not coupled to network latency. The data layer also handles retries, broadcast signaling, and sync status.",
+            'The in-memory cache and localStorage mirror allow synchronous reads and immediate writes. The UI is not coupled to network latency. The data layer also handles retries, broadcast signaling, and sync status.',
           plain:
-            "The app behaves like it has its own notebook. It saves locally first, then worries about the cloud second.",
-          why:
-            "This is the key to FullVision’s responsiveness and offline resilience.",
+            'The app behaves like it has its own notebook. It saves locally first, then worries about the cloud second.',
+          why: 'This is the key to FullVision’s responsiveness and offline resilience.',
           links: [
-            ["shared/data.js", "../shared/data.js"],
-            ["docs/ARCHITECTURE.md", "../docs/ARCHITECTURE.md"]
-          ]
+            ['shared/data.js', '../shared/data.js'],
+            ['docs/ARCHITECTURE.md', '../docs/ARCHITECTURE.md'],
+          ],
         },
         logic: {
-          label: "Main Flow",
-          title: "4. Evidence becomes meaning",
+          label: 'Main Flow',
+          title: '4. Evidence becomes meaning',
           engineer:
-            "The calculation and report layers interpret raw records rather than storing them. Score events, statuses, overrides, and observations are transformed into proficiency summaries and reporting outputs.",
+            'The calculation and report layers interpret raw records rather than storing them. Score events, statuses, overrides, and observations are transformed into proficiency summaries and reporting outputs.',
           plain:
-            "The app does not just store teacher input. It interprets that input into useful judgments and narratives.",
-          why:
-            "This is where the product’s educational philosophy becomes real code.",
+            'The app does not just store teacher input. It interprets that input into useful judgments and narratives.',
+          why: 'This is where the product’s educational philosophy becomes real code.',
           links: [
-            ["shared/calc.js", "../shared/calc.js"],
-            ["page-reports.js", "../teacher/page-reports.js"],
-            ["report-blocks.js", "../teacher/report-blocks.js"]
-          ]
+            ['shared/calc.js', '../shared/calc.js'],
+            ['page-reports.js', '../teacher/page-reports.js'],
+            ['report-blocks.js', '../teacher/report-blocks.js'],
+          ],
         },
         backend: {
-          label: "Main Flow",
-          title: "5. Background sync updates the official record",
+          label: 'Main Flow',
+          title: '5. Background sync updates the official record',
           engineer:
-            "The frontend does not write directly to exposed tables. It uses guarded public RPCs that update the canonical multi-schema Supabase backend. Local temporary IDs can later be patched to canonical IDs.",
-          plain:
-            "The cloud becomes the official record after the teacher has already kept working.",
-          why:
-            "This explains how the app can be both fast for the teacher and rigorous about its durable backend.",
+            'The frontend does not write directly to exposed tables. It uses guarded public RPCs that update the canonical multi-schema Supabase backend. Local temporary IDs can later be patched to canonical IDs.',
+          plain: 'The cloud becomes the official record after the teacher has already kept working.',
+          why: 'This explains how the app can be both fast for the teacher and rigorous about its durable backend.',
           links: [
-            ["shared/supabase.js", "../shared/supabase.js"],
-            ["schema.sql", "../schema.sql"]
-          ]
-        }
+            ['shared/supabase.js', '../shared/supabase.js'],
+            ['schema.sql', '../schema.sql'],
+          ],
+        },
       };
 
-      const steps = Array.from(document.querySelectorAll(".step"));
-      const detailContent = document.getElementById("detail-content");
-      const searchInput = document.getElementById("concept-search");
-      const statusBar = document.getElementById("status-bar");
+      const steps = Array.from(document.querySelectorAll('.step'));
+      const detailContent = document.getElementById('detail-content');
+      const searchInput = document.getElementById('concept-search');
+      const statusBar = document.getElementById('status-bar');
 
-      let activeStep = "user-first-login";
-      let searchTerm = "";
+      let activeStep = 'user-first-login';
+      let searchTerm = '';
 
       function renderDetail(stepKey) {
         const item = stepMeta[stepKey];
@@ -1279,7 +1380,7 @@
           <div class="detail-block">
             <strong>Relevant Files</strong>
             <div class="detail-links">
-              ${item.links.map(([label, href]) => `<a class="link-chip" href="${href}">${label}</a>`).join("")}
+              ${item.links.map(([label, href]) => `<a class="link-chip" href="${href}">${label}</a>`).join('')}
             </div>
           </div>
         `;
@@ -1289,54 +1390,55 @@
           <button class="chip" data-action="clear-search" type="button">Clear Search</button>
         `;
 
-        statusBar.querySelector('[data-action="clear-search"]').addEventListener("click", clearSearch);
+        statusBar.querySelector('[data-action="clear-search"]').addEventListener('click', clearSearch);
       }
 
       function applyState() {
-        steps.forEach((step) => {
-          const tagString = (step.dataset.tags || "").toLowerCase();
-          const matchesSearch = !searchTerm || tagString.includes(searchTerm) || step.textContent.toLowerCase().includes(searchTerm);
-          step.classList.toggle("active", step.dataset.step === activeStep);
-          step.classList.toggle("dimmed", !matchesSearch);
+        steps.forEach(step => {
+          const tagString = (step.dataset.tags || '').toLowerCase();
+          const matchesSearch =
+            !searchTerm || tagString.includes(searchTerm) || step.textContent.toLowerCase().includes(searchTerm);
+          step.classList.toggle('active', step.dataset.step === activeStep);
+          step.classList.toggle('dimmed', !matchesSearch);
         });
       }
 
       function clearSearch() {
-        searchTerm = "";
-        searchInput.value = "";
+        searchTerm = '';
+        searchInput.value = '';
         applyState();
       }
 
-      steps.forEach((step) => {
-        step.addEventListener("click", () => {
+      steps.forEach(step => {
+        step.addEventListener('click', () => {
           activeStep = step.dataset.step;
           renderDetail(activeStep);
           applyState();
         });
       });
 
-      searchInput.addEventListener("input", () => {
+      searchInput.addEventListener('input', () => {
         searchTerm = searchInput.value.trim().toLowerCase();
         applyState();
       });
 
-      searchInput.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter") return;
-        const match = steps.find((step) => {
-          const tagString = (step.dataset.tags || "").toLowerCase();
+      searchInput.addEventListener('keydown', event => {
+        if (event.key !== 'Enter') return;
+        const match = steps.find(step => {
+          const tagString = (step.dataset.tags || '').toLowerCase();
           return !searchTerm || tagString.includes(searchTerm) || step.textContent.toLowerCase().includes(searchTerm);
         });
         if (!match) return;
         activeStep = match.dataset.step;
         renderDetail(activeStep);
         applyState();
-        match.scrollIntoView({ behavior: "smooth", block: "center" });
+        match.scrollIntoView({ behavior: 'smooth', block: 'center' });
       });
 
-      document.querySelectorAll("[data-jump]").forEach((button) => {
-        button.addEventListener("click", () => {
+      document.querySelectorAll('[data-jump]').forEach(button => {
+        button.addEventListener('click', () => {
           const target = document.getElementById(button.dataset.jump);
-          if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+          if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
       });
 

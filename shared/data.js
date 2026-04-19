@@ -1478,9 +1478,11 @@ async function _rpcData(sb, name, params) {
     var schemaName = parts.shift();
     fnName = parts.join('.');
     if (!schemaName || !fnName) throw new Error('Invalid RPC name: ' + name);
-    if (!sb.schema || typeof sb.schema !== 'function') throw new Error('Supabase schema client unavailable for ' + name);
+    if (!sb.schema || typeof sb.schema !== 'function')
+      throw new Error('Supabase schema client unavailable for ' + name);
     target = sb.schema(schemaName);
-    if (!target || typeof target.rpc !== 'function') throw new Error('Supabase schema RPC client unavailable for ' + name);
+    if (!target || typeof target.rpc !== 'function')
+      throw new Error('Supabase schema RPC client unavailable for ' + name);
   }
   var res = await target.rpc(fnName, params || {});
   if (res && !res.error) return res.data;
@@ -1493,7 +1495,7 @@ function _isMissingRpcError(error) {
   var message = String(error.message || '');
   return (
     message.indexOf('Could not find the function') >= 0 ||
-    message.indexOf('function') >= 0 && message.indexOf('does not exist') >= 0 ||
+    (message.indexOf('function') >= 0 && message.indexOf('does not exist') >= 0) ||
     message.indexOf('schema cache') >= 0
   );
 }
@@ -1610,7 +1612,8 @@ function _canonicalAssessmentsToBlob(rows) {
     var moduleId = _firstDefined(r, ['module_id', 'moduleId']);
     var dateAssigned = _firstDefined(r, ['assigned_at', 'date_assigned', 'dateAssigned']);
     if (scoreMode) assessment.scoreMode = scoreMode;
-    if (maxPoints !== null && maxPoints !== undefined && maxPoints !== '') assessment.maxPoints = _numberOr(maxPoints, 0);
+    if (maxPoints !== null && maxPoints !== undefined && maxPoints !== '')
+      assessment.maxPoints = _numberOr(maxPoints, 0);
     if (notes) assessment.notes = notes;
     if (rubricId) assessment.rubricId = rubricId;
     if (moduleId) assessment.moduleId = moduleId;
@@ -1716,7 +1719,10 @@ function _canonicalOutcomesToLearningMap(cid, rows) {
     .map(function (row) {
       var tagId = _firstDefined(row, ['course_outcome_id', 'id']);
       if (!tagId) return null;
-      var sectionName = _firstDefined(row, ['section_name', 'sectionName']) || _firstDefined(row, ['short_label', 'outcome_code']) || 'Outcome';
+      var sectionName =
+        _firstDefined(row, ['section_name', 'sectionName']) ||
+        _firstDefined(row, ['short_label', 'outcome_code']) ||
+        'Outcome';
       var shortName = _shortLabel(_firstDefined(row, ['short_label', 'outcome_code']) || sectionName);
       var color = _firstDefined(row, ['color']) || defaultColor;
       var tag = {
@@ -1879,7 +1885,11 @@ async function _loadPerStudentCanonicalField(sb, cid, students, rpcName, field, 
   if (!students || students.length === 0) return;
   var loads = await Promise.allSettled(
     students.map(function (student) {
-      var canonicalStudentId = _isUuid(student && student.personId) ? student.personId : _isUuid(student && student.id) ? student.id : null;
+      var canonicalStudentId = _isUuid(student && student.personId)
+        ? student.personId
+        : _isUuid(student && student.id)
+          ? student.id
+          : null;
       if (!canonicalStudentId) {
         return Promise.resolve({ student: student, skipped: true });
       }
@@ -1978,7 +1988,12 @@ async function _doInitData(cid) {
     var flagsRes = settled[9];
 
     if (rosterRes.status === 'fulfilled') {
-      _applyCanonicalField('students', cid, _canonicalRosterToStudents(_coerceArray(rosterRes.value)), 'Canonical roster load');
+      _applyCanonicalField(
+        'students',
+        cid,
+        _canonicalRosterToStudents(_coerceArray(rosterRes.value)),
+        'Canonical roster load',
+      );
     } else {
       console.warn('Canonical roster load failed for', cid, rosterRes.reason);
     }
@@ -2024,9 +2039,12 @@ async function _doInitData(cid) {
     if (policyRes.status === 'fulfilled') {
       _cache.courseConfigs[cid] = _canonicalPolicyToCourseConfig(policyRes.value);
       if (COURSES[cid]) {
-        if (_cache.courseConfigs[cid].gradingSystem !== undefined) COURSES[cid].gradingSystem = _cache.courseConfigs[cid].gradingSystem;
-        if (_cache.courseConfigs[cid].calcMethod !== undefined) COURSES[cid].calcMethod = _cache.courseConfigs[cid].calcMethod;
-        if (_cache.courseConfigs[cid].decayWeight !== undefined) COURSES[cid].decayWeight = _cache.courseConfigs[cid].decayWeight;
+        if (_cache.courseConfigs[cid].gradingSystem !== undefined)
+          COURSES[cid].gradingSystem = _cache.courseConfigs[cid].gradingSystem;
+        if (_cache.courseConfigs[cid].calcMethod !== undefined)
+          COURSES[cid].calcMethod = _cache.courseConfigs[cid].calcMethod;
+        if (_cache.courseConfigs[cid].decayWeight !== undefined)
+          COURSES[cid].decayWeight = _cache.courseConfigs[cid].decayWeight;
       }
     } else {
       console.warn('Canonical course policy load failed for', cid, policyRes.reason);
@@ -2100,7 +2118,11 @@ async function _doInitData(cid) {
       ),
     ]);
 
-    if (!_cache.learningMaps[cid] || (!_cache.learningMaps[cid]._customized && (!_cache.learningMaps[cid].sections || _cache.learningMaps[cid].sections.length === 0))) {
+    if (
+      !_cache.learningMaps[cid] ||
+      (!_cache.learningMaps[cid]._customized &&
+        (!_cache.learningMaps[cid].sections || _cache.learningMaps[cid].sections.length === 0))
+    ) {
       _cache.learningMaps[cid] = LEARNING_MAP[cid] || { subjects: [], sections: [] };
       learningMapUpdated = true;
     }

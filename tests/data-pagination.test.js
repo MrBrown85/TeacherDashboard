@@ -148,10 +148,7 @@ describe('canonical initData large-payload guards', () => {
 
     localStorage.setItem('gb-students-' + CID, JSON.stringify(_canonicalRosterToStudents(rosterRows)));
     localStorage.setItem('gb-assessments-' + CID, JSON.stringify(_canonicalAssessmentsToBlob(fullAssessmentRows)));
-    localStorage.setItem(
-      'gb-scores-' + CID,
-      JSON.stringify(_canonicalScoresToBlob(fullScoreRows, {})),
-    );
+    localStorage.setItem('gb-scores-' + CID, JSON.stringify(_canonicalScoresToBlob(fullScoreRows, {})));
 
     globalThis.getSupabase = function () {
       return makeRpcClient({

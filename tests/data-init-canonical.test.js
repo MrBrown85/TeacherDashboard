@@ -327,7 +327,9 @@ describe('initData canonical reads', () => {
   it('keeps local fallback data for RPCs that fail while still applying successful RPC loads', async () => {
     localStorage.setItem(
       'gb-students-' + CID,
-      JSON.stringify([{ id: 'local-student', firstName: 'Local', lastName: 'Only', designations: [], sortName: 'Only Local' }]),
+      JSON.stringify([
+        { id: 'local-student', firstName: 'Local', lastName: 'Only', designations: [], sortName: 'Only Local' },
+      ]),
     );
 
     globalThis.getSupabase = function () {
@@ -361,16 +363,21 @@ describe('initData canonical reads', () => {
     expect(_cache.students[CID]).toEqual([
       expect.objectContaining({ id: 'local-student', firstName: 'Local', lastName: 'Only' }),
     ]);
-    expect(_cache.assessments[CID]).toEqual([
-      expect.objectContaining({ id: ASSESS_1, title: 'Remote Assessment' }),
-    ]);
+    expect(_cache.assessments[CID]).toEqual([expect.objectContaining({ id: ASSESS_1, title: 'Remote Assessment' })]);
   });
 
   it('keeps local goals, reflections, and overrides when the per-student RPCs are missing', async () => {
     localStorage.setItem(
       'gb-students-' + CID,
       JSON.stringify([
-        { id: ENROLL_1, personId: PERSON_1, firstName: 'Alice', lastName: 'Smith', designations: [], sortName: 'Smith Alice' },
+        {
+          id: ENROLL_1,
+          personId: PERSON_1,
+          firstName: 'Alice',
+          lastName: 'Smith',
+          designations: [],
+          sortName: 'Smith Alice',
+        },
       ]),
     );
     localStorage.setItem('gb-goals-' + CID, JSON.stringify({ [ENROLL_1]: { [OUTCOME_1]: 'Local goal stays put.' } }));

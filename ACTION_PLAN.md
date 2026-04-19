@@ -9,7 +9,7 @@ Last refreshed: 2026-04-18. Items are tracked here as they're discovered; closed
 If you're picking up the database work, ship in this order — each step depends on the previous one being stable.
 
 1. **Phase 1c-reads** (P0, item #1 below). Highest impact: until this lands, data written from one device never appears on another. After it ships, validate in production for a day or two with real scoring/observation flows.
-2. **Score race-window fix** (P0, item #2 below). Once Phase 1c-reads is in, you'll *see* the partial-import problem — scores written before their enrollment promise resolves silently skip canonical sync. Two fixes possible (await in `teams-import.js`, or queue deferred syncs in `data.js`); the second is more robust.
+2. **Score race-window fix** (P0, item #2 below). Once Phase 1c-reads is in, you'll _see_ the partial-import problem — scores written before their enrollment promise resolves silently skip canonical sync. Two fixes possible (await in `teams-import.js`, or queue deferred syncs in `data.js`); the second is more robust.
 3. **Delete the bridge short-circuits** (P1, item #6 below). Only after Phase 1c-reads is verified in real use. The `// CANONICAL-RPC TRANSITION:` early-returns in `_doSync`, `_handleCrossTabChange`, `_refreshFromSupabase`, `_deleteFromSupabase` become dead code at that point.
 4. **Realtime publication** (P2, item #7 below). Add the canonical entity tables back to `supabase_realtime` and re-enable the no-op'd `_initRealtimeSync` body, pointed at the new tables filtered by `course_offering_id`. Restores phone↔laptop live sync.
 5. **Small DB additions** (P2, items #9 and #10). `delete_course` if you decide against archive-only; missing storage for modules/rubrics/customTags/notes if you want them server-backed.
@@ -22,7 +22,7 @@ Items #3 (key rotation), #4 (E2E suite), and #5 (CI) below are independent of th
 
 ### 1. Phase 1c-reads — wire `_doInitData` to canonical RPCs
 
-**Why**: Phase 2 (commit `c02e6e3` on `phase-2-canonical-writes`) wired all high-frequency *writes* to canonical RPCs (`enroll_student`, `create_assessment`, `save_course_score`, `create_observation`, etc.). Reads still come from localStorage — so data written from another device (or imported on the server side) never appears until you log out and back in. The bridge in `_doInitData` short-circuits the broken legacy `.from('students')` etc. calls.
+**Why**: Phase 2 (commit `c02e6e3` on `phase-2-canonical-writes`) wired all high-frequency _writes_ to canonical RPCs (`enroll_student`, `create_assessment`, `save_course_score`, `create_observation`, etc.). Reads still come from localStorage — so data written from another device (or imported on the server side) never appears until you log out and back in. The bridge in `_doInitData` short-circuits the broken legacy `.from('students')` etc. calls.
 
 **Progress (2026-04-18)**: `_doInitData(cid)` now attempts canonical top-level reads with per-RPC fallback to localStorage for roster, assessments, scores, observations, policy, report config, outcomes, statuses, term ratings, and flags. The flag load now falls back from `public.list_student_flags` to `projection.list_student_flags`, which matches the checked-in schema. Targeted unit coverage lives in `tests/data-init-canonical.test.js`, and `tests/data-pagination.test.js` has been rewritten and re-enabled against the canonical RPC path: it now verifies that `initData()` hydrates 1500-row assessment/score payloads correctly and keeps the fuller local cache when a canonical snapshot is truncated.
 
@@ -31,6 +31,7 @@ Items #3 (key rotation), #4 (E2E suite), and #5 (CI) below are independent of th
 **Remaining gap**: the corresponding read RPCs are still not present in the checked-in `schema.sql`, so this part of Phase 1c is now client-ready but still needs schema confirmation before it can be called complete.
 
 **Plan**:
+
 - Replace `_doInitData(cid)` body with parallel calls to `list_course_roster`, `list_course_assessments`, `list_course_scores`, `list_course_observations`, `get_course_policy`, `get_report_config`, `list_course_outcomes`, `list_assignment_statuses`.
 - Per-student loops for `get_student_goals`, `list_student_reflections`, `list_section_overrides` (no bulk variant in the canonical schema).
 - Update converter functions to map canonical row shapes to the existing legacy cache shape so consumers don't have to change in lockstep.
@@ -64,9 +65,9 @@ Items #3 (key rotation), #4 (E2E suite), and #5 (CI) below are independent of th
 
 ### 5. CI / branch-protection
 
-**Progress (2026-04-18)**: Added `.github/workflows/ci.yml` to run `npm test` and `npm run format:check` on push/PR. Local `npm test` passes.
+**Progress (2026-04-18)**: Added `.github/workflows/ci.yml` to run unit tests and formatting checks on push/PR. The workflow has now been narrowed to run Prettier only on files changed by the push/PR, which avoids failing on the repo-wide historical formatting baseline while still enforcing formatting on new work.
 
-**Blocker (2026-04-18)**: `npm run format:check` is currently red on the checked-in repo baseline (322 files, including tracked app/test/docs files), so branch protection should not require the workflow yet unless the formatting baseline is fixed or the scope of `format:check` is intentionally narrowed.
+**Residual risk (2026-04-18)**: Local `npm test` can still fail outside UTC because some mobile date-group tests use `toISOString()` around day-boundary logic. The same targeted suites pass under `TZ=UTC`, which matches GitHub Actions on Ubuntu, so this is an existing test-environment flake rather than a blocker for the CI workflow change.
 
 ### 6. Clear the legacy bridge in `data.js`
 
@@ -116,16 +117,16 @@ IIFE pattern works but blocks tree-shaking and modern tooling. Migrate one leaf 
 
 ## Done
 
-| When | What |
-|------|------|
+| When       | What                                                                                                                                                              |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 2026-04-18 | Phase 2 — high-frequency writes (`saveStudents`, `saveAssessments`, `upsertScore`, `addQuickOb`/`updateQuickOb`/`deleteQuickOb`) wired to canonical RPCs. PR #63. |
-| 2026-04-18 | Demo Mode — login-screen button bypasses auth and loads Science 8 sample class. PR #63. |
-| 2026-04-17 | Phase 1c-writes — `createCourse`, `updateCourse`, `saveCourseConfig`, `saveReportConfig`, `saveConfig` wired to canonical RPCs. Commit `dfb4331`. |
-| 2026-04-17 | Phase 1b — `initAllCourses` wired to `get_teacher_preferences` + `list_teacher_courses`. Commit `39f0461`. |
-| 2026-04-17 | Bridge — short-circuited every legacy `.from()` write so production stops throwing 18 PGRST205 errors per page load. Commit `3abbcba`. |
-| 2026-04-17 | `schema.sql` regenerated from `supabase_migrations.schema_migrations` (130 KB across 31 migrations). |
-| 2026-04-17 | Locked `search_path` on 10 functions flagged by Supabase advisors. Migration `lock_function_search_paths`. |
-| Earlier | Move Supabase credentials to env vars (Netlify edge function `inject-env.js`). |
-| Earlier | Inline `onclick` handlers replaced with `data-action` delegation in shared modules. |
-| Earlier | CSP headers + per-request nonce wired in `inject-env.js`. |
-| Earlier | Service worker, PWA manifest, idle-timeout sign-out, FOIPPA-compliant data wiping. |
+| 2026-04-18 | Demo Mode — login-screen button bypasses auth and loads Science 8 sample class. PR #63.                                                                           |
+| 2026-04-17 | Phase 1c-writes — `createCourse`, `updateCourse`, `saveCourseConfig`, `saveReportConfig`, `saveConfig` wired to canonical RPCs. Commit `dfb4331`.                 |
+| 2026-04-17 | Phase 1b — `initAllCourses` wired to `get_teacher_preferences` + `list_teacher_courses`. Commit `39f0461`.                                                        |
+| 2026-04-17 | Bridge — short-circuited every legacy `.from()` write so production stops throwing 18 PGRST205 errors per page load. Commit `3abbcba`.                            |
+| 2026-04-17 | `schema.sql` regenerated from `supabase_migrations.schema_migrations` (130 KB across 31 migrations).                                                              |
+| 2026-04-17 | Locked `search_path` on 10 functions flagged by Supabase advisors. Migration `lock_function_search_paths`.                                                        |
+| Earlier    | Move Supabase credentials to env vars (Netlify edge function `inject-env.js`).                                                                                    |
+| Earlier    | Inline `onclick` handlers replaced with `data-action` delegation in shared modules.                                                                               |
+| Earlier    | CSP headers + per-request nonce wired in `inject-env.js`.                                                                                                         |
+| Earlier    | Service worker, PWA manifest, idle-timeout sign-out, FOIPPA-compliant data wiping.                                                                                |
