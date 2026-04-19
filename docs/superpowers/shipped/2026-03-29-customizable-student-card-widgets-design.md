@@ -53,24 +53,24 @@ On first load (no localStorage entry), the config is:
 
 ## Widget Registry
 
-| # | Key | Label | Default | Empty Behaviour |
-|---|-----|-------|---------|-----------------|
-| 0 | `hero` | Name & Proficiency | on | Fallback: always shows name even if toggled off |
-| 1 | `sectionBars` | Section Progress | on | Hidden if no sections |
-| 2 | `completion` | Completion | on | Shows "—" if no assessments |
-| 3 | `missingWork` | Missing Work | off | Hidden if 0 missing |
-| 4 | `growth` | Growth Journey | on | Hidden if no scored work |
-| 5 | `obsSnippet` | Latest Observation | on | "No observations yet" italic |
-| 6 | `obsSummary` | Observation Insights | off | Hidden if 0 observations |
-| 7 | `flagStatus` | Flag | off | Hidden if not flagged |
-| 8 | `reflection` | Student Voice | off | Hidden if no reflections/goals |
-| 9 | `dispositions` | Learner Dispositions | on | Hidden if no term rating |
-| 10 | `traits` | Character Strengths | off | Hidden if no positive traits |
-| 11 | `concerns` | Concerns | off | Hidden if no concerns |
-| 12 | `workHabits` | Work Habits & Participation | off | Hidden if no term rating |
-| 13 | `growthAreas` | Growth Areas | off | Hidden if none set |
-| 14 | `narrative` | Teacher Narrative | off | Hidden if no narrative |
-| 15 | `actions` | Action Buttons | on | Always renders |
+| #   | Key            | Label                       | Default | Empty Behaviour                                 |
+| --- | -------------- | --------------------------- | ------- | ----------------------------------------------- |
+| 0   | `hero`         | Name & Proficiency          | on      | Fallback: always shows name even if toggled off |
+| 1   | `sectionBars`  | Section Progress            | on      | Hidden if no sections                           |
+| 2   | `completion`   | Completion                  | on      | Shows "—" if no assessments                     |
+| 3   | `missingWork`  | Missing Work                | off     | Hidden if 0 missing                             |
+| 4   | `growth`       | Growth Journey              | on      | Hidden if no scored work                        |
+| 5   | `obsSnippet`   | Latest Observation          | on      | "No observations yet" italic                    |
+| 6   | `obsSummary`   | Observation Insights        | off     | Hidden if 0 observations                        |
+| 7   | `flagStatus`   | Flag                        | off     | Hidden if not flagged                           |
+| 8   | `reflection`   | Student Voice               | off     | Hidden if no reflections/goals                  |
+| 9   | `dispositions` | Learner Dispositions        | on      | Hidden if no term rating                        |
+| 10  | `traits`       | Character Strengths         | off     | Hidden if no positive traits                    |
+| 11  | `concerns`     | Concerns                    | off     | Hidden if no concerns                           |
+| 12  | `workHabits`   | Work Habits & Participation | off     | Hidden if no term rating                        |
+| 13  | `growthAreas`  | Growth Areas                | off     | Hidden if none set                              |
+| 14  | `narrative`    | Teacher Narrative           | off     | Hidden if no narrative                          |
+| 15  | `actions`      | Action Buttons              | on      | Always renders                                  |
 
 ## Widget Visual Treatments
 
@@ -190,22 +190,22 @@ Observe + View Profile buttons. Slimmed: 8px vertical padding, 13px font, 12px b
 
 ## Visual Distinctness Matrix
 
-| Visual Language | Widget |
-|-----------------|--------|
-| Horizontal fill bars | `sectionBars` |
-| Arc ring | `completion` |
-| Bold alert number | `missingWork` |
-| Text pill with arrow | `growth` |
-| Rounded background box | `obsSnippet` |
-| Plain sentence | `obsSummary` |
-| Inline icon (no row) | `flagStatus` |
-| Left-border accent + italic | `reflection` |
-| Radar/petal SVG shape | `dispositions` |
-| Blue chips | `traits` |
-| Red chips | `concerns` |
-| Segmented pip bar | `workHabits` |
-| Dot-prefixed neutral chips | `growthAreas` |
-| Shadowed card | `narrative` |
+| Visual Language             | Widget         |
+| --------------------------- | -------------- |
+| Horizontal fill bars        | `sectionBars`  |
+| Arc ring                    | `completion`   |
+| Bold alert number           | `missingWork`  |
+| Text pill with arrow        | `growth`       |
+| Rounded background box      | `obsSnippet`   |
+| Plain sentence              | `obsSummary`   |
+| Inline icon (no row)        | `flagStatus`   |
+| Left-border accent + italic | `reflection`   |
+| Radar/petal SVG shape       | `dispositions` |
+| Blue chips                  | `traits`       |
+| Red chips                   | `concerns`     |
+| Segmented pip bar           | `workHabits`   |
+| Dot-prefixed neutral chips  | `growthAreas`  |
+| Shadowed card               | `narrative`    |
 
 ## Card Layout
 
@@ -296,13 +296,13 @@ All dismiss the editor. No explicit save — changes are already persisted.
 
 ## Files to Modify
 
-| File | Changes |
-|------|---------|
+| File                             | Changes                                                                                                |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `teacher-mobile/tab-students.js` | Refactor `_renderStudentCard` into widget system, add new widget render functions, add edit mode logic |
-| `teacher-mobile/styles.css` | Widget-specific styles, edit mode styles, scroll indicator, editor sheet |
-| `teacher-mobile/shell.js` | Long-press event handler for edit mode activation |
-| `shared/data.js` | Possibly add `getCardWidgetConfig()` / `saveCardWidgetConfig()` helpers |
-| `shared/constants.js` | Widget registry definition (keys, labels, defaults, order) |
+| `teacher-mobile/styles.css`      | Widget-specific styles, edit mode styles, scroll indicator, editor sheet                               |
+| `teacher-mobile/shell.js`        | Long-press event handler for edit mode activation                                                      |
+| `shared/data.js`                 | Possibly add `getCardWidgetConfig()` / `saveCardWidgetConfig()` helpers                                |
+| `shared/constants.js`            | Widget registry definition (keys, labels, defaults, order)                                             |
 
 ## Out of Scope
 
