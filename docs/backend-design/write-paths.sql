@@ -17,6 +17,8 @@
 --   fullvision_v2_fix_score_audit_security_definer (2026-04-19)
 --   fullvision_v2_write_path_observation      (2026-04-19)
 --   fullvision_v2_write_path_student_records  (2026-04-19)
+--   fullvision_v2_write_path_term_rating      (2026-04-19)
+--   fullvision_v2_fix_save_term_rating_dim_audit (2026-04-19)
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Phase 1.1 — Auth / bootstrap RPCs
@@ -1803,3 +1805,38 @@ grant execute on function upsert_reflection(uuid, uuid, text, int) to authentica
 grant execute on function upsert_section_override(uuid, uuid, int, text) to authenticated;
 grant execute on function clear_section_override(uuid, uuid) to authenticated;
 grant execute on function bulk_attendance(uuid[], date, text) to authenticated;
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Phase 1.10 — TermRating composite save + audit (§13, Q28)
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- Audit helper: SECURITY DEFINER, mirrors _score_audit_diff rationale.
+create or replace function _term_rating_audit_field(
+    p_tr_id uuid, p_field text, p_old text, p_new text
+) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+    if p_old is distinct from p_new then
+        insert into term_rating_audit (term_rating_id, changed_by, field_changed, old_value, new_value)
+        values (p_tr_id, (select auth.uid()), p_field, p_old, p_new);
+    end if;
+end; $$;
+revoke all on function _term_rating_audit_field(uuid, text, text, text) from public;
+grant execute on function _term_rating_audit_field(uuid, text, text, text) to authenticated;
+
+-- save_term_rating: see deployed function body in gradebook-prod for full SQL.
+-- Payload shape (p_payload jsonb), all keys optional:
+--   narrative_html      text
+--   work_habits_rating  1..4
+--   participation_rating 1..4
+--   social_traits       text[]
+--   dimensions          [{section_id uuid, rating 1..4}, ...]  (full replace)
+--   strength_tags       [uuid, ...]                            (full replace)
+--   growth_tags         [uuid, ...]                            (full replace)
+--   mention_assessments [uuid, ...]                            (full replace)
+--   mention_observations [uuid, ...]                           (full replace)
+-- Omitting a key leaves that field/set alone.  Every field / membership change
+-- emits a term_rating_audit row in the same transaction.
+
+grant execute on function save_term_rating(uuid, int, jsonb) to authenticated;
