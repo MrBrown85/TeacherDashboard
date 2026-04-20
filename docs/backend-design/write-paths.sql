@@ -5,7 +5,8 @@
 -- Append new RPCs here as each phase lands.
 --
 -- Applied migrations (in order):
---   fullvision_v2_write_path_auth_bootstrap  (2026-04-19)
+--   fullvision_v2_write_path_auth_bootstrap   (2026-04-19)
+--   fullvision_v2_write_path_course_crud      (2026-04-19)
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Phase 1.1 — Auth / bootstrap RPCs
@@ -157,6 +158,301 @@ begin
 
     if not found then
         raise exception 'no pending deletion found for this teacher' using errcode = 'P0002';
+    end if;
+end;
+$$;
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Phase 1.2 — Course CRUD RPCs
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- create_course(p_name, p_grade_level, p_description, p_color, p_grading_system,
+--               p_calc_method, p_decay_weight, p_timezone, p_late_work_policy,
+--               p_subjects text[] DEFAULT NULL) → uuid
+--
+-- Plain variant (§2.1): p_subjects = NULL → Course + ReportConfig + active_course_id update.
+-- Wizard variant (§2.2): p_subjects = ['Math','Science',...] → also inserts Subject rows.
+create or replace function create_course(
+    p_name            text,
+    p_grade_level     text    default null,
+    p_description     text    default null,
+    p_color           text    default null,
+    p_grading_system  text    default 'proficiency',
+    p_calc_method     text    default 'average',
+    p_decay_weight    numeric default null,
+    p_timezone        text    default 'America/Vancouver',
+    p_late_work_policy text   default null,
+    p_subjects        text[]  default null
+) returns uuid
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+    _uid       uuid := (select auth.uid());
+    _course_id uuid;
+    _i         int;
+begin
+    if _uid is null then
+        raise exception 'not authenticated' using errcode = 'PT401';
+    end if;
+
+    insert into course (
+        teacher_id, name, grade_level, description, color,
+        grading_system, calc_method, decay_weight, timezone, late_work_policy
+    ) values (
+        _uid, p_name, p_grade_level, p_description, p_color,
+        p_grading_system, p_calc_method, p_decay_weight, p_timezone, p_late_work_policy
+    ) returning id into _course_id;
+
+    insert into report_config (course_id) values (_course_id);
+
+    if p_subjects is not null then
+        for _i in 1 .. array_length(p_subjects, 1) loop
+            insert into subject (course_id, name, display_order)
+            values (_course_id, p_subjects[_i], _i - 1);
+        end loop;
+    end if;
+
+    insert into teacher_preference (teacher_id, active_course_id)
+    values (_uid, _course_id)
+    on conflict (teacher_id) do update set active_course_id = excluded.active_course_id;
+
+    return _course_id;
+end;
+$$;
+
+
+-- update_course(p_course_id, p_patch jsonb) → void
+--
+-- Partial update; accepted keys: name, grade_level, description, color,
+-- grading_system, calc_method, decay_weight, timezone, late_work_policy.
+-- Nullable fields use key-presence check (? operator) so NULL can be written
+-- explicitly; non-nullable fields fall back to current value when key absent.
+create or replace function update_course(
+    p_course_id  uuid,
+    p_patch      jsonb
+) returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+    if (select auth.uid()) is null then
+        raise exception 'not authenticated' using errcode = 'PT401';
+    end if;
+
+    update course set
+        name             = coalesce(p_patch->>'name',           name),
+        grade_level      = coalesce(p_patch->>'grade_level',    grade_level),
+        description      = case when p_patch ? 'description'
+                                then p_patch->>'description'   else description end,
+        color            = case when p_patch ? 'color'
+                                then p_patch->>'color'         else color end,
+        grading_system   = coalesce(p_patch->>'grading_system', grading_system),
+        calc_method      = coalesce(p_patch->>'calc_method',    calc_method),
+        decay_weight     = case when p_patch ? 'decay_weight'
+                                then (p_patch->>'decay_weight')::numeric
+                                else decay_weight end,
+        timezone         = coalesce(p_patch->>'timezone',       timezone),
+        late_work_policy = case when p_patch ? 'late_work_policy'
+                                then p_patch->>'late_work_policy'
+                                else late_work_policy end,
+        updated_at       = now()
+    where id = p_course_id;
+
+    if not found then
+        raise exception 'course not found' using errcode = 'P0002';
+    end if;
+end;
+$$;
+
+
+-- archive_course(p_course_id, p_archived) → void
+--
+-- Toggles Course.is_archived (§2.5). Pass false to unarchive.
+create or replace function archive_course(
+    p_course_id  uuid,
+    p_archived   boolean
+) returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+    if (select auth.uid()) is null then
+        raise exception 'not authenticated' using errcode = 'PT401';
+    end if;
+
+    update course
+       set is_archived = p_archived,
+           updated_at  = now()
+     where id = p_course_id;
+
+    if not found then
+        raise exception 'course not found' using errcode = 'P0002';
+    end if;
+end;
+$$;
+
+
+-- duplicate_course(p_src_id) → uuid
+--
+-- Structure-only copy per Q27 (no enrollments, students, scores, observations).
+-- Copies: Course, ReportConfig, Subject, CompetencyGroup, Section, Tag,
+--         Module, Rubric, Criterion, CriterionTag, CustomTag, ObservationTemplate.
+-- Uses jsonb maps for old→new ID remapping of cross-referenced entities.
+create or replace function duplicate_course(p_src_id uuid) returns uuid
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+    _uid        uuid := (select auth.uid());
+    _new_course uuid := gen_random_uuid();
+    _new_id     uuid;
+    _subj_map   jsonb := '{}';
+    _cgrp_map   jsonb := '{}';
+    _sect_map   jsonb := '{}';
+    _tag_map    jsonb := '{}';
+    _rubric_map jsonb := '{}';
+    _crit_map   jsonb := '{}';
+    _row        record;
+begin
+    if _uid is null then
+        raise exception 'not authenticated' using errcode = 'PT401';
+    end if;
+
+    if not exists (select 1 from course where id = p_src_id and teacher_id = _uid) then
+        raise exception 'course not found' using errcode = 'P0002';
+    end if;
+
+    insert into course (id, teacher_id, name, grade_level, description, color,
+                        is_archived, display_order, grading_system, calc_method,
+                        decay_weight, timezone, late_work_policy)
+    select _new_course, teacher_id, name || ' (copy)', grade_level, description, color,
+           false, display_order, grading_system, calc_method,
+           decay_weight, timezone, late_work_policy
+    from course where id = p_src_id;
+
+    insert into report_config (course_id, preset, blocks_config)
+    select _new_course, preset, blocks_config from report_config where course_id = p_src_id;
+
+    for _row in select * from subject where course_id = p_src_id loop
+        _new_id := gen_random_uuid();
+        insert into subject (id, course_id, name, display_order)
+        values (_new_id, _new_course, _row.name, _row.display_order);
+        _subj_map := _subj_map || jsonb_build_object(_row.id::text, _new_id::text);
+    end loop;
+
+    for _row in select * from competency_group where course_id = p_src_id loop
+        _new_id := gen_random_uuid();
+        insert into competency_group (id, course_id, name, color, display_order)
+        values (_new_id, _new_course, _row.name, _row.color, _row.display_order);
+        _cgrp_map := _cgrp_map || jsonb_build_object(_row.id::text, _new_id::text);
+    end loop;
+
+    for _row in select * from section where course_id = p_src_id loop
+        _new_id := gen_random_uuid();
+        insert into section (id, course_id, subject_id, competency_group_id, name, display_order)
+        values (
+            _new_id, _new_course,
+            (_subj_map ->> _row.subject_id::text)::uuid,
+            case when _row.competency_group_id is not null
+                 then (_cgrp_map ->> _row.competency_group_id::text)::uuid
+                 else null end,
+            _row.name, _row.display_order
+        );
+        _sect_map := _sect_map || jsonb_build_object(_row.id::text, _new_id::text);
+    end loop;
+
+    for _row in
+        select t.* from tag t
+        join section s on s.id = t.section_id
+        where s.course_id = p_src_id
+    loop
+        _new_id := gen_random_uuid();
+        insert into tag (id, section_id, code, label, i_can_text, display_order)
+        values (_new_id, (_sect_map ->> _row.section_id::text)::uuid,
+                _row.code, _row.label, _row.i_can_text, _row.display_order);
+        _tag_map := _tag_map || jsonb_build_object(_row.id::text, _new_id::text);
+    end loop;
+
+    for _row in select * from module where course_id = p_src_id loop
+        _new_id := gen_random_uuid();
+        insert into module (id, course_id, name, color, display_order)
+        values (_new_id, _new_course, _row.name, _row.color, _row.display_order);
+    end loop;
+
+    for _row in select * from rubric where course_id = p_src_id loop
+        _new_id := gen_random_uuid();
+        insert into rubric (id, course_id, name)
+        values (_new_id, _new_course, _row.name);
+        _rubric_map := _rubric_map || jsonb_build_object(_row.id::text, _new_id::text);
+    end loop;
+
+    for _row in
+        select c.* from criterion c
+        join rubric r on r.id = c.rubric_id
+        where r.course_id = p_src_id
+    loop
+        _new_id := gen_random_uuid();
+        insert into criterion (id, rubric_id, name,
+            level_4_descriptor, level_3_descriptor, level_2_descriptor, level_1_descriptor,
+            level_4_value, level_3_value, level_2_value, level_1_value,
+            weight, display_order)
+        values (
+            _new_id, (_rubric_map ->> _row.rubric_id::text)::uuid, _row.name,
+            _row.level_4_descriptor, _row.level_3_descriptor,
+            _row.level_2_descriptor, _row.level_1_descriptor,
+            _row.level_4_value, _row.level_3_value, _row.level_2_value, _row.level_1_value,
+            _row.weight, _row.display_order
+        );
+        _crit_map := _crit_map || jsonb_build_object(_row.id::text, _new_id::text);
+    end loop;
+
+    insert into criterion_tag (criterion_id, tag_id)
+    select (_crit_map ->> ct.criterion_id::text)::uuid,
+           (_tag_map  ->> ct.tag_id::text)::uuid
+    from criterion_tag ct
+    join criterion c on c.id = ct.criterion_id
+    join rubric r on r.id = c.rubric_id
+    where r.course_id = p_src_id
+      and (_crit_map ->> ct.criterion_id::text) is not null
+      and (_tag_map  ->> ct.tag_id::text) is not null;
+
+    insert into custom_tag (course_id, label)
+    select _new_course, label from custom_tag where course_id = p_src_id;
+
+    insert into observation_template (course_id, body, default_sentiment,
+                                      default_context_type, is_seed, display_order)
+    select _new_course, body, default_sentiment, default_context_type, is_seed, display_order
+    from observation_template where course_id = p_src_id;
+
+    return _new_course;
+end;
+$$;
+
+
+-- delete_course(p_course_id) → void
+--
+-- Hard-delete; FK cascade removes all course-scoped data (§2.6).
+-- Student rows are NOT deleted — only their Enrollment rows cascade.
+create or replace function delete_course(p_course_id uuid) returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+    if (select auth.uid()) is null then
+        raise exception 'not authenticated' using errcode = 'PT401';
+    end if;
+
+    delete from course where id = p_course_id;
+
+    if not found then
+        raise exception 'course not found' using errcode = 'P0002';
     end if;
 end;
 $$;

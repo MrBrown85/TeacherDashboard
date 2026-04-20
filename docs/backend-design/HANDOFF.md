@@ -104,7 +104,7 @@ If the user said "yes" to one action in a past session, **do not** assume it ext
 
 **Live state on `gradebook-prod`:**
 - Legacy schema (old `public`, `academics`, `assessment`, `identity`, `integration`, `observation`, `projection`, `reporting`) was **wiped and replaced** with v2 (user authorized). Zero production data was preserved.
-- 12 v2 migrations applied in order:
+- 13 v2 migrations applied in order:
   1. `fullvision_v2_reset_public_schema`
   2. `fullvision_v2_schema`
   3. `fullvision_v2_rls_policies`
@@ -117,8 +117,10 @@ If the user said "yes" to one action in a past session, **do not** assume it ext
   10. `fullvision_v2_fix_section_proficiency_mostrecent_ambiguity`
   11. `fullvision_v2_fix_decaying_avg_ambiguity`
   12. `fullvision_v2_grant_table_privileges`
+  13. `fullvision_v2_write_path_auth_bootstrap` ← Phase 1.1
+  14. `fullvision_v2_write_path_course_crud` ← Phase 1.2
 - 39 tables, all RLS-enabled with ≥1 policy.
-- 17 functions, all with `search_path=public` locked.
+- 25 functions, all with `search_path=public` locked.
 - Security advisor: **0 lints.** Performance advisor: 0 actionable.
 
 **Verified via smoke tests (today):**
@@ -157,7 +159,7 @@ Author each RPC per [write-paths.md](write-paths.md), deploy as a new migration 
 RPC inventory is grouped so each box is ~one session of work:
 
 - [x] **1.1 Auth/bootstrap RPCs**: `bootstrap_teacher()` (creates Teacher + TeacherPreference + Welcome-Class seed per Pass C §1.3 + Q45/Q47), `soft_delete_teacher()` (Q29).
-- [ ] **1.2 Course CRUD RPCs**: `create_course`, `update_course`, `archive_course`, `duplicate_course` (structure-only per Q27), `delete_course`.
+- [x] **1.2 Course CRUD RPCs**: `create_course`, `update_course`, `archive_course`, `duplicate_course` (structure-only per Q27), `delete_course`.
 - [ ] **1.3 Category + Module + Rubric RPCs**: `upsert_category` (per-course weight-cap enforced by trigger already deployed), `delete_category`, `upsert_module`, `delete_module`, `upsert_rubric` (full criteria payload), `delete_rubric`.
 - [ ] **1.4 Learning map RPCs**: `upsert_subject`, `delete_subject`, `upsert_competency_group`, `delete_competency_group`, `upsert_section`, `delete_section`, `upsert_tag`, `delete_tag`, `reorder_*` family.
 - [ ] **1.5 Student + Enrollment RPCs**: `create_student_and_enroll`, `update_student`, `update_enrollment`, `withdraw_enrollment`, `reorder_roster`, `bulk_apply_pronouns`, `import_roster_csv`.
@@ -240,5 +242,7 @@ Claude appends one line per completed task. Format: `YYYY-MM-DD | session-<n> | 
 - `2026-04-19 | session-1 | handoff | this document created`
 
 - `2026-04-19 | session-2 | 1.1 | deployed migration fullvision_v2_write_path_auth_bootstrap: bootstrap_teacher, soft_delete_teacher, restore_teacher; 7-assertion smoke test passed; write-paths.sql created`
+- `2026-04-19 | session-2 | docs | updated HANDOFF What's-already-done: 13 migrations, 20 functions`
+- `2026-04-19 | session-2 | 1.2 | deployed migration fullvision_v2_write_path_course_crud: create_course (plain+wizard), update_course (jsonb patch), archive_course, duplicate_course (full structure remap), delete_course; 14-assertion smoke test passed`
 
 *(next session, keep appending.)*
