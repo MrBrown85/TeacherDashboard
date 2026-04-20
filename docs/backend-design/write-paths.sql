@@ -15,6 +15,7 @@
 --   fullvision_v2_write_path_assessment_crud  (2026-04-19)
 --   fullvision_v2_write_path_scoring          (2026-04-19)
 --   fullvision_v2_fix_score_audit_security_definer (2026-04-19)
+--   fullvision_v2_write_path_observation      (2026-04-19)
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Phase 1.1 — Auth / bootstrap RPCs
@@ -1549,3 +1550,153 @@ grant execute on function fill_rubric(uuid, uuid, int) to authenticated;
 grant execute on function clear_score(uuid, uuid) to authenticated;
 grant execute on function clear_row_scores(uuid, uuid) to authenticated;
 grant execute on function clear_column_scores(uuid) to authenticated;
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Phase 1.8 — Observation + Template + CustomTag (§10, §12)
+-- ─────────────────────────────────────────────────────────────────────────────
+
+create or replace function create_observation(
+    p_course_id uuid, p_body text,
+    p_sentiment text default null, p_context_type text default null,
+    p_assessment_id uuid default null,
+    p_enrollment_ids uuid[] default '{}',
+    p_tag_ids uuid[] default '{}',
+    p_custom_tag_ids uuid[] default '{}'
+) returns uuid
+language plpgsql security invoker set search_path = public as $$
+declare _id uuid; _x uuid;
+begin
+    if (select auth.uid()) is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    insert into observation (course_id, body, sentiment, context_type, assessment_id)
+    values (p_course_id, p_body, p_sentiment, p_context_type, p_assessment_id)
+    returning id into _id;
+    if p_enrollment_ids is not null then
+        foreach _x in array p_enrollment_ids loop
+            insert into observation_student (observation_id, enrollment_id) values (_id, _x) on conflict do nothing;
+        end loop;
+    end if;
+    if p_tag_ids is not null then
+        foreach _x in array p_tag_ids loop
+            insert into observation_tag (observation_id, tag_id) values (_id, _x) on conflict do nothing;
+        end loop;
+    end if;
+    if p_custom_tag_ids is not null then
+        foreach _x in array p_custom_tag_ids loop
+            insert into observation_custom_tag (observation_id, custom_tag_id) values (_id, _x) on conflict do nothing;
+        end loop;
+    end if;
+    return _id;
+end; $$;
+
+-- update_observation: passing null for a join-array param leaves that set alone.
+-- Passing an empty array wipes it.
+create or replace function update_observation(
+    p_id uuid, p_patch jsonb,
+    p_enrollment_ids uuid[] default null,
+    p_tag_ids uuid[] default null,
+    p_custom_tag_ids uuid[] default null
+) returns void
+language plpgsql security invoker set search_path = public as $$
+declare _x uuid;
+begin
+    if (select auth.uid()) is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    update observation set
+        body          = coalesce(p_patch->>'body', body),
+        sentiment     = case when p_patch ? 'sentiment'     then p_patch->>'sentiment'     else sentiment end,
+        context_type  = case when p_patch ? 'context_type'  then p_patch->>'context_type'  else context_type end,
+        assessment_id = case when p_patch ? 'assessment_id' then nullif(p_patch->>'assessment_id','')::uuid else assessment_id end,
+        updated_at    = now()
+    where id = p_id;
+    if not found then raise exception 'observation not found' using errcode = 'P0002'; end if;
+
+    if p_enrollment_ids is not null then
+        delete from observation_student where observation_id = p_id;
+        foreach _x in array p_enrollment_ids loop
+            insert into observation_student (observation_id, enrollment_id) values (p_id, _x) on conflict do nothing;
+        end loop;
+    end if;
+    if p_tag_ids is not null then
+        delete from observation_tag where observation_id = p_id;
+        foreach _x in array p_tag_ids loop
+            insert into observation_tag (observation_id, tag_id) values (p_id, _x) on conflict do nothing;
+        end loop;
+    end if;
+    if p_custom_tag_ids is not null then
+        delete from observation_custom_tag where observation_id = p_id;
+        foreach _x in array p_custom_tag_ids loop
+            insert into observation_custom_tag (observation_id, custom_tag_id) values (p_id, _x) on conflict do nothing;
+        end loop;
+    end if;
+end; $$;
+
+create or replace function delete_observation(p_id uuid) returns void
+language plpgsql security invoker set search_path = public as $$
+begin
+    if (select auth.uid()) is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    delete from observation where id = p_id;
+    if not found then raise exception 'observation not found' using errcode = 'P0002'; end if;
+end; $$;
+
+-- Templates: seeds (is_seed=true) are immutable. Seeds come from migration-time
+-- inserts, never from this RPC (it forces is_seed=false on create).
+create or replace function upsert_observation_template(
+    p_id uuid, p_course_id uuid, p_body text,
+    p_default_sentiment text default null,
+    p_default_context_type text default null,
+    p_display_order int default null
+) returns uuid
+language plpgsql security invoker set search_path = public as $$
+declare _id uuid;
+begin
+    if (select auth.uid()) is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    if p_id is null then
+        insert into observation_template (course_id, body, default_sentiment,
+                                          default_context_type, is_seed, display_order)
+        values (p_course_id, p_body, p_default_sentiment, p_default_context_type, false,
+                coalesce(p_display_order,
+                         (select coalesce(max(display_order)+1, 0) from observation_template where course_id = p_course_id)))
+        returning id into _id;
+    else
+        update observation_template set
+            body                 = p_body,
+            default_sentiment    = p_default_sentiment,
+            default_context_type = p_default_context_type,
+            display_order        = coalesce(p_display_order, display_order),
+            updated_at           = now()
+         where id = p_id and is_seed = false
+        returning id into _id;
+        if _id is null then
+            raise exception 'observation_template not found or is seed (immutable)' using errcode = 'P0002';
+        end if;
+    end if;
+    return _id;
+end; $$;
+
+create or replace function delete_observation_template(p_id uuid) returns void
+language plpgsql security invoker set search_path = public as $$
+declare _n int;
+begin
+    if (select auth.uid()) is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    delete from observation_template where id = p_id and is_seed = false;
+    get diagnostics _n = row_count;
+    if _n = 0 then
+        raise exception 'observation_template not found or is seed (immutable)' using errcode = 'P0002';
+    end if;
+end; $$;
+
+create or replace function create_custom_tag(p_course_id uuid, p_label text) returns uuid
+language plpgsql security invoker set search_path = public as $$
+declare _id uuid;
+begin
+    if (select auth.uid()) is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    insert into custom_tag (course_id, label) values (p_course_id, p_label) returning id into _id;
+    return _id;
+end; $$;
+
+grant execute on function create_observation(uuid, text, text, text, uuid, uuid[], uuid[], uuid[]) to authenticated;
+grant execute on function update_observation(uuid, jsonb, uuid[], uuid[], uuid[]) to authenticated;
+grant execute on function delete_observation(uuid) to authenticated;
+grant execute on function upsert_observation_template(uuid, uuid, text, text, text, int) to authenticated;
+grant execute on function delete_observation_template(uuid) to authenticated;
+grant execute on function create_custom_tag(uuid, text) to authenticated;
