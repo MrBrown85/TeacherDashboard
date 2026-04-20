@@ -278,5 +278,6 @@ Claude appends one line per completed task. Format: `YYYY-MM-DD | session-<n> | 
 - `2026-04-20 | session-5 | plan-3.1-f-verify | HANDOFF 4.2 verified: added tests/data-assessments-v2-dispatch.test.js (14 tests) covering _canonicalCreate/Update/DeleteAssessment + duplicateAssessment + saveAssessmentTags + saveCollab. Full suite 39 files / 707 passing.`
 - `2026-04-20 | session-5 | plan-3.1-g-verify | HANDOFF 4.3 verified: scoring clear helpers (fillRubric, clearScore, clearRowScores, clearColumnScores) already covered by tests/data-scores-v2-dispatch.test.js added for 3.1-d. No additional tests needed.`
 - `2026-04-20 | session-5 | plan-3.1-h-verify | HANDOFF 4.4 verified: added tests/data-observations-v2-dispatch.test.js (17 tests) covering _persistObservation{Create,Update,Delete}, createObservationRich, updateObservationRich, upsertObservationTemplate, deleteObservationTemplate, createCustomTag. 725 total passing.`
+- `2026-04-20 | session-5 | plan-3.1-i-verify | HANDOFF 4.5 verified: added tests/data-learning-map-v2-dispatch.test.js (19 tests) covering all 20 window.v2.* structural helpers (Subject/CompetencyGroup/Section/Tag/Module/Category + Rubric composite) + _rpcOrNoop offline no-op. 744 total passing.`
 
 *(next session, keep appending.)*
