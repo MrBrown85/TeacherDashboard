@@ -80,6 +80,18 @@ You are continuing an ongoing rebuild. **Read this whole file before touching an
 
 ---
 
+## Working mode (as of 2026-04-19 evening)
+
+**Local-only until the user pushes.** The user is out of Netlify build credits and has asked that no further work be pushed to `origin` — every push triggers a Netlify deploy and burns minutes. Until the user explicitly says "push" again:
+
+- Do **not** run `git push` on any branch in the main FullVision repo.
+- Do **not** run `gh pr create` / `gh pr edit` / any command that changes remote state on GitHub.
+- Do **not** update PRs #75 or #76 from the CLI — they stay frozen at their last pushed commit.
+- Commits on `rebuild-v2` (and the design repo's `design/backend-v2`) are fine and expected — just keep them local.
+- Supabase migrations on `gradebook-prod` are unaffected (free tier, no Netlify involvement).
+
+The user plans to push early next week. When they do, the accumulated local commits on `rebuild-v2` will update PR #76 in one batch.
+
 ## Safety gates (NEVER proceed without explicit user approval)
 
 Stop and ask if the next step requires any of these:
