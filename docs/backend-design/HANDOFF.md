@@ -206,6 +206,7 @@ Earlier bugs fixed inline (mostRecent ambiguity, decaying_avg ambiguity, missing
 
 - **2026-04-19 (Phase 1.4):** `section_competency_group_fk` used `ON DELETE SET NULL` without a column list, so deleting a `competency_group` tried to null `section.course_id` (NOT NULL). Fixed via migration `fullvision_v2_fix_section_competency_group_fk_set_null` using PG15+ `SET NULL (competency_group_id)`. schema.sql updated to match.
 - **2026-04-19 (Phase 1.11):** `report_config.preset` CHECK was `in (brief,standard,detailed)` but write-paths §14 requires `'custom'` for manual block toggles. Fixed via migration `fullvision_v2_fix_report_config_add_custom_preset`; schema.sql updated.
+- **2026-04-20 (Phase 3.0 test baseline):** `tests/data-init-invokes-canonical-reads.test.js` and `tests/data-pagination.test.js` were guarding against the April 3 regression using the cancelled canonical-schema RPC names (`list_course_roster`, `list_course_assessments`, etc.). Both files were updated to guard against `get_gradebook` being stubbed (the actual v2 boot read); all 36 test files now green. Commit `570529c` on `rebuild-v2`.
 
 ---
 
@@ -266,5 +267,8 @@ Claude appends one line per completed task. Format: `YYYY-MM-DD | session-<n> | 
 - `2026-04-19 | session-3 | 1.6 | deployed migration fullvision_v2_write_path_assessment_crud: create_assessment (with tag_ids[]), update_assessment (jsonb patch + optional tag replace), duplicate_assessment (copies tags, not scores/observations), delete_assessment, save_assessment_tags, save_collab (validates mode ∈ {none,pairs,groups}); smoke test passed`
 - `2026-04-19 | session-3 | 1.5 | deployed migrations fullvision_v2_write_path_student_enrollment + fullvision_v2_fix_import_roster_csv_reenroll: create_student_and_enroll, update_student, update_enrollment (jsonb patch inc. designations/is_flagged/roster_position/withdrawn_at), withdraw_enrollment, reorder_roster, bulk_apply_pronouns, import_roster_csv (match by SN→email→name; reactivates withdrawn enrollments); smoke test (11 assertions) passed`
 - `2026-04-19 | session-3 | 1.4 | deployed migration fullvision_v2_write_path_learning_map: upsert/delete for subject, competency_group, section (auto-denormalizes course_id from subject), tag; reorder_{subjects,competency_groups,sections,tags,modules}; smoke test passed (subject/group/section/tag CRUD, display_order auto-append, reorder, cascades, group-delete preserves section.course_id)`
+
+- `2026-04-20 | session-5 | plan-3.0 | created verify-rebuild-v2 worktree from rebuild-v2; npm install clean; fixed 2 stale test files (data-init-invokes-canonical-reads + data-pagination — were testing cancelled list_course_roster RPCs, updated to guard get_gradebook); all 36 tests green; commit 570529c`
+- `2026-04-20 | session-5 | plan-3.1-a | HANDOFF 3.2 code review: initAllCourses() correctly calls bootstrap_teacher → list_teacher_courses; Demo Mode short-circuits before those calls; tests green; dev server running at http://localhost:8347; browser + signed-in verification pending user action`
 
 *(next session, keep appending.)*
