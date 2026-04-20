@@ -855,23 +855,49 @@ async function initAllCourses() {
     }
   }
 
-  // Load global state from canonical RPCs:
-  //   get_teacher_preferences() → { activeCourseId, uiPrefs }
-  //   list_teacher_courses()    → [{ course_offering_id, title, ... }]
+  // Load global state from v2 RPCs:
+  //   bootstrap_teacher(email, display_name) → { id, email, display_name,
+  //     created_at, deleted_at, preferences: { active_course_id, view_mode,
+  //     mobile_view_mode, mobile_sort_mode, card_widget_config } }
+  //     Creates teacher + teacher_preference + Welcome Class on first sign-in;
+  //     returns existing rows on subsequent sign-ins.
+  //   list_teacher_courses() → [{ id, name, grade_level, description, color,
+  //     is_archived, display_order, grading_system, calc_method, decay_weight,
+  //     timezone, late_work_policy, created_at, updated_at }, ...]
   // On any failure fall back to localStorage so the app still loads offline.
   if (_useSupabase) {
     const sb = getSupabase();
     try {
-      const [prefsRes, coursesRes] = await Promise.all([
-        sb.rpc('get_teacher_preferences'),
-        sb.rpc('list_teacher_courses'),
-      ]);
-      if (prefsRes.error) throw prefsRes.error;
+      const {
+        data: { session },
+      } = await sb.auth.getSession();
+      const email = (session && session.user && session.user.email) || '';
+      const displayName = (session && session.user && session.user.user_metadata && session.user.user_metadata.display_name) || null;
+
+      const bootRes = await sb.rpc('bootstrap_teacher', {
+        p_email: email,
+        p_display_name: displayName,
+      });
+      if (bootRes.error) throw bootRes.error;
+      const teacher = bootRes.data || {};
+      const prefs = teacher.preferences || {};
+      _teacherId = teacher.id || _teacherId;
+
+      const coursesRes = await sb.rpc('list_teacher_courses');
       if (coursesRes.error) throw coursesRes.error;
-      const prefs = prefsRes.data || {};
-      const courseList = coursesRes.data || [];
-      _cache.courses = _canonicalCoursesToBlob(courseList);
-      _cache.config = Object.assign({ activeCourse: prefs.activeCourseId || null }, prefs.uiPrefs || {});
+
+      _cache.courses = _canonicalCoursesToBlob(coursesRes.data || []);
+      _cache.config = {
+        activeCourse: prefs.active_course_id || null,
+        viewMode: prefs.view_mode || null,
+        mobileViewMode: prefs.mobile_view_mode || null,
+        mobileSortMode: prefs.mobile_sort_mode || null,
+        cardWidgetConfig: prefs.card_widget_config || null,
+        displayName: teacher.display_name || null,
+        email: teacher.email || null,
+        // deleted_at non-null ⇒ pending soft-delete; Pass C §5 prompts restore.
+        accountDeletedAt: teacher.deleted_at || null,
+      };
       // Mirror to localStorage so offline reloads (or transient Supabase failures)
       // can boot from cache instead of starting empty.
       _safeLSSet('gb-courses', JSON.stringify(_cache.courses));
@@ -879,7 +905,7 @@ async function initAllCourses() {
       _syncStatus = 'idle';
       _updateSyncIndicator();
     } catch (e) {
-      console.warn('Canonical course load failed, falling back to localStorage:', e);
+      console.warn('v2 course load failed, falling back to localStorage:', e);
       _useSupabase = false;
     }
   }
@@ -2430,26 +2456,32 @@ function _assessmentRowsToBlob(rows) {
   });
 }
 
-/* Convert canonical list_teacher_courses() response → COURSES blob shape.
-   Canonical row: { course_offering_id, title, subject_code, grade_band,
-                    description, school_year, term_code, status }
-   Legacy shape:  { [id]: { id, name, gradeLevel, description, ...,
-                            gradingSystem?, calcMethod?, decayWeight? } }
-   Policy fields (gradingSystem/calcMethod/decayWeight) are populated lazily by
-   getCourseConfig(cid) → get_course_policy(uuid) when a course becomes active. */
+/* Convert v2 list_teacher_courses() response → COURSES blob shape.
+   v2 row:       { id, name, grade_level, description, color, is_archived,
+                   display_order, grading_system, calc_method, decay_weight,
+                   timezone, late_work_policy, created_at, updated_at }
+   App shape:    { [id]: { id, name, gradeLevel, description, color, archived,
+                           displayOrder, gradingSystem, calcMethod, decayWeight,
+                           timezone, lateWorkPolicy } }
+   Policy fields (gradingSystem/calcMethod/decayWeight/lateWorkPolicy/timezone)
+   are populated here; legacy get_course_policy() is retired in v2. */
 function _canonicalCoursesToBlob(rows) {
   var out = {};
   (rows || []).forEach(function (r) {
-    if (!r || !r.course_offering_id) return;
-    out[r.course_offering_id] = {
-      id: r.course_offering_id,
-      name: r.title || 'Untitled Class',
+    if (!r || !r.id) return;
+    out[r.id] = {
+      id: r.id,
+      name: r.name || 'Untitled Class',
       description: r.description || '',
-      gradeLevel: r.grade_band || '',
-      subjectCode: r.subject_code || '',
-      schoolYear: r.school_year || '',
-      termCode: r.term_code || '',
-      archived: r.status === 'archived',
+      gradeLevel: r.grade_level || '',
+      color: r.color || '',
+      archived: !!r.is_archived,
+      displayOrder: r.display_order != null ? r.display_order : 0,
+      gradingSystem: r.grading_system || null,
+      calcMethod: r.calc_method || null,
+      decayWeight: r.decay_weight,
+      timezone: r.timezone || null,
+      lateWorkPolicy: r.late_work_policy || null,
     };
   });
   return out;
