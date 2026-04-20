@@ -80,6 +80,7 @@ const _cache = {
   customTags: {}, // keyed by cid
   notes: {}, // keyed by cid
   reportConfig: {}, // keyed by cid
+  v2Gradebook: {}, // keyed by cid — raw get_gradebook(cid) payload (Phase 3.4+)
 };
 
 // Mapping from cache field → localStorage key suffix (and Supabase data_key)
@@ -1958,37 +1959,117 @@ function _canonicalFlagsToBlob(rows, enrollmentByStudentId) {
   return blob;
 }
 
+/* Convert v2 get_gradebook(cid) payload → per-course cache blobs.
+   Payload shape (read-paths.sql §2.1):
+     { course, students:[{enrollment_id, student_id, first_name, last_name,
+                          roster_position, is_flagged}],
+       assessments:[{id, title, category_id, score_mode, max_points,
+                     has_rubric, date_assigned, due_date, display_order}],
+       cells: { enrollment_id → { assessment_id → {kind, value,
+                                                   score:{value,status,comment}} } },
+       row_summaries: { enrollment_id → {letter, overall_proficiency, counts} } } */
+function _v2GradebookToCache(cid, payload) {
+  payload = payload || {};
+  var students = (payload.students || []).map(function (s) {
+    return migrateStudent({
+      id: s.enrollment_id,
+      personId: s.student_id,
+      firstName: s.first_name || '',
+      lastName: s.last_name || '',
+      preferred: '',
+      pronouns: '',
+      studentNumber: '',
+      email: '',
+      dateOfBirth: '',
+      designations: [],
+      attendance: [],
+      sortName: ((s.last_name || '') + ' ' + (s.first_name || '')).trim(),
+      rosterPosition: Number(s.roster_position || 0),
+      isFlagged: !!s.is_flagged,
+    });
+  });
+
+  var assessments = (payload.assessments || []).map(function (a) {
+    return {
+      id: a.id,
+      title: a.title || '',
+      date: _dateOnly(a.date_assigned),
+      type: 'summative',
+      tag_ids: [],
+      score_mode: a.score_mode || 'proficiency',
+      max_points: a.max_points != null ? Number(a.max_points) : null,
+      has_rubric: !!a.has_rubric,
+      category_id: a.category_id || null,
+      due_date: _dateOnly(a.due_date),
+      assigned_at: _dateOnly(a.date_assigned),
+      display_order: Number(a.display_order || 0),
+    };
+  });
+
+  _persistLoadedField(cid, 'students', students);
+  _persistLoadedField(cid, 'assessments', assessments);
+  _cache.v2Gradebook[cid] = payload;
+
+  // The remaining cache fields stay empty until their port lands:
+  //   scores       — Phase 4.3 (tag-level TagScore + RubricScore reads)
+  //   observations — Phase 4.4 (get_observations read)
+  //   learningMaps — Phase 4.5 (get_learning_map read)
+  //   termRatings  — Phase 4.7
+  //   reportConfig — Phase 3.x / 4.8 report preview
+  //   goals, reflections, overrides, flags — Phase 4.6 (get_student_profile)
+  // Per-cell overall values are preserved on _cache.v2Gradebook[cid].cells
+  // for whichever rendering pass picks them up first.
+  _persistLoadedField(cid, 'scores', {});
+  _persistLoadedField(cid, 'observations', {});
+  _persistLoadedField(cid, 'courseConfigs', {});
+  _persistLoadedField(cid, 'reportConfig', null);
+  _persistLoadedField(cid, 'learningMaps',
+    (typeof LEARNING_MAP !== 'undefined' && LEARNING_MAP[cid]) || { subjects: [], sections: [] });
+  _persistLoadedField(cid, 'statuses', {});
+  _persistLoadedField(cid, 'termRatings', {});
+  _persistLoadedField(cid, 'flags', {});
+  _persistLoadedField(cid, 'goals', {});
+  _persistLoadedField(cid, 'reflections', {});
+  _persistLoadedField(cid, 'overrides', {});
+
+  _cache.notes[cid] = _safeParseLS('gb-notes-' + cid, {});
+  _cache.modules[cid] = _safeParseLS('gb-modules-' + cid, _safeParseLS('gb-units-' + cid, [])) || [];
+  _cache.rubrics[cid] = _safeParseLS('gb-rubrics-' + cid, []);
+  _cache.customTags[cid] = _safeParseLS('gb-custom-tags-' + cid, []);
+}
+
 async function _doInitData(cid) {
   if (_useSupabase) {
-    // v2 TRANSITION (Phase 3.3): the legacy per-course RPCs below
-    // (list_course_roster, list_course_scores, list_course_observations, …)
-    // were dropped with the gradebook-prod schema wipe. Until Phase 3.4 wires
-    // up v2 get_gradebook(course_id), present an empty-but-valid cache for
-    // the active course so the app shell renders without crashing or spamming
-    // "RPC not found" errors. Real data reload happens when 3.4 lands.
-    if (!window.__V2_GRADEBOOK_READY) {
-      _persistLoadedField(cid, 'students', []);
-      _persistLoadedField(cid, 'assessments', []);
-      _persistLoadedField(cid, 'scores', {});
-      _persistLoadedField(cid, 'observations', {});
-      _persistLoadedField(cid, 'courseConfigs', {});
-      _persistLoadedField(cid, 'reportConfig', null);
-      _persistLoadedField(cid, 'learningMaps', (typeof LEARNING_MAP !== 'undefined' && LEARNING_MAP[cid]) || { subjects: [], sections: [] });
-      _persistLoadedField(cid, 'statuses', {});
-      _persistLoadedField(cid, 'termRatings', {});
-      _persistLoadedField(cid, 'flags', {});
-      _persistLoadedField(cid, 'goals', {});
-      _persistLoadedField(cid, 'reflections', {});
-      _persistLoadedField(cid, 'overrides', {});
-      _cache.notes[cid] = _safeParseLS('gb-notes-' + cid, {});
-      _cache.modules[cid] = _safeParseLS('gb-modules-' + cid, _safeParseLS('gb-units-' + cid, [])) || [];
-      _cache.rubrics[cid] = _safeParseLS('gb-rubrics-' + cid, []);
-      _cache.customTags[cid] = _safeParseLS('gb-custom-tags-' + cid, []);
+    const sb = getSupabase();
+
+    // v2 TRANSITION (Phases 3.3 → 3.4):
+    //   3.3 empty-shell short-circuit kept here for the not-ready fallback path
+    //       (e.g. window.__V2_GRADEBOOK_READY explicitly turned off for testing).
+    //   3.4 default ON: call get_gradebook(cid) and hydrate students + assessments
+    //       + _cache.v2Gradebook. Scores/observations/learningMaps/etc. stay empty
+    //       until their own phases port the corresponding reads.
+    if (window.__V2_GRADEBOOK_READY === false) {
+      _v2GradebookToCache(cid, { students: [], assessments: [], cells: {}, row_summaries: {} });
       return;
     }
 
-    const sb = getSupabase();
+    try {
+      var gbRes = await sb.rpc('get_gradebook', { p_course_id: cid });
+      if (gbRes.error) throw gbRes.error;
+      _v2GradebookToCache(cid, gbRes.data || {});
+      return;
+    } catch (e) {
+      console.warn('get_gradebook failed for ' + cid + '; falling back to empty cache:', e);
+      _v2GradebookToCache(cid, { students: [], assessments: [], cells: {}, row_summaries: {} });
+      return;
+    }
 
+    // (Legacy per-course RPC fan-out removed — get_gradebook above is the v2
+    // boot read. Phase 4.x will add purpose-built v2 RPCs for scoring,
+    // observations, learning map, etc. as each UI path is ported.)
+    return;
+
+    // eslint-disable-next-line no-unreachable
     try {
       var rosterRes = await _rpcPagedArray(sb, 'list_course_roster', { p_course_offering_id: cid });
       if (rosterRes.error) throw rosterRes.error;
