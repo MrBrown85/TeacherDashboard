@@ -4659,72 +4659,177 @@ function updateQuickOb(cid, sid, obId, updates) {
   _broadcastChange(cid, 'observations');
 }
 
-/* Canonical observation writes — all require enrollment_id (UUID).
-   create_observation also needs cid as UUID; id is omitted so the RPC mints one. */
+/* v2 create_observation(p_course_id, p_body, p_sentiment, p_context_type,
+   p_assessment_id, p_enrollment_ids uuid[], p_tag_ids uuid[],
+   p_custom_tag_ids uuid[]) → uuid */
 function _persistObservationCreate(cid, sid, entry) {
   if (!_isUuid(cid) || !_isUuid(sid)) return;
   var sb = getSupabase();
   if (!sb) return;
+  var ctxAsmt =
+    entry.assignmentContext && _isUuid(entry.assignmentContext.assessmentId)
+      ? entry.assignmentContext.assessmentId
+      : null;
+  // entry.dims is an array of dimension codes (text labels) — not UUIDs in the
+  // legacy store. Passing [] here; tag linkage lands in Phase 4.5 once the
+  // learning map port carries real tag ids through to observation capture.
   sb.rpc('create_observation', {
-    p_course_offering_id: cid,
-    p_payload: {
-      enrollmentId: sid,
-      created: entry.created,
-      sentiment: entry.sentiment || '',
-      context: entry.context || '',
-      text: entry.text || '',
-      dims: entry.dims || [],
-    },
+    p_course_id:       cid,
+    p_body:            entry.text || '',
+    p_sentiment:       entry.sentiment || null,
+    p_context_type:    entry.context || null,
+    p_assessment_id:   ctxAsmt,
+    p_enrollment_ids:  [sid],
+    p_tag_ids:         [],
+    p_custom_tag_ids:  [],
   }).then(function (res) {
     if (res.error) {
       console.warn('create_observation failed:', res.error);
       return;
     }
-    var row = res.data || {};
-    // Patch the cached entry's id to the canonical observation_id so future
-    // updates/deletes can reference it.
+    var newId = res.data;
     var arr = (_cache.observations[cid] || {})[sid];
     if (Array.isArray(arr)) {
       var cached = arr.find(function (o) {
         return o.id === entry.id;
       });
-      if (cached && row.observation_id) {
-        cached.id = row.observation_id;
+      if (cached && newId) {
+        cached.id = newId;
         _safeLSSet('gb-quick-obs-' + cid, JSON.stringify(_cache.observations[cid]));
       }
     }
   });
 }
 
+/* v2 update_observation(p_id, p_patch jsonb, p_enrollment_ids, p_tag_ids,
+   p_custom_tag_ids). Null join-array params leave that set alone; empty
+   array wipes it. Here we always pass null so we don't disturb membership
+   unless the caller explicitly wants to. */
 function _persistObservationUpdate(cid, ob) {
-  if (!_isUuid(cid) || !_isUuid(ob.id)) return;
+  if (!_isUuid(ob.id)) return;
   var sb = getSupabase();
   if (!sb) return;
+  var patch = {
+    body:         ob.text || '',
+    sentiment:    ob.sentiment || null,
+    context_type: ob.context || null,
+  };
+  if (ob.assignmentContext && _isUuid(ob.assignmentContext.assessmentId)) {
+    patch.assessment_id = ob.assignmentContext.assessmentId;
+  }
   sb.rpc('update_observation', {
-    p_course_offering_id: cid,
-    p_observation_id: ob.id,
-    p_payload: {
-      sentiment: ob.sentiment || '',
-      context: ob.context || '',
-      text: ob.text || '',
-      dims: ob.dims || [],
-    },
+    p_id: ob.id,
+    p_patch: patch,
+    p_enrollment_ids: null,
+    p_tag_ids: null,
+    p_custom_tag_ids: null,
   }).then(function (res) {
     if (res.error) console.warn('update_observation failed:', res.error);
   });
 }
 
+/* v2 delete_observation(p_id). FK cascade handles observation_student /
+   observation_tag / observation_custom_tag / term_rating_observation. */
 function _persistObservationDelete(cid, obId) {
-  if (!_isUuid(cid) || !_isUuid(obId)) return;
+  if (!_isUuid(obId)) return;
   var sb = getSupabase();
   if (!sb) return;
-  sb.rpc('delete_observation', {
-    p_course_offering_id: cid,
-    p_observation_id: obId,
-  }).then(function (res) {
+  sb.rpc('delete_observation', { p_id: obId }).then(function (res) {
     if (res.error) console.warn('delete_observation failed:', res.error);
   });
 }
+
+/* ── Public v2 observation helpers (Phase 4.4) ─────────────────── */
+
+/* Richer create that accepts multi-student targeting + tag + custom-tag
+   membership, mirroring the Pass B §10.1 capture-bar payload. */
+window.createObservationRich = function (params) {
+  var sb = getSupabase();
+  if (!sb) return Promise.resolve();
+  params = params || {};
+  if (!_isUuid(params.courseId)) return Promise.resolve();
+  return sb
+    .rpc('create_observation', {
+      p_course_id:      params.courseId,
+      p_body:           params.body || '',
+      p_sentiment:      params.sentiment || null,
+      p_context_type:   params.contextType || null,
+      p_assessment_id:  _isUuid(params.assessmentId) ? params.assessmentId : null,
+      p_enrollment_ids: (params.enrollmentIds || []).filter(_isUuid),
+      p_tag_ids:        (params.tagIds || []).filter(_isUuid),
+      p_custom_tag_ids: (params.customTagIds || []).filter(_isUuid),
+    })
+    .then(function (res) {
+      if (res.error) console.warn('create_observation failed:', res.error);
+      return res;
+    });
+};
+
+window.updateObservationRich = function (obId, patch, joins) {
+  var sb = getSupabase();
+  if (!sb) return Promise.resolve();
+  if (!_isUuid(obId)) return Promise.resolve();
+  joins = joins || {};
+  return sb
+    .rpc('update_observation', {
+      p_id:             obId,
+      p_patch:          patch || {},
+      p_enrollment_ids: joins.enrollmentIds ? joins.enrollmentIds.filter(_isUuid) : null,
+      p_tag_ids:        joins.tagIds        ? joins.tagIds.filter(_isUuid)        : null,
+      p_custom_tag_ids: joins.customTagIds  ? joins.customTagIds.filter(_isUuid)  : null,
+    })
+    .then(function (res) {
+      if (res.error) console.warn('update_observation failed:', res.error);
+      return res;
+    });
+};
+
+/* Observation templates — seeds (is_seed=true) are immutable; these helpers
+   only touch teacher-owned custom templates (Q4). */
+window.upsertObservationTemplate = function (cid, payload) {
+  var sb = getSupabase();
+  if (!sb) return Promise.resolve();
+  if (!_isUuid(cid)) return Promise.resolve();
+  payload = payload || {};
+  return sb
+    .rpc('upsert_observation_template', {
+      p_id:                   _isUuid(payload.id) ? payload.id : null,
+      p_course_id:            cid,
+      p_body:                 payload.body || '',
+      p_default_sentiment:    payload.defaultSentiment || null,
+      p_default_context_type: payload.defaultContextType || null,
+      p_display_order:        payload.displayOrder != null ? Number(payload.displayOrder) : null,
+    })
+    .then(function (res) {
+      if (res.error) console.warn('upsert_observation_template failed:', res.error);
+      return res;
+    });
+};
+
+window.deleteObservationTemplate = function (tplId) {
+  var sb = getSupabase();
+  if (!sb) return Promise.resolve();
+  if (!_isUuid(tplId)) return Promise.resolve();
+  return sb
+    .rpc('delete_observation_template', { p_id: tplId })
+    .then(function (res) {
+      if (res.error) console.warn('delete_observation_template failed:', res.error);
+      return res;
+    });
+};
+
+/* Custom tag — per §12, create-only path (no edit/delete inventoried). */
+window.createCustomTag = function (cid, label) {
+  var sb = getSupabase();
+  if (!sb) return Promise.resolve();
+  if (!_isUuid(cid)) return Promise.resolve();
+  return sb
+    .rpc('create_custom_tag', { p_course_id: cid, p_label: label || '' })
+    .then(function (res) {
+      if (res.error) console.warn('create_custom_tag failed:', res.error);
+      return res;
+    });
+};
 
 function getQuickObsByDim(cid, sid, dim) {
   return getStudentQuickObs(cid, sid).filter(o => (o.dims || []).includes(dim));
