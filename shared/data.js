@@ -2929,6 +2929,74 @@ window.upsertCellScore = function (cid, enrollmentId, assessmentId, value) {
   });
 };
 
+/* Fill every criterion of a rubric assessment with one level value (§9.6).
+   Returns the number of criteria updated. */
+window.fillRubric = function (enrollmentId, assessmentId, value) {
+  if (!_isUuid(enrollmentId) || !_isUuid(assessmentId)) return Promise.resolve();
+  var sb = getSupabase();
+  if (!sb) return Promise.resolve();
+  var v = value == null ? null : Number(value);
+  return sb
+    .rpc('fill_rubric', {
+      p_enrollment_id: enrollmentId,
+      p_assessment_id: assessmentId,
+      p_value: v,
+    })
+    .then(function (res) {
+      if (res.error) console.warn('fill_rubric failed:', res.error);
+      return res;
+    });
+};
+
+/* Clear a single cell — removes Score, RubricScore, and TagScore rows for
+   the (enrollment, assessment) tuple.  Final value/status are captured as a
+   deletion audit row before the delete cascades. */
+window.clearScore = function (enrollmentId, assessmentId) {
+  if (!_isUuid(enrollmentId) || !_isUuid(assessmentId)) return Promise.resolve();
+  var sb = getSupabase();
+  if (!sb) return Promise.resolve();
+  return sb
+    .rpc('clear_score', {
+      p_enrollment_id: enrollmentId,
+      p_assessment_id: assessmentId,
+    })
+    .then(function (res) {
+      if (res.error) console.warn('clear_score failed:', res.error);
+      return res;
+    });
+};
+
+/* Clear every score this student has in the course — the "remove all of this
+   student's grades" action. Returns audit-row count. */
+window.clearRowScores = function (enrollmentId, courseId) {
+  if (!_isUuid(enrollmentId) || !_isUuid(courseId)) return Promise.resolve();
+  var sb = getSupabase();
+  if (!sb) return Promise.resolve();
+  return sb
+    .rpc('clear_row_scores', {
+      p_enrollment_id: enrollmentId,
+      p_course_id: courseId,
+    })
+    .then(function (res) {
+      if (res.error) console.warn('clear_row_scores failed:', res.error);
+      return res;
+    });
+};
+
+/* Clear every student's score on a single assessment — the "reset this column"
+   action. Returns audit-row count. */
+window.clearColumnScores = function (assessmentId) {
+  if (!_isUuid(assessmentId)) return Promise.resolve();
+  var sb = getSupabase();
+  if (!sb) return Promise.resolve();
+  return sb
+    .rpc('clear_column_scores', { p_assessment_id: assessmentId })
+    .then(function (res) {
+      if (res.error) console.warn('clear_column_scores failed:', res.error);
+      return res;
+    });
+};
+
 /* Status pills (NS / EXC / LATE / null). Uses set_score_status RPC per §9.3. */
 window.setCellStatus = function (enrollmentId, assessmentId, status) {
   if (!_isUuid(enrollmentId) || !_isUuid(assessmentId)) return Promise.resolve();
