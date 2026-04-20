@@ -10,6 +10,8 @@
 --   fullvision_v2_write_path_category_module_rubric (2026-04-19)
 --   fullvision_v2_fix_section_competency_group_fk_set_null (2026-04-19)
 --   fullvision_v2_write_path_learning_map     (2026-04-19)
+--   fullvision_v2_write_path_student_enrollment (2026-04-19)
+--   fullvision_v2_fix_import_roster_csv_reenroll (2026-04-19)
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Phase 1.1 — Auth / bootstrap RPCs
@@ -983,3 +985,214 @@ grant execute on function reorder_competency_groups(uuid[]) to authenticated;
 grant execute on function reorder_sections(uuid[]) to authenticated;
 grant execute on function reorder_tags(uuid[]) to authenticated;
 grant execute on function reorder_modules(uuid[]) to authenticated;
+
+
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Phase 1.5 — Student + Enrollment RPCs
+-- ─────────────────────────────────────────────────────────────────────────────
+
+create or replace function create_student_and_enroll(
+    p_course_id      uuid,
+    p_first_name     text,
+    p_last_name      text    default null,
+    p_preferred_name text    default null,
+    p_pronouns       text    default null,
+    p_student_number text    default null,
+    p_email          text    default null,
+    p_date_of_birth  date    default null,
+    p_designations   text[]  default '{}',
+    p_existing_student_id uuid default null
+) returns jsonb
+language plpgsql security invoker set search_path = public as $$
+declare
+    _uid        uuid := (select auth.uid());
+    _student_id uuid;
+    _enroll_id  uuid;
+    _next_pos   int;
+begin
+    if _uid is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+
+    if p_existing_student_id is not null then
+        _student_id := p_existing_student_id;
+    else
+        insert into student (teacher_id, first_name, last_name, preferred_name,
+                             pronouns, student_number, email, date_of_birth)
+        values (_uid, p_first_name, p_last_name, p_preferred_name,
+                p_pronouns, p_student_number, p_email, p_date_of_birth)
+        returning id into _student_id;
+    end if;
+
+    select coalesce(max(roster_position)+1, 0) into _next_pos
+      from enrollment where course_id = p_course_id;
+
+    insert into enrollment (student_id, course_id, designations, roster_position)
+    values (_student_id, p_course_id, coalesce(p_designations, '{}'), _next_pos)
+    returning id into _enroll_id;
+
+    return jsonb_build_object('student_id', _student_id, 'enrollment_id', _enroll_id);
+end; $$;
+
+create or replace function update_student(p_id uuid, p_patch jsonb) returns void
+language plpgsql security invoker set search_path = public as $$
+begin
+    if (select auth.uid()) is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    update student set
+        first_name     = coalesce(p_patch->>'first_name', first_name),
+        last_name      = case when p_patch ? 'last_name'      then p_patch->>'last_name'      else last_name end,
+        preferred_name = case when p_patch ? 'preferred_name' then p_patch->>'preferred_name' else preferred_name end,
+        pronouns       = case when p_patch ? 'pronouns'       then p_patch->>'pronouns'       else pronouns end,
+        student_number = case when p_patch ? 'student_number' then p_patch->>'student_number' else student_number end,
+        email          = case when p_patch ? 'email'          then p_patch->>'email'          else email end,
+        date_of_birth  = case when p_patch ? 'date_of_birth'  then (p_patch->>'date_of_birth')::date else date_of_birth end,
+        updated_at     = now()
+    where id = p_id;
+    if not found then raise exception 'student not found' using errcode = 'P0002'; end if;
+end; $$;
+
+-- update_enrollment: patch keys designations (text[]), is_flagged, roster_position, withdrawn_at.
+create or replace function update_enrollment(p_id uuid, p_patch jsonb) returns void
+language plpgsql security invoker set search_path = public as $$
+declare _desig text[];
+begin
+    if (select auth.uid()) is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    if p_patch ? 'designations' and jsonb_typeof(p_patch->'designations') = 'array' then
+        select array_agg(v #>> '{}') into _desig from jsonb_array_elements(p_patch->'designations') v;
+    end if;
+    update enrollment set
+        designations    = case when p_patch ? 'designations'    then coalesce(_desig, '{}') else designations end,
+        is_flagged      = case when p_patch ? 'is_flagged'      then (p_patch->>'is_flagged')::boolean else is_flagged end,
+        roster_position = case when p_patch ? 'roster_position' then (p_patch->>'roster_position')::int else roster_position end,
+        withdrawn_at    = case when p_patch ? 'withdrawn_at'
+                               then nullif(p_patch->>'withdrawn_at', '')::timestamptz
+                               else withdrawn_at end,
+        updated_at      = now()
+    where id = p_id;
+    if not found then raise exception 'enrollment not found' using errcode = 'P0002'; end if;
+end; $$;
+
+create or replace function withdraw_enrollment(p_id uuid) returns void
+language plpgsql security invoker set search_path = public as $$
+begin
+    if (select auth.uid()) is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    update enrollment set withdrawn_at = now(), updated_at = now() where id = p_id;
+    if not found then raise exception 'enrollment not found' using errcode = 'P0002'; end if;
+end; $$;
+
+create or replace function reorder_roster(p_ids uuid[]) returns void
+language plpgsql security invoker set search_path = public as $$
+declare _i int;
+begin
+    if (select auth.uid()) is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    if p_ids is null then return; end if;
+    for _i in 1 .. coalesce(array_length(p_ids, 1), 0) loop
+        update enrollment set roster_position = _i - 1, updated_at = now() where id = p_ids[_i];
+    end loop;
+end; $$;
+
+create or replace function bulk_apply_pronouns(p_student_ids uuid[], p_pronouns text) returns int
+language plpgsql security invoker set search_path = public as $$
+declare _n int;
+begin
+    if (select auth.uid()) is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    if p_student_ids is null or array_length(p_student_ids, 1) is null then return 0; end if;
+    update student set pronouns = p_pronouns, updated_at = now() where id = any(p_student_ids);
+    get diagnostics _n = row_count;
+    return _n;
+end; $$;
+
+-- import_roster_csv: match existing students by student_number → email → (first+last);
+-- create new ones when no match. Existing active enrollment: update designations;
+-- existing withdrawn: reactivate; no enrollment row: insert.
+-- Returns { created, enrolled, reactivated }.
+create or replace function import_roster_csv(p_course_id uuid, p_rows jsonb)
+returns jsonb
+language plpgsql security invoker set search_path = public as $$
+declare
+    _uid      uuid := (select auth.uid());
+    _row      jsonb;
+    _sid      uuid;
+    _created  int := 0;
+    _enrolled int := 0;
+    _reactivated int := 0;
+    _existed_id uuid;
+    _was_withdrawn boolean;
+    _next_pos int;
+    _desig    text[];
+    _sn       text; _em text; _fn text; _ln text;
+begin
+    if _uid is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    if p_rows is null or jsonb_typeof(p_rows) <> 'array' then
+        raise exception 'p_rows must be an array' using errcode = '22023';
+    end if;
+
+    for _row in select * from jsonb_array_elements(p_rows) loop
+        _sid := null;
+        _sn := nullif(_row->>'student_number', '');
+        _em := nullif(_row->>'email', '');
+        _fn := nullif(_row->>'first_name', '');
+        _ln := nullif(_row->>'last_name', '');
+
+        if _sn is not null then
+            select id into _sid from student where teacher_id = _uid and student_number = _sn limit 1;
+        end if;
+        if _sid is null and _em is not null then
+            select id into _sid from student where teacher_id = _uid and email = _em limit 1;
+        end if;
+        if _sid is null and _fn is not null then
+            select id into _sid from student
+             where teacher_id = _uid and first_name = _fn
+               and coalesce(last_name, '') = coalesce(_ln, '') limit 1;
+        end if;
+
+        if _sid is null then
+            insert into student (teacher_id, first_name, last_name, preferred_name,
+                                 pronouns, student_number, email, date_of_birth)
+            values (_uid, _fn, _ln,
+                    nullif(_row->>'preferred_name',''),
+                    nullif(_row->>'pronouns',''),
+                    _sn, _em,
+                    nullif(_row->>'date_of_birth','')::date)
+            returning id into _sid;
+            _created := _created + 1;
+        end if;
+
+        _desig := '{}';
+        if _row ? 'designations' and jsonb_typeof(_row->'designations') = 'array' then
+            select array_agg(v #>> '{}') into _desig from jsonb_array_elements(_row->'designations') v;
+        end if;
+
+        select id, (withdrawn_at is not null) into _existed_id, _was_withdrawn
+          from enrollment where student_id = _sid and course_id = p_course_id;
+
+        if _existed_id is null then
+            select coalesce(max(roster_position)+1, 0) into _next_pos from enrollment where course_id = p_course_id;
+            insert into enrollment (student_id, course_id, designations, roster_position)
+            values (_sid, p_course_id, coalesce(_desig, '{}'), _next_pos);
+            _enrolled := _enrolled + 1;
+        elsif _was_withdrawn then
+            update enrollment set withdrawn_at = null,
+                                  designations = coalesce(_desig, designations),
+                                  updated_at = now()
+             where id = _existed_id;
+            _reactivated := _reactivated + 1;
+        else
+            if _row ? 'designations' then
+                update enrollment set designations = coalesce(_desig, '{}'), updated_at = now()
+                 where id = _existed_id;
+            end if;
+            _reactivated := _reactivated + 1;
+        end if;
+    end loop;
+
+    return jsonb_build_object('created', _created, 'enrolled', _enrolled, 'reactivated', _reactivated);
+end; $$;
+
+grant execute on function create_student_and_enroll(uuid, text, text, text, text, text, text, date, text[], uuid) to authenticated;
+grant execute on function update_student(uuid, jsonb) to authenticated;
+grant execute on function update_enrollment(uuid, jsonb) to authenticated;
+grant execute on function withdraw_enrollment(uuid) to authenticated;
+grant execute on function reorder_roster(uuid[]) to authenticated;
+grant execute on function bulk_apply_pronouns(uuid[], text) to authenticated;
+grant execute on function import_roster_csv(uuid, jsonb) to authenticated;
