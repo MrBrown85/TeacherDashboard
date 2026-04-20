@@ -5048,6 +5048,43 @@ window.v2.bulkAttendance = function (enrollmentIds, date, status) {
      growthTagIds         → growth_tags[]
      mentionAssessmentIds → mention_assessments[]
      mentionObservationIds→ mention_observations[] */
+/* ── v2 ReportConfig + TeacherPreference (Phase 4.8 + 1.11 wire-up) ──── */
+
+window.v2.applyReportPreset = function (courseId, preset) {
+  return _rpcOrNoop('apply_report_preset', {
+    p_course_id: courseId,
+    p_preset:    preset,  // 'brief' | 'standard' | 'detailed'
+  });
+};
+
+/* Full replace. If blocks_config diverges from a named preset's defaults,
+   pass p_preset='custom' (or leave preset null — RPC defaults to 'custom'). */
+window.v2.saveReportConfig = function (courseId, blocksConfig, preset) {
+  return _rpcOrNoop('save_report_config', {
+    p_course_id:     courseId,
+    p_blocks_config: blocksConfig || {},
+    p_preset:        preset || null,
+  });
+};
+
+/* Flip a single block; server auto-sets preset='custom'. */
+window.v2.toggleReportBlock = function (courseId, blockKey, enabled) {
+  return _rpcOrNoop('toggle_report_block', {
+    p_course_id: courseId,
+    p_block_key: blockKey,
+    p_enabled:   !!enabled,
+  });
+};
+
+/* Teacher preferences — jsonb patch; omitted keys unchanged. */
+window.v2.saveTeacherPreferences = function (patch) {
+  return _rpcOrNoop('save_teacher_preferences', { p_patch: patch || {} });
+};
+
+/* Soft-delete / restore for account-level lifecycle (Pass C §5). */
+window.v2.softDeleteTeacher = function () { return _rpcOrNoop('soft_delete_teacher', {}); };
+window.v2.restoreTeacher    = function () { return _rpcOrNoop('restore_teacher',    {}); };
+
 window.v2.saveTermRating = function (enrollmentId, term, payload) {
   payload = payload || {};
   var wire = {};
