@@ -21,6 +21,8 @@
 --   fullvision_v2_fix_save_term_rating_dim_audit (2026-04-19)
 --   fullvision_v2_fix_report_config_add_custom_preset (2026-04-19)
 --   fullvision_v2_write_path_prefs_report     (2026-04-19)
+--   fullvision_v2_enable_pg_cron              (2026-04-19)
+--   fullvision_v2_write_path_retention_cleanup (2026-04-19)
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Phase 1.1 — Auth / bootstrap RPCs
@@ -1938,3 +1940,50 @@ grant execute on function apply_report_preset(uuid, text) to authenticated;
 grant execute on function save_report_config(uuid, jsonb, text) to authenticated;
 grant execute on function toggle_report_block(uuid, text, boolean) to authenticated;
 grant execute on function save_teacher_preferences(jsonb) to authenticated;
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Phase 1.12 — Retention cleanup (pg_cron scheduled job)
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Migrations:
+--   fullvision_v2_enable_pg_cron (2026-04-19) — extension enable
+--   fullvision_v2_write_path_retention_cleanup (2026-04-19) — fn + schedule
+--
+-- Schedule: 'fv_retention_cleanup_daily' at 03:17 UTC daily.
+-- Actions:
+--   • Hard-delete teachers where deleted_at < now() - 30 days (Q29).
+--     Cascades remove every owned row (course, student, score, observation, ...).
+--   • Purge score_audit + term_rating_audit rows older than 2 years (Q28).
+-- SECURITY DEFINER so the job bypasses RLS on teacher + audit tables.
+
+create or replace function fv_retention_cleanup() returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+    _teachers_purged int;
+    _score_audit_purged int;
+    _tr_audit_purged    int;
+begin
+    delete from teacher
+     where deleted_at is not null
+       and deleted_at < now() - interval '30 days';
+    get diagnostics _teachers_purged = row_count;
+
+    delete from score_audit where changed_at < now() - interval '2 years';
+    get diagnostics _score_audit_purged = row_count;
+
+    delete from term_rating_audit where changed_at < now() - interval '2 years';
+    get diagnostics _tr_audit_purged = row_count;
+
+    return jsonb_build_object(
+        'teachers_purged', _teachers_purged,
+        'score_audit_purged', _score_audit_purged,
+        'term_rating_audit_purged', _tr_audit_purged,
+        'ran_at', now()
+    );
+end; $$;
+revoke all on function fv_retention_cleanup() from public;
+
+-- Registered via cron.schedule(...) in the deploy migration. Job metadata:
+--   jobname:  fv_retention_cleanup_daily
+--   schedule: '17 3 * * *'
+--   command:  select public.fv_retention_cleanup();
