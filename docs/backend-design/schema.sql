@@ -166,7 +166,7 @@ create table section (
     constraint section_competency_group_fk
         foreign key (competency_group_id, course_id)
         references competency_group(id, course_id)
-        match simple on delete set null
+        match simple on delete set null (competency_group_id)
 );
 create index section_course_idx on section(course_id);
 create index section_subject_idx on section(subject_id);

@@ -8,6 +8,8 @@
 --   fullvision_v2_write_path_auth_bootstrap   (2026-04-19)
 --   fullvision_v2_write_path_course_crud      (2026-04-19)
 --   fullvision_v2_write_path_category_module_rubric (2026-04-19)
+--   fullvision_v2_fix_section_competency_group_fk_set_null (2026-04-19)
+--   fullvision_v2_write_path_learning_map     (2026-04-19)
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Phase 1.1 — Auth / bootstrap RPCs
@@ -741,3 +743,243 @@ grant execute on function upsert_module(uuid, uuid, text, text, int) to authenti
 grant execute on function delete_module(uuid) to authenticated;
 grant execute on function upsert_rubric(uuid, uuid, text, jsonb) to authenticated;
 grant execute on function delete_rubric(uuid) to authenticated;
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Phase 1.4 — Learning map RPCs (Subject, CompetencyGroup, Section, Tag + reorder)
+-- ─────────────────────────────────────────────────────────────────────────────
+-- NB: deployed alongside migration fullvision_v2_fix_section_competency_group_fk_set_null
+-- which fixed a latent FK bug: the composite FK's ON DELETE SET NULL previously
+-- nulled section.course_id (NOT NULL) in addition to competency_group_id. PG15+
+-- column-list form `SET NULL (competency_group_id)` was used to restrict it.
+
+create or replace function upsert_subject(
+    p_id            uuid,
+    p_course_id     uuid,
+    p_name          text,
+    p_display_order int default null
+) returns uuid
+language plpgsql security invoker set search_path = public as $$
+declare _id uuid;
+begin
+    if (select auth.uid()) is null then
+        raise exception 'not authenticated' using errcode = 'PT401';
+    end if;
+
+    if p_id is null then
+        insert into subject (course_id, name, display_order)
+        values (p_course_id, p_name,
+                coalesce(p_display_order,
+                         (select coalesce(max(display_order)+1, 0) from subject where course_id = p_course_id)))
+        returning id into _id;
+    else
+        update subject set
+            name          = p_name,
+            display_order = coalesce(p_display_order, display_order),
+            updated_at    = now()
+         where id = p_id
+        returning id into _id;
+        if _id is null then raise exception 'subject not found' using errcode = 'P0002'; end if;
+    end if;
+    return _id;
+end; $$;
+
+create or replace function delete_subject(p_id uuid) returns void
+language plpgsql security invoker set search_path = public as $$
+begin
+    if (select auth.uid()) is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    delete from subject where id = p_id;
+    if not found then raise exception 'subject not found' using errcode = 'P0002'; end if;
+end; $$;
+
+create or replace function upsert_competency_group(
+    p_id            uuid,
+    p_course_id     uuid,
+    p_name          text,
+    p_color         text default null,
+    p_display_order int  default null
+) returns uuid
+language plpgsql security invoker set search_path = public as $$
+declare _id uuid;
+begin
+    if (select auth.uid()) is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    if p_id is null then
+        insert into competency_group (course_id, name, color, display_order)
+        values (p_course_id, p_name, p_color,
+                coalesce(p_display_order,
+                         (select coalesce(max(display_order)+1, 0) from competency_group where course_id = p_course_id)))
+        returning id into _id;
+    else
+        update competency_group set
+            name          = p_name,
+            color         = p_color,
+            display_order = coalesce(p_display_order, display_order),
+            updated_at    = now()
+         where id = p_id
+        returning id into _id;
+        if _id is null then raise exception 'competency_group not found' using errcode = 'P0002'; end if;
+    end if;
+    return _id;
+end; $$;
+
+create or replace function delete_competency_group(p_id uuid) returns void
+language plpgsql security invoker set search_path = public as $$
+begin
+    if (select auth.uid()) is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    delete from competency_group where id = p_id;
+    if not found then raise exception 'competency_group not found' using errcode = 'P0002'; end if;
+end; $$;
+
+create or replace function upsert_section(
+    p_id                  uuid,
+    p_subject_id          uuid,
+    p_name                text,
+    p_competency_group_id uuid  default null,
+    p_display_order       int   default null
+) returns uuid
+language plpgsql security invoker set search_path = public as $$
+declare _id uuid; _course_id uuid;
+begin
+    if (select auth.uid()) is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    select course_id into _course_id from subject where id = p_subject_id;
+    if _course_id is null then raise exception 'subject not found' using errcode = 'P0002'; end if;
+
+    if p_id is null then
+        insert into section (course_id, subject_id, competency_group_id, name, display_order)
+        values (_course_id, p_subject_id, p_competency_group_id, p_name,
+                coalesce(p_display_order,
+                         (select coalesce(max(display_order)+1, 0) from section where subject_id = p_subject_id)))
+        returning id into _id;
+    else
+        update section set
+            subject_id          = p_subject_id,
+            course_id           = _course_id,
+            competency_group_id = p_competency_group_id,
+            name                = p_name,
+            display_order       = coalesce(p_display_order, display_order),
+            updated_at          = now()
+         where id = p_id
+        returning id into _id;
+        if _id is null then raise exception 'section not found' using errcode = 'P0002'; end if;
+    end if;
+    return _id;
+end; $$;
+
+create or replace function delete_section(p_id uuid) returns void
+language plpgsql security invoker set search_path = public as $$
+begin
+    if (select auth.uid()) is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    delete from section where id = p_id;
+    if not found then raise exception 'section not found' using errcode = 'P0002'; end if;
+end; $$;
+
+create or replace function upsert_tag(
+    p_id            uuid,
+    p_section_id    uuid,
+    p_label         text,
+    p_code          text default null,
+    p_i_can_text    text default null,
+    p_display_order int  default null
+) returns uuid
+language plpgsql security invoker set search_path = public as $$
+declare _id uuid;
+begin
+    if (select auth.uid()) is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    if p_id is null then
+        insert into tag (section_id, code, label, i_can_text, display_order)
+        values (p_section_id, p_code, p_label, p_i_can_text,
+                coalesce(p_display_order,
+                         (select coalesce(max(display_order)+1, 0) from tag where section_id = p_section_id)))
+        returning id into _id;
+    else
+        update tag set
+            section_id    = p_section_id,
+            code          = p_code,
+            label         = p_label,
+            i_can_text    = p_i_can_text,
+            display_order = coalesce(p_display_order, display_order),
+            updated_at    = now()
+         where id = p_id
+        returning id into _id;
+        if _id is null then raise exception 'tag not found' using errcode = 'P0002'; end if;
+    end if;
+    return _id;
+end; $$;
+
+create or replace function delete_tag(p_id uuid) returns void
+language plpgsql security invoker set search_path = public as $$
+begin
+    if (select auth.uid()) is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    delete from tag where id = p_id;
+    if not found then raise exception 'tag not found' using errcode = 'P0002'; end if;
+end; $$;
+
+-- Reorder family: rewrite display_order = array index. Ownership enforced via RLS.
+create or replace function reorder_subjects(p_ids uuid[]) returns void
+language plpgsql security invoker set search_path = public as $$
+declare _i int;
+begin
+    if (select auth.uid()) is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    if p_ids is null then return; end if;
+    for _i in 1 .. coalesce(array_length(p_ids, 1), 0) loop
+        update subject set display_order = _i - 1, updated_at = now() where id = p_ids[_i];
+    end loop;
+end; $$;
+
+create or replace function reorder_competency_groups(p_ids uuid[]) returns void
+language plpgsql security invoker set search_path = public as $$
+declare _i int;
+begin
+    if (select auth.uid()) is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    if p_ids is null then return; end if;
+    for _i in 1 .. coalesce(array_length(p_ids, 1), 0) loop
+        update competency_group set display_order = _i - 1, updated_at = now() where id = p_ids[_i];
+    end loop;
+end; $$;
+
+create or replace function reorder_sections(p_ids uuid[]) returns void
+language plpgsql security invoker set search_path = public as $$
+declare _i int;
+begin
+    if (select auth.uid()) is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    if p_ids is null then return; end if;
+    for _i in 1 .. coalesce(array_length(p_ids, 1), 0) loop
+        update section set display_order = _i - 1, updated_at = now() where id = p_ids[_i];
+    end loop;
+end; $$;
+
+create or replace function reorder_tags(p_ids uuid[]) returns void
+language plpgsql security invoker set search_path = public as $$
+declare _i int;
+begin
+    if (select auth.uid()) is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    if p_ids is null then return; end if;
+    for _i in 1 .. coalesce(array_length(p_ids, 1), 0) loop
+        update tag set display_order = _i - 1, updated_at = now() where id = p_ids[_i];
+    end loop;
+end; $$;
+
+create or replace function reorder_modules(p_ids uuid[]) returns void
+language plpgsql security invoker set search_path = public as $$
+declare _i int;
+begin
+    if (select auth.uid()) is null then raise exception 'not authenticated' using errcode = 'PT401'; end if;
+    if p_ids is null then return; end if;
+    for _i in 1 .. coalesce(array_length(p_ids, 1), 0) loop
+        update module set display_order = _i - 1, updated_at = now() where id = p_ids[_i];
+    end loop;
+end; $$;
+
+grant execute on function upsert_subject(uuid, uuid, text, int) to authenticated;
+grant execute on function delete_subject(uuid) to authenticated;
+grant execute on function upsert_competency_group(uuid, uuid, text, text, int) to authenticated;
+grant execute on function delete_competency_group(uuid) to authenticated;
+grant execute on function upsert_section(uuid, uuid, text, uuid, int) to authenticated;
+grant execute on function delete_section(uuid) to authenticated;
+grant execute on function upsert_tag(uuid, uuid, text, text, text, int) to authenticated;
+grant execute on function delete_tag(uuid) to authenticated;
+grant execute on function reorder_subjects(uuid[]) to authenticated;
+grant execute on function reorder_competency_groups(uuid[]) to authenticated;
+grant execute on function reorder_sections(uuid[]) to authenticated;
+grant execute on function reorder_tags(uuid[]) to authenticated;
+grant execute on function reorder_modules(uuid[]) to authenticated;
