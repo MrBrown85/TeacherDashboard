@@ -2868,28 +2868,81 @@ function upsertScore(cid, sid, aid, tid, scoreVal, date, type, note) {
   _broadcastChange(cid, 'scores');
 }
 
-/* Canonical score write — requires all four IDs to be canonical UUIDs.
-   sid/aid/tid become canonical only AFTER their enrollment/assessment/outcome
-   creation RPCs complete, so a score saved during the brief window between
-   local create and async canonical resolution will skip remote sync. The
-   localStorage write still happens in upsertScore so the score isn't lost. */
+/* v2 per-cell / per-tag / per-criterion score write.
+   Dispatches to the right RPC:
+     • overall cell (no tid)            → upsert_score
+     • tag-scoped, non-rubric assessment → upsert_tag_score
+     • tag-scoped, rubric assessment     → upsert_rubric_score (tid treated as criterion_id)
+   Requires canonical UUIDs. If tid is present but the assessment's has_rubric
+   flag is unknown (v2Gradebook payload missing), we default to tag_score — it
+   will raise on the server for rubric assessments and land in console.warn.
+   The localStorage write still happens in upsertScore so the score isn't lost. */
 function _persistScoreToCanonical(cid, sid, aid, tid, scoreVal, note) {
-  if (!_isUuid(cid) || !_isUuid(sid) || !_isUuid(aid) || !_isUuid(tid)) return;
+  if (!_isUuid(sid) || !_isUuid(aid)) return;
   var sb = getSupabase();
   if (!sb) return;
-  sb.rpc('save_course_score', {
-    p_course_offering_id: cid,
-    p_payload: {
-      assessmentId: aid,
-      enrollmentId: sid,
-      outcomeId: tid,
-      score: scoreVal != null ? String(scoreVal) : '',
-      comment: note || '',
-    },
-  }).then(function (res) {
-    if (res.error) console.warn('save_course_score failed:', res.error);
-  });
+  var intVal = scoreVal === '' || scoreVal == null ? null : Number(scoreVal);
+
+  if (_isUuid(tid) && intVal != null) {
+    // Tag- or criterion-scoped write.
+    var gb = _cache.v2Gradebook && _cache.v2Gradebook[cid];
+    var aRow = gb && (gb.assessments || []).find(function (x) { return x.id === aid; });
+    var useRubric = !!(aRow && aRow.has_rubric);
+    var rpc = useRubric ? 'upsert_rubric_score' : 'upsert_tag_score';
+    var params = useRubric
+      ? { p_enrollment_id: sid, p_assessment_id: aid, p_criterion_id: tid, p_value: intVal }
+      : { p_enrollment_id: sid, p_assessment_id: aid, p_tag_id: tid, p_value: intVal };
+    sb.rpc(rpc, params).then(function (res) {
+      if (res.error) console.warn(rpc + ' failed:', res.error);
+    });
+  }
+
+  // Comment-only updates: route to save_score_comment (no value change). The
+  // legacy per-tag comment is collapsed onto the parent score row in v2 —
+  // comments live on Score, not on TagScore/RubricScore.
+  if (note != null && note !== '') {
+    sb.rpc('save_score_comment', {
+      p_enrollment_id: sid,
+      p_assessment_id: aid,
+      p_comment: note,
+    }).then(function (res) {
+      if (res.error) console.warn('save_score_comment failed:', res.error);
+    });
+  }
 }
+
+/* Overall per-cell score — writes to score.value (Phase 3.5 HANDOFF target).
+   Used by UI paths that enter a top-level proficiency/points value for a
+   (student, assessment) cell, independent of tag/criterion breakdown. */
+window.upsertCellScore = function (cid, enrollmentId, assessmentId, value) {
+  if (!_isUuid(enrollmentId) || !_isUuid(assessmentId)) return Promise.resolve();
+  var sb = getSupabase();
+  if (!sb) return Promise.resolve();
+  var v = value === '' || value == null ? null : Number(value);
+  return sb.rpc('upsert_score', {
+    p_enrollment_id: enrollmentId,
+    p_assessment_id: assessmentId,
+    p_value: v,
+  }).then(function (res) {
+    if (res.error) console.warn('upsert_score failed:', res.error);
+    return res;
+  });
+};
+
+/* Status pills (NS / EXC / LATE / null). Uses set_score_status RPC per §9.3. */
+window.setCellStatus = function (enrollmentId, assessmentId, status) {
+  if (!_isUuid(enrollmentId) || !_isUuid(assessmentId)) return Promise.resolve();
+  var sb = getSupabase();
+  if (!sb) return Promise.resolve();
+  return sb.rpc('set_score_status', {
+    p_enrollment_id: enrollmentId,
+    p_assessment_id: assessmentId,
+    p_status: status || null,
+  }).then(function (res) {
+    if (res.error) console.warn('set_score_status failed:', res.error);
+    return res;
+  });
+};
 
 /* ══════════════════════════════════════════════════════════════════
    Utilities (unchanged)
