@@ -1262,7 +1262,14 @@ window.DashClassManager = (function() {
   function _cmHasCategories(cid) {
     if (!cid) return false;
     try {
-      if (_cmCategoryState[cid] && _cmCategoryState[cid].rows && _cmCategoryState[cid].rows.length > 0) return true;
+      // Only count SAVED rows (rows with a server-issued id). Transient
+      // blank rows from a recent "+ Add category" click don't count —
+      // otherwise the Letter/Both segments would enable immediately on
+      // click, before the teacher has typed anything meaningful.
+      var rows = (_cmCategoryState[cid] && _cmCategoryState[cid].rows) || [];
+      for (var j = 0; j < rows.length; j++) {
+        if (rows[j].id && (rows[j].name || '').trim()) return true;
+      }
       var gb = (typeof _cache !== 'undefined' && _cache.v2Gradebook && _cache.v2Gradebook[cid]) || null;
       if (gb && Array.isArray(gb.categories) && gb.categories.length > 0) return true;
       var assArr = (typeof getAssessments === 'function') ? getAssessments(cid) : [];
