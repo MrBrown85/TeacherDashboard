@@ -26,13 +26,13 @@ Read docs/backend-design/HANDOFF.md and continue.
 
 **Recommended model + effort per phase** (don't use Opus 1M + Extra high by default — it burns weekly quota fast):
 
-| Phase | Model | Effort |
-|---|---|---|
-| 1 (write-path RPCs — mechanical) | Sonnet 4.6 | Medium |
-| 2 (git hygiene — trivial) | Haiku 4.5 | Low |
-| 3 (minimal client port — per file) | Sonnet 4.6 | High |
-| 4 (data.js rewrite — domain logic) | Opus 4.7 (standard, NOT 1M) | High |
-| Stuck / novel bug | Opus 4.7 + Extra high | one-off |
+| Phase                              | Model                       | Effort  |
+| ---------------------------------- | --------------------------- | ------- |
+| 1 (write-path RPCs — mechanical)   | Sonnet 4.6                  | Medium  |
+| 2 (git hygiene — trivial)          | Haiku 4.5                   | Low     |
+| 3 (minimal client port — per file) | Sonnet 4.6                  | High    |
+| 4 (data.js rewrite — domain logic) | Opus 4.7 (standard, NOT 1M) | High    |
+| Stuck / novel bug                  | Opus 4.7 + Extra high       | one-off |
 
 Set via `/model` and `/effort` before each session. Standard 200k context is enough — HANDOFF is designed to keep each session small.
 
@@ -56,16 +56,16 @@ You are continuing an ongoing rebuild. **Read this whole file before touching an
 
 ## Ground truth
 
-| Fact | Value |
-|---|---|
-| Supabase project ref | `novsfeqjhbleyyaztmlh` (name: `gradebook-prod`, ca-central-1, Postgres 17) |
-| Org | `MrBrown85's Org` (`zvqlrjxkzxeidhrnqgny`) |
-| **Design worktree (this repo, read-only charter)** | `/Users/colinbrown/Documents/fullvision-backend-design` |
-| **Main FullVision repo (write target for client port)** | `/Users/colinbrown/Documents/FullVision` |
-| Legacy (reference-only) | `/Users/colinbrown/Documents/Projects/FullVision -- Legacy` |
-| Main repo active branch | `main` (rebuild-v2 merged locally on 2026-04-20; see Activity log + reconciliation entries below) |
-| User has **no budget** for new Supabase projects | Reuse `gradebook-prod`. Do NOT create new projects or paid resources. |
-| User owns domain | `fullvision.ca` (+ `fullvision.netlify.com` fallback). DNS changes are user-only. |
+| Fact                                                    | Value                                                                                             |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Supabase project ref                                    | `novsfeqjhbleyyaztmlh` (name: `gradebook-prod`, ca-central-1, Postgres 17)                        |
+| Org                                                     | `MrBrown85's Org` (`zvqlrjxkzxeidhrnqgny`)                                                        |
+| **Design worktree (this repo, read-only charter)**      | `/Users/colinbrown/Documents/fullvision-backend-design`                                           |
+| **Main FullVision repo (write target for client port)** | `/Users/colinbrown/Documents/FullVision`                                                          |
+| Legacy (reference-only)                                 | `/Users/colinbrown/Documents/Projects/FullVision -- Legacy`                                       |
+| Main repo active branch                                 | `main` (rebuild-v2 merged locally on 2026-04-20; see Activity log + reconciliation entries below) |
+| User has **no budget** for new Supabase projects        | Reuse `gradebook-prod`. Do NOT create new projects or paid resources.                             |
+| User owns domain                                        | `fullvision.ca` (+ `fullvision.netlify.com` fallback). DNS changes are user-only.                 |
 
 ### Reading order for first-time context load
 
@@ -181,7 +181,7 @@ Each task = one functional area (students, assessments, observations, term ratin
 - [x] **4.3** Score + rubric score + tag score entry. (3.5 landed upsertCellScore / upsertTagScore·RubricScore dispatch / setCellStatus / save_score_comment.) Added `window.fillRubric`, `window.clearScore`, `window.clearRowScores`, `window.clearColumnScores`. Legacy `sb.from('scores')` sync paths in `_syncToSupabase` are already short-circuited since the transition started. Commit `6cb58cf` on `rebuild-v2` (local only). **Pending Demo-Mode verification.**
 - [x] **4.4** Observations + templates. Ported `_persistObservationCreate`/`Update`/`Delete` to `create_observation` / `update_observation` / `delete_observation` (v2). Quick-post sends single-element enrollment array; rich capture-bar path via new `window.createObservationRich` + `window.updateObservationRich` accepts multi-student + tag + custom-tag membership. Added `window.upsertObservationTemplate` / `window.deleteObservationTemplate` (seeds immutable) and `window.createCustomTag`. Commit `71ee3de` on `rebuild-v2` (local only). gradebook-prod smoke: create/update/delete + templates + custom tag all verified, FK cascade confirmed. Note: legacy `dims` field (text codes) is not passed as `tag_ids` — that lands with Phase 4.5 learning-map port.
 - [x] **4.5** Learning map (subjects/groups/sections/tags/modules/rubrics). Exposed all 20 structural RPCs under `window.v2.*` namespace: `v2.upsert/delete/reorderSubjects`, `v2.upsert/delete/reorderCompetencyGroups`, `v2.upsert/delete/reorderSections`, `v2.upsert/delete/reorderTags`, `v2.upsert/delete/reorderModules`, `v2.upsert/deleteCategory`, `v2.upsert/deleteRubric` (rubric composite maps camelCase → snake_case criteria payload). Added `_rpcOrNoop` helper. Existing blob-based `saveLearningMap` / `saveCompetencyGroups` / legacy `deleteRubric` local functions unchanged — blob cache → v2 per-entity migration lands when the learning-map UI is rewritten. Commit `20c000f` on `rebuild-v2` (local only).
-- [x] **4.6** Student profile view. Added `window.v2.getStudentProfile` (→ `get_student_profile`), `v2.addNote`/`deleteNote`, `v2.saveGoal`, `v2.saveReflection` (1..5 guard), `v2.saveSectionOverride`/`clearSectionOverride` (1..4 guard), `v2.bulkAttendance`. Existing blob-based save* functions unchanged — UI rewrites will call these directly. Commit `85f17b4` on `rebuild-v2` (local only). gradebook-prod smoke passes.
+- [x] **4.6** Student profile view. Added `window.v2.getStudentProfile` (→ `get_student_profile`), `v2.addNote`/`deleteNote`, `v2.saveGoal`, `v2.saveReflection` (1..5 guard), `v2.saveSectionOverride`/`clearSectionOverride` (1..4 guard), `v2.bulkAttendance`. Existing blob-based save\* functions unchanged — UI rewrites will call these directly. Commit `85f17b4` on `rebuild-v2` (local only). gradebook-prod smoke passes.
 - [x] **4.7** Term rating editor. Added `window.v2.saveTermRating(enrollmentId, term, payload)` wrapping `save_term_rating`. Accepts camelCase payload (narrativeHtml, workHabits/participationRating, socialTraits, dimensions [{sectionId, rating}], strength/growthTagIds, mentionAssessment/ObservationIds); translates to snake_case wire format; omitted keys leave fields/sets alone, empty [] wipes. Commit `6f83ae7` on `rebuild-v2` (local only).
 - [x] **4.8** Report preview. Added `window.v2.applyReportPreset` (brief/standard/detailed), `v2.saveReportConfig` (full replace, defaults preset='custom'), `v2.toggleReportBlock` (auto-flips preset='custom'), `v2.saveTeacherPreferences` (jsonb patch), `v2.softDeleteTeacher` / `v2.restoreTeacher` (Pass C §5). Every v2 RPC deployed on gradebook-prod now has a `window.v2.*` entry. Commit `7897916` on `rebuild-v2` (local only).
 - [x] **4.9** Import flows. Deployed migration `fullvision_v2_write_path_imports`: `import_teams_class(payload)` (§15.2 — course + students + enrollments + assessments; match by SN→email→name; no scores) and `import_json_restore(payload)` (§15.3 — FK-safe topological replay, teacher_id forced to auth.uid(), UPSERT idempotent, covers 20 entity sections). Added `window.v2.importRosterCsv` / `v2.importTeamsClass` / `v2.importJsonRestore`. Commit `15e7cf2` on `rebuild-v2` (local only). gradebook-prod smoke passes both imports + idempotent re-run.
@@ -195,13 +195,13 @@ Each task = one functional area (students, assessments, observations, term ratin
 ### Phase 5 gap-fill (added 2026-04-20 after design-plan audit)
 
 - [x] **5.4 Read-path completion** — deployed §2.3 through §2.8 + backfilled `get_student_profile.competency_tree`. Mirrored in [`read-paths.sql`](read-paths.sql). Smoke-tests extended (blocks 15–21).
-    - [x] 5.4.1 `get_learning_map(p_course_id)` — migration `fullvision_v2_read_path_get_learning_map`; full tree + per-tag class_avg + coverage_count
-    - [x] 5.4.2 `get_class_dashboard(p_course_id)` — migration `fullvision_v2_read_path_get_class_dashboard`; class_avg + histograms + per-assessment/per-group averages + at-risk list + flagged count
-    - [x] 5.4.3 `get_term_rating(p_enrollment_id, p_term)` — migration `fullvision_v2_read_path_get_term_rating`; prior state + course-scoped pickers + context numbers + suggested_dim_defaults
-    - [x] 5.4.4 `get_observations(p_course_id, p_filters, p_page, p_page_size)` — migration `fullvision_v2_read_path_get_observations`; filtered + paginated + indexes
-    - [x] 5.4.5 `get_assessment_detail(p_assessment_id)` — migration `fullvision_v2_read_path_get_assessment_detail`; metadata + rubric/criteria + linked tags + per-cell state
-    - [x] 5.4.6 `get_report(p_enrollment_id, p_term?)` — migration `fullvision_v2_read_path_get_report`; block-by-block composition per ReportConfig
-    - [x] 5.4.7 `get_student_profile.competency_tree` backfill — migration `fullvision_v2_get_student_profile_competency_tree`; the one TODO left in the original RPC
+  - [x] 5.4.1 `get_learning_map(p_course_id)` — migration `fullvision_v2_read_path_get_learning_map`; full tree + per-tag class_avg + coverage_count
+  - [x] 5.4.2 `get_class_dashboard(p_course_id)` — migration `fullvision_v2_read_path_get_class_dashboard`; class_avg + histograms + per-assessment/per-group averages + at-risk list + flagged count
+  - [x] 5.4.3 `get_term_rating(p_enrollment_id, p_term)` — migration `fullvision_v2_read_path_get_term_rating`; prior state + course-scoped pickers + context numbers + suggested_dim_defaults
+  - [x] 5.4.4 `get_observations(p_course_id, p_filters, p_page, p_page_size)` — migration `fullvision_v2_read_path_get_observations`; filtered + paginated + indexes
+  - [x] 5.4.5 `get_assessment_detail(p_assessment_id)` — migration `fullvision_v2_read_path_get_assessment_detail`; metadata + rubric/criteria + linked tags + per-cell state
+  - [x] 5.4.6 `get_report(p_enrollment_id, p_term?)` — migration `fullvision_v2_read_path_get_report`; block-by-block composition per ReportConfig
+  - [x] 5.4.7 `get_student_profile.competency_tree` backfill — migration `fullvision_v2_get_student_profile_competency_tree`; the one TODO left in the original RPC
 - [x] **5.5 Write-path completion** — deployed `delete_student` (§4.5), `relink_student` (§15.4, merge + move + ghost delete), `clear_data` (§16.2, tenant-isolated). Mirrored in [`write-paths.sql`](write-paths.sql). Smoke-tests extended (blocks 22–23). Migration: `fullvision_v2_write_path_student_delete_relink_clear`.
 
 Client side: 9 new `window.v2.*` wrappers landed (`getLearningMap`, `getClassDashboard`, `getTermRating`, `getObservations`, `getAssessmentDetail`, `getReport`, `deleteStudent`, `relinkStudent`, `clearData`). **Every design-inventoried RPC now has a live implementation + client helper.**
@@ -308,28 +308,28 @@ Claude appends one line per completed task. Format: `YYYY-MM-DD | session-<n> | 
 - `2026-04-20 | session-5 | plan-3.1-l-verify | HANDOFF 4.8 verified: added tests/data-reportconfig-prefs-teacher-v2-dispatch.test.js (12 tests) covering report-config, teacher preferences, soft-delete/restore, and 3 import helpers (roster/Teams/JSON). 5 pre-existing mobile date flakes logged in Discovered gaps.`
 - `2026-04-20 | session-5 | plan-3.1-m-verify | HANDOFF 4.9 verified: import dispatchers covered by tests/data-reportconfig-prefs-teacher-v2-dispatch.test.js imports-block added for 3.1-l. No additional tests needed.`
 - `2026-04-20 | session-5 | plan-3.1-n-verify | HANDOFF 4.10 verified: added tests/offline-queue.test.js (14 tests) covering enqueue, flush+dead-letter, stats, clear, callOrEnqueue (online/offline/network-error/validation/no-supabase). setTimeout faked to skip real backoff delays.`
-- `2026-04-20 | session-5 | plan-3.1-o-verify | HANDOFF 5.1 verified: added tests/demo-seed.test.js (10 tests) covering buildDemoSeedPayload Q43 counts + FK integrity + UUID shape + applyDemoSeed. Noted: categories live under \`_categories_preview\` pending import_json_restore inclusion.`
+- `2026-04-20 | session-5 | plan-3.1-o-verify | HANDOFF 5.1 verified: added tests/demo-seed.test.js (10 tests) covering buildDemoSeedPayload Q43 counts + FK integrity + UUID shape + applyDemoSeed. Noted: categories live under \`\_categories_preview\` pending import_json_restore inclusion.`
 - `2026-04-20 | session-5 | plan-3.1-p-verify | HANDOFF 5.3 verified: smoke-tests.sql 14 DO blocks present; Block 14 (RLS cross-tenant isolation) re-verified live against gradebook-prod via MCP — all assertions pass, cross-tenant reads rejected.`
 - `2026-04-20 | session-5 | phase-3-verify-complete | all 16 rebuild-v2 phases (HANDOFF 3.2–3.5, 4.1–4.10, 5.1, 5.3) verified via 111 new unit tests + DB smoke + signed-in browser round-trip. rebuild-v2 ready for Phase 4 merge to main.`
 
 - `2026-04-20 | session-5 | 4.2-merge | reconciliation plan Phase 4 executed locally: git merge --no-ff rebuild-v2 into main (merge commit 2fbc6d7) + git merge --no-ff phase-5.2-complete (merge commit e563ef4, HANDOFF activity-log/gap conflict resolved additively). 2 stale canonical-RPC tests fixed post-merge (commit 8f99dee). Full suite 793 passing + 5 pre-existing date flakes (logged). Local only — push embargo remains.`
 - `2026-04-20 | session-5 | 4.3-action-plan | ACTION_PLAN.md already absent from main (deleted in earlier cleanup); no action required.`
 - `2026-04-20 | session-5 | 5.3-sweep | Phase 5 doc sweep complete (commit 01112cb): 11 reference docs footered (8 backend-design + 3 root); docs/ARCHITECTURE.md Data-layer table regenerated with v2 RPCs; DECISIONS.md Q50 (save_course_score hotfix rationale) + Q51 (--no-ff merge choice) added. Re-sync grep found only historical comments in shared/data.js explaining retired RPCs — no live code or current-state claims reference dead canonical names.`
-- \`2026-04-20 | session-5 | 6.1-dead-code | removed ~230 LOC of dead legacy-bridge sync machinery from shared/data.js (commit 521500b): _syncToSupabase / _doSync / _initRealtimeSync / _refreshFromSupabase / _handleCrossTabChange / _deleteFromSupabase + retry-queue infrastructure (_addToRetryQueue, _retryFailedSyncs, retrySyncs, _retryQueue, _inflightSyncs, _pendingWrites, _syncKey, _MAX_RETRIES, etc.) + all call sites. Added tests/data-dead-bridge-removed.test.js (7 TDD guards). Writes now route through v2 RPC dispatch; offline queue = window.v2Queue. Full suite 800 passing + 5 pre-existing date flakes.\`
+- \`2026-04-20 | session-5 | 6.1-dead-code | removed ~230 LOC of dead legacy-bridge sync machinery from shared/data.js (commit 521500b): \_syncToSupabase / \_doSync / \_initRealtimeSync / \_refreshFromSupabase / \_handleCrossTabChange / \_deleteFromSupabase + retry-queue infrastructure (\_addToRetryQueue, \_retryFailedSyncs, retrySyncs, \_retryQueue, \_inflightSyncs, \_pendingWrites, \_syncKey, \_MAX_RETRIES, etc.) + all call sites. Added tests/data-dead-bridge-removed.test.js (7 TDD guards). Writes now route through v2 RPC dispatch; offline queue = window.v2Queue. Full suite 800 passing + 5 pre-existing date flakes.\`
 - \`2026-04-20 | session-5 | 6.2-backlog | opened docs/superpowers/plans/2026-04-20-post-reconciliation-backlog.md (11 items: P1 key rotation + Playwright e2e + push-embargo lift; P2 realtime re-publication + bulk read RPCs + delete_course semantics + SQL regen; P3 date-flake freeze + decisions.html regen + spec-vs-ui-diff replay; P4 demo-seed category promotion + Demo Mode migration to v2 generator).\`
 - \`2026-04-20 | session-5 | 6.3-ship | moved docs/superpowers/plans/2026-04-20-database-wiring-reconciliation.md → shipped/. Reconciliation plan complete.\`
 - \`2026-04-20 | session-5 | push | local main (31 commits past origin/main) pushed clean — origin now at f76c666. Netlify auto-deploy triggered.\`
 - \`2026-04-20 | session-5 | backlog-P3.1 | fixed 5 flaky date-sensitive mobile tests (commit 145686d): vi.setSystemTime freeze at 2026-04-20T12:00:00Z for dateGroupLabel describes + renders-multiple-date-groups test. 805/805 passing.\`
-- \`2026-04-20 | session-5 | cleanup | removed throwaway worktrees .claude/worktrees/merge-test (was main) and .claude/worktrees/verify-rebuild-v2 (was rebuild-v2). main branch now checked out on primary repo path. Other pre-existing worktrees (heuristic-leakey + 4 older colin/*) left intact.\`
+- \`2026-04-20 | session-5 | cleanup | removed throwaway worktrees .claude/worktrees/merge-test (was main) and .claude/worktrees/verify-rebuild-v2 (was rebuild-v2). main branch now checked out on primary repo path. Other pre-existing worktrees (heuristic-leakey + 4 older colin/\*) left intact.\`
 - \`2026-04-20 | session-5 | backlog-P1.2 | added e2e/regression-smoke.spec.js skeleton (skipped pending P3.4 infra fix). Pre-probe of existing e2e suite found all 8 auth.spec.js tests failing — webServer serves raw source without credential substitution. New P3.4 backlog item tracks the fix.\`
 - \`2026-04-20 | session-5 | backlog-P1.0 | DISCOVERED: fullvision.ca serving 503 "usage_exceeded" from Netlify post-push. Team Dev plan quota hit. Live site dark until user addresses billing. New P1.0 backlog item tracks the remediation options.\`
 - \`2026-04-20 | session-5 | backlog-P3.4 | fixed Playwright webServer: new scripts/build-e2e.sh + npm run build:e2e + updated playwright.config.js to build dist with dummy credentials substituted then serve. Went from 0 passing → 123/141 e2e tests passing. Remaining 18 content-mismatch failures logged as P3.5 (not infra; test-vs-UI reconciliation).\`
 - \`2026-04-21 | session-6 | ui-spec-move | copied INSTRUCTIONS.md / DESIGN-SYSTEM.md / TASKS.md from fullvision-backend-design worktree into main's docs/backend-design/. They are now the authoritative spec on main. Opened docs/superpowers/plans/2026-04-21-ui-v1-feature-gap.md tracking the four Tier-A UI tasks the user asked about (T-UI-02 grading system, T-UI-12 category creator, T-UI-09 rubric weight, T-UI-10 rubric per-level values) plus the remaining T-UI / T-OPS backlog.\`
-- \`2026-04-21 | session-6 | T-UI-02 | A.1 grading_system segmented control shipped: 3 segments (Proficiency/Letter/Both, matches backend CHECK), letter+both gated on _cmHasCategories with cm-seg-btn-disabled style + tooltip + hint, default by grade level, legacy summative/formative slider + Report-as-percentage + 'points' course-level value all retired. Fixed wizard step-2 picker, teams-import default, JSDoc, 2 test fixtures. 805/805 unit tests pass. Demo-Mode visual verification pending user.\`
+- \`2026-04-21 | session-6 | T-UI-02 | A.1 grading_system segmented control shipped: 3 segments (Proficiency/Letter/Both, matches backend CHECK), letter+both gated on \_cmHasCategories with cm-seg-btn-disabled style + tooltip + hint, default by grade level, legacy summative/formative slider + Report-as-percentage + 'points' course-level value all retired. Fixed wizard step-2 picker, teams-import default, JSDoc, 2 test fixtures. 805/805 unit tests pass. Demo-Mode visual verification pending user.\`
 - \`2026-04-21 | session-6 | T-UI-12 | A.2 Category management shipped inside Grading & Calculation: per-row (drag handle + name + weight % + delete), + Add button, running sum with >100 priority color, live warn + blur-commit, drag-reorder via window.v2.reorderCategories. New RPCs: list_categories + reorder_categories deployed as migration fullvision_v2_category_list_and_reorder (security-invoker, weight-cap trigger still enforces 100% server-side; live smoke passed). 2 new dispatch unit tests; 807/807 passing. Resolves T-UI-02 disabled-state naturally once first category is added.\`
 - \`2026-04-21 | session-6 | T-UI-09 + T-UI-10 | A.3 + A.4 shipped together in teacher/page-assignments.js rubric editor: per-criterion Weight input (default 1) in header; per-criterion <details> disclosure 'Customize point values' with 4 inputs L4/L3/L2/L1 (default closed, opens when overrides present, reverting to default auto-removes override). addCriterion seeds the new fields. updateCritWeight + updateCritLevelValue handlers. CSS in assignments.css. Persistence caveat: saveRubrics still writes only to localStorage — new backlog item P2.5 tracks wiring to window.v2.upsertRubric for gradebook-prod persistence. 807/807 unit tests pass.\`
 - \`2026-04-21 | session-6 | T-UI-12-fix | cmHasCategories now only counts SAVED rows (server id AND non-empty name) — transient '+ Add category' rows no longer flip Letter/Both enabled prematurely. Commit 3665af5.\`
 - \`2026-04-21 | session-6 | calc-method-descriptions | added contextual 1-paragraph descriptions beneath the Calculation Method toggle (Phoneox port: grading-config.tsx:100-115). Commit 2293ada.\`
-- \`2026-04-21 | session-6 | calc+grading+late-policy | three additions to Grading & Calculation panel (Q10 + Q19 + Phoneox port): Mean + Median calc methods (shared/calc.js _calcGroup 'average' and 'median' branches; internal value 'average' matches backend CHECK, label reads 'Mean'); contextual grading-system descriptions for proficiency/letter/both; Late Work Policy textarea persisting through existing course.lateWorkPolicy → update_course RPC with null-on-empty coercion. +8 calc-pure unit tests. 815/815 passing. Commit df7d131.\`
+- \`2026-04-21 | session-6 | calc+grading+late-policy | three additions to Grading & Calculation panel (Q10 + Q19 + Phoneox port): Mean + Median calc methods (shared/calc.js \_calcGroup 'average' and 'median' branches; internal value 'average' matches backend CHECK, label reads 'Mean'); contextual grading-system descriptions for proficiency/letter/both; Late Work Policy textarea persisting through existing course.lateWorkPolicy → update_course RPC with null-on-empty coercion. +8 calc-pure unit tests. 815/815 passing. Commit df7d131.\`
 
-*(next session, keep appending.)*
+_(next session, keep appending.)_
