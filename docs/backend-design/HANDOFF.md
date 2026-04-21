@@ -298,4 +298,7 @@ Claude appends one line per completed task. Format: `YYYY-MM-DD | session-<n> | 
 - `2026-04-20 | session-5 | plan-3.1-p-verify | HANDOFF 5.3 verified: smoke-tests.sql 14 DO blocks present; Block 14 (RLS cross-tenant isolation) re-verified live against gradebook-prod via MCP — all assertions pass, cross-tenant reads rejected.`
 - `2026-04-20 | session-5 | phase-3-verify-complete | all 16 rebuild-v2 phases (HANDOFF 3.2–3.5, 4.1–4.10, 5.1, 5.3) verified via 111 new unit tests + DB smoke + signed-in browser round-trip. rebuild-v2 ready for Phase 4 merge to main.`
 
+- `2026-04-20 | session-5 | 4.2-merge | reconciliation plan Phase 4 executed locally: git merge --no-ff rebuild-v2 into main (merge commit 2fbc6d7) + git merge --no-ff phase-5.2-complete (merge commit e563ef4, HANDOFF activity-log/gap conflict resolved additively). 2 stale canonical-RPC tests fixed post-merge (commit 8f99dee). Full suite 793 passing + 5 pre-existing date flakes (logged). Local only — push embargo remains.`
+- `2026-04-20 | session-5 | 4.3-action-plan | ACTION_PLAN.md already absent from main (deleted in earlier cleanup); no action required.`
+
 *(next session, keep appending.)*
