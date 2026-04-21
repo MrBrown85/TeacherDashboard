@@ -31,7 +31,31 @@ describe('setAssignmentStatus', () => {
     expect(getAssignmentStatus(CID, 'stu1', 'assess1')).toBeNull();
   });
 
-  it('calls canonical save_assignment_status when Supabase is enabled', async () => {
+  it('calls v2 set_score_status when Supabase is enabled and ids are UUIDs', async () => {
+    const ENR = '11111111-1111-1111-1111-111111111111';
+    const AID = '22222222-2222-2222-2222-222222222222';
+    const rpcCalls = [];
+    _useSupabase = true;
+    globalThis.getSupabase = () => ({
+      rpc(name, payload) {
+        rpcCalls.push({ name, payload });
+        return Promise.resolve({ error: null });
+      },
+    });
+
+    setAssignmentStatus(CID, ENR, AID, 'late');
+    await Promise.resolve();
+
+    const scoreStatusCall = rpcCalls.find(function (c) { return c.name === 'set_score_status'; });
+    expect(scoreStatusCall).toBeDefined();
+    expect(scoreStatusCall.payload).toEqual({
+      p_enrollment_id: ENR,
+      p_assessment_id: AID,
+      p_status: 'late',
+    });
+  });
+
+  it('skips the RPC when ids are not UUIDs (legacy local-only path)', async () => {
     const rpcCalls = [];
     _useSupabase = true;
     globalThis.getSupabase = () => ({
@@ -44,13 +68,6 @@ describe('setAssignmentStatus', () => {
     setAssignmentStatus(CID, 'stu1', 'assess1', 'late');
     await Promise.resolve();
 
-    expect(rpcCalls).toHaveLength(1);
-    expect(rpcCalls[0].name).toBe('save_assignment_status');
-    expect(rpcCalls[0].payload).toEqual({
-      p_course_offering_id: CID,
-      p_student_id: 'stu1',
-      p_assessment_id: 'assess1',
-      p_status: 'late',
-    });
+    expect(rpcCalls.find(function (c) { return c.name === 'set_score_status'; })).toBeUndefined();
   });
 });

@@ -85,7 +85,7 @@ describe('upsertTermRating', () => {
     expect(result.narrative).toBe('Added narrative');
   });
 
-  it('calls canonical upsert_term_rating when course and student ids are canonical', async () => {
+  it('calls v2 save_term_rating via window.v2.saveTermRating when enrollment id is a UUID', async () => {
     const rpcCalls = [];
     _useSupabase = true;
     _cache.students[CANONICAL_CID] = [
@@ -105,14 +105,15 @@ describe('upsertTermRating', () => {
       },
     });
 
-    upsertTermRating(CANONICAL_CID, ENROLLMENT_ID, 'term1', { narrative: 'Canonical write' });
+    // `termId` must be a numeric 1..6 to pass the v2 guard; legacy 'term1'
+    // no longer dispatches remotely.
+    upsertTermRating(CANONICAL_CID, ENROLLMENT_ID, 1, { narrative: 'Canonical write' });
     await Promise.resolve();
 
-    expect(rpcCalls).toHaveLength(1);
-    expect(rpcCalls[0].name).toBe('upsert_term_rating');
-    expect(rpcCalls[0].payload.p_course_offering_id).toBe(CANONICAL_CID);
-    expect(rpcCalls[0].payload.p_student_id).toBe(STUDENT_ID);
-    expect(rpcCalls[0].payload.p_term_id).toBe('term1');
-    expect(rpcCalls[0].payload.p_patch.narrative).toBe('Canonical write');
+    const call = rpcCalls.find(function (c) { return c.name === 'save_term_rating'; });
+    expect(call).toBeDefined();
+    expect(call.payload.p_enrollment_id).toBe(ENROLLMENT_ID);
+    expect(call.payload.p_term).toBe(1);
+    expect(call.payload.p_payload.narrative_html).toBe('Canonical write');
   });
 });
