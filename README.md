@@ -75,7 +75,7 @@ The schema is multi-namespace (`academics.*`, `assessment.*`, `observation.*`, `
 
 Credentials are injected at serve time by [`netlify/edge-functions/inject-env.js`](netlify/edge-functions/inject-env.js). Set `SUPABASE_URL` and `SUPABASE_KEY` in Netlify → **Site configuration → Environment variables**. Never commit credentials to source.
 
-For local dev without Supabase, use **Demo Mode** (see below) — no credentials needed.
+For local signed-in development, copy [`.env.example`](/Users/colinbrown/Documents/FullVision/.env.example) to `.env`, fill in `SUPABASE_URL` and `SUPABASE_KEY`, then run `npm run dev:local`. For local dev without Supabase, use **Demo Mode** instead — no credentials needed.
 
 ### 4. Run locally
 
@@ -84,6 +84,15 @@ npm run dev
 ```
 
 Opens on port 8347. The root redirects to [`/login.html`](http://localhost:8347/login.html). Click **"Try Demo Mode"** to skip auth and load the Science 8 sample class — handy for UI work without a live Supabase backend.
+
+Signed-in local run:
+
+```bash
+cp .env.example .env
+npm run dev:local
+```
+
+`dev:local` serves the app directly from the repo, injects `SUPABASE_URL` / `SUPABASE_KEY` into HTML the same way production does, and avoids requiring a Netlify deploy just to test authenticated flows.
 
 E2E tests:
 

@@ -7,7 +7,7 @@
     "build": "bash scripts/build.sh",
     "build:e2e": "bash scripts/build-e2e.sh",
     "dev": "npx serve -l 8347",
-    "dev:local": "netlify dev --port 8347",
+    "dev:local": "node scripts/dev-local.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "npx playwright test",

@@ -63,7 +63,7 @@ You are continuing an ongoing rebuild. **Read this whole file before touching an
 | **Design worktree (this repo, read-only charter)** | `/Users/colinbrown/Documents/fullvision-backend-design` |
 | **Main FullVision repo (write target for client port)** | `/Users/colinbrown/Documents/FullVision` |
 | Legacy (reference-only) | `/Users/colinbrown/Documents/Projects/FullVision -- Legacy` |
-| Main repo active branch | `rebuild-v2` (15 local commits past `main`, not yet pushed past `e9f84ce` — see Working mode) |
+| Main repo active branch | `main` (rebuild-v2 merged locally on 2026-04-20; see Activity log + reconciliation entries below) |
 | User has **no budget** for new Supabase projects | Reuse `gradebook-prod`. Do NOT create new projects or paid resources. |
 | User owns domain | `fullvision.ca` (+ `fullvision.netlify.com` fallback). DNS changes are user-only. |
 
