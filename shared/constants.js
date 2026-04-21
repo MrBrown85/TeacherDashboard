@@ -4,7 +4,7 @@
  * @typedef {Object} Course
  * @property {string} id - Course identifier (e.g. 'sci8')
  * @property {string} name - Display name (e.g. 'Science 8')
- * @property {'proficiency'|'points'} gradingSystem - Grading mode
+ * @property {'proficiency'|'letter'|'both'} gradingSystem - Grading mode (T-UI-02; 'points' retired 2026-04-21)
  * @property {'mostRecent'|'highest'|'mode'|'decayingAvg'} calcMethod - Proficiency calculation method
  * @property {number} decayWeight - Weight for decaying average (0-1)
  * @property {string[]} curriculumTags - Linked curriculum codes (e.g. ['SCI8'])

@@ -772,7 +772,9 @@ describe('Import creates new class when courseId is null', () => {
     const result = { studentsCreated: 0, assessmentsCreated: 0, scoresWritten: 0, feedbackSaved: 0, className: '' };
 
     // Create new class
-    const newCourse = createCourse({ name: className || 'Imported Class', gradingSystem: 'points' });
+    // T-UI-02 · gradingSystem='points' retired 2026-04-21 (valid: proficiency/letter/both).
+    // Teams imports now default to proficiency; teacher upgrades from Course Settings.
+    const newCourse = createCourse({ name: className || 'Imported Class', gradingSystem: 'proficiency' });
     const cid = newCourse.id;
     result.className = className || 'Imported Class';
 
@@ -844,7 +846,8 @@ describe('Import creates new class when courseId is null', () => {
 
     expect(COURSES[courseId]).toBeDefined();
     expect(COURSES[courseId].name).toBe('English 10 Block A');
-    expect(COURSES[courseId].gradingSystem).toBe('points');
+    // T-UI-02 · Teams imports now default to proficiency (points retired 2026-04-21).
+    expect(COURSES[courseId].gradingSystem).toBe('proficiency');
     expect(result.className).toBe('English 10 Block A');
   });
 

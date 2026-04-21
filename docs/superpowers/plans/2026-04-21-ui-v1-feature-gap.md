@@ -40,7 +40,7 @@ No AI co-author. No AI references in branch or commit content (`feedback_no_ai_r
 
 ### A.1 · T-UI-02 — `grading_system` segmented control · ~45–60 min
 
-- [ ] **File:** `teacher/dash-class-manager.js` course-policy section (~line 720–770); reuse `.gb-seg-control` from `teacher/gradebook.css:41–54`.
+- [x] *Shipped 2026-04-21 commit TBD.* Rewrote the Course Settings "Grading & Calculation" block in `teacher/dash-class-manager.js:731–790` — 3-segment `Proficiency / Letter / Both` (was `Proficiency (1-4) / Letter (A-F) / Points`; backend CHECK confirms the new triple matches). `_cmHasCategories(cid)` gates Letter + Both — when falsy, those segments render with `.cm-seg-btn-disabled` (strike-through, `not-allowed` cursor, `title` tooltip) + a muted-italic hint line beneath the group: *"Create a category first →"*. `_cmDefaultGradingSystem` maps grade 8–9 → `proficiency`, 10–12 → `letter`. Click handler `cmSetGradingSystem` short-circuits with toast when letter/both + no categories. Deleted: `cmToggleReportPct`, `cmToggleCatWeights`, `cmUpdateCatWeights` + their bindings + the legacy summative/formative slider block + the Report-as-percentage checkbox (U14/U16 retired). Also fixed: create-wizard Step 2 picker (letter/both disabled until categories exist), `teams-import.js` default, `shared/constants.js` JSDoc, 2 stale test fixtures. 805/805 unit tests pass.
 - 3 segments: Proficiency / Letter / Both.
 - Default by grade level: 8–9 → proficiency, 10–12 → letter.
 - Disable Letter + Both when `course.categories.length === 0`; tooltip "Create a category first →" links to the category row landed by A.2.

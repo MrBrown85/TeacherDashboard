@@ -729,16 +729,22 @@ window.DashClassManager = (function() {
     '</div>';
 
     // Section 3: Grading & Calculation (still in left column)
-    var gs = course.gradingSystem || 'proficiency';
+    // T-UI-02 — grading_system segmented control. Three segments:
+    //   proficiency / letter / both. letter+both require at least one
+    //   assessment Category (T-UI-12) — disabled with tooltip otherwise.
+    var gs = course.gradingSystem || (_cmDefaultGradingSystem(course));
+    var hasCats = _cmHasCategories(cmSelectedCourse);
+    var gradeLockReason = hasCats ? '' : 'Create a category first \u2192';
     html += '<div class="cm-section">' +
       '<div class="cm-section-title">Grading &amp; Calculation</div>' +
       '<div class="cm-field">' +
         '<label class="cm-label">Grading System</label>' +
-        '<div class="cm-seg">' +
-          '<button class="cm-seg-btn' + (gs==='proficiency'?' active':'') + '" data-action="cmSetGradingSystem" data-value="proficiency">Proficiency (1\u20134)</button>' +
-          '<button class="cm-seg-btn' + (gs==='letter'?' active':'') + '" data-action="cmSetGradingSystem" data-value="letter">Letter (A\u2013F)</button>' +
-          '<button class="cm-seg-btn' + (gs==='points'?' active':'') + '" data-action="cmSetGradingSystem" data-value="points">Points</button>' +
+        '<div class="cm-seg" role="radiogroup" aria-label="Grading system">' +
+          '<button class="cm-seg-btn' + (gs==='proficiency'?' active':'') + '" role="radio" aria-checked="' + (gs==='proficiency') + '" data-action="cmSetGradingSystem" data-value="proficiency">Proficiency</button>' +
+          '<button class="cm-seg-btn' + (gs==='letter'?' active':'') + (hasCats?'':' cm-seg-btn-disabled') + '" role="radio" aria-checked="' + (gs==='letter') + '" aria-disabled="' + (!hasCats) + '"' + (hasCats?'':' title="' + gradeLockReason + '"') + ' data-action="cmSetGradingSystem" data-value="letter">Letter</button>' +
+          '<button class="cm-seg-btn' + (gs==='both'?' active':'') + (hasCats?'':' cm-seg-btn-disabled') + '" role="radio" aria-checked="' + (gs==='both') + '" aria-disabled="' + (!hasCats) + '"' + (hasCats?'':' title="' + gradeLockReason + '"') + ' data-action="cmSetGradingSystem" data-value="both">Both</button>' +
         '</div>' +
+        (hasCats ? '' : '<div class="cm-hint cm-seg-hint-locked">' + esc(gradeLockReason) + '</div>') +
       '</div>' +
       '<div class="cm-field">' +
         '<label class="cm-label">Calculation Method</label>' +
@@ -757,35 +763,11 @@ window.DashClassManager = (function() {
         '</div>' +
         '<div class="cm-hint">Higher values weight recent scores more heavily.</div>' +
       '</div>' +
-      '<div class="cm-field">' +
-        '<label class="cm-label">Category Weights</label>' +
-        '<label style="display:flex;align-items:center;gap:8px;font-size:0.82rem;cursor:pointer;margin-bottom:8px">' +
-          '<input type="checkbox" id="cm-cw-enabled" ' + (cwEnabled?'checked':'') + ' data-action-change="cmCwEnabled" style="width:16px;height:16px;accent-color:var(--active)">' +
-          'Weight formative assessments separately' +
-        '</label>' +
-        '<div id="cm-cw-sliders" style="' + (cwEnabled?'':'display:none') + '">' +
-          '<div style="display:flex;gap:20px;align-items:center">' +
-            '<div style="flex:1">' +
-              '<div style="display:flex;justify-content:space-between;font-size:0.75rem;color:var(--text-2);margin-bottom:4px">' +
-                '<span>Summative</span><span>Formative</span>' +
-              '</div>' +
-              '<input type="range" id="cm-cw-range" min="0" max="100" value="' + Math.round(cw.summative*100) + '" data-action-input="cmCwRange" style="width:100%">' +
-              '<div style="display:flex;justify-content:space-between;font-size:0.78rem;font-weight:600;margin-top:2px">' +
-                '<span id="cm-cw-summ">' + Math.round(cw.summative*100) + '%</span>' +
-                '<span id="cm-cw-form">' + Math.round(cw.formative*100) + '%</span>' +
-              '</div>' +
-            '</div>' +
-          '</div>' +
-        '</div>' +
-      '</div>' +
-      '<div class="cm-field">' +
-        '<label class="cm-label">Report Card Format</label>' +
-        '<label style="display:flex;align-items:center;gap:8px;font-size:0.82rem;cursor:pointer">' +
-          '<input type="checkbox" id="cm-report-pct" ' + (cc.reportAsPercentage?'checked':'') + ' data-action-change="cmReportPct" style="width:16px;height:16px;accent-color:var(--active)">' +
-          'Report final grade as percentage (recommended for grades 10\u201312)' +
-        '</label>' +
-        '<div class="cm-hint">When enabled, the overall grade on reports displays as a percentage instead of a proficiency level.</div>' +
-      '</div>' +
+      // T-UI-02 retired controls: the legacy "Category weights (summative vs
+      // formative slider)" and "Report final grade as percentage" checkbox
+      // were deleted 2026-04-21. Real category weighting lands in T-UI-12's
+      // Category management row; percentage/letter display is driven entirely
+      // by grading_system above.
     '</div>';
 
     html += '</div>'; // close left column
@@ -1052,11 +1034,16 @@ window.DashClassManager = (function() {
 
     html += '<div class="cm-section"><div class="cm-section-title">Grading &amp; Calculation</div>' +
       '<div class="cm-field"><label class="cm-label">Grading System</label>' +
+        // T-UI-02 · wizard grading_system picker. Letter/Both are hidden in
+        // the create wizard (no categories exist yet) — teacher picks them
+        // later in Course Settings after adding at least one category.
         '<div class="cm-seg" id="cm-cg-grading">' +
-          '<button class="cm-seg-btn active" data-val="proficiency" data-action="cmCreateToggle" data-group="cm-cg-grading">Proficiency (1\u20134)</button>' +
-          '<button class="cm-seg-btn" data-val="letter" data-action="cmCreateToggle" data-group="cm-cg-grading">Letter (A\u2013F)</button>' +
-          '<button class="cm-seg-btn" data-val="points" data-action="cmCreateToggle" data-group="cm-cg-grading">Points</button>' +
-        '</div></div>' +
+          '<button class="cm-seg-btn active" data-val="proficiency" data-action="cmCreateToggle" data-group="cm-cg-grading">Proficiency</button>' +
+          '<button class="cm-seg-btn cm-seg-btn-disabled" data-val="letter" disabled title="Add a category in Course Settings first \u2192">Letter</button>' +
+          '<button class="cm-seg-btn cm-seg-btn-disabled" data-val="both" disabled title="Add a category in Course Settings first \u2192">Both</button>' +
+        '</div>' +
+        '<div class="cm-hint cm-seg-hint-locked">Create categories in Course Settings to unlock Letter and Both.</div>' +
+      '</div>' +
       '<div class="cm-field"><label class="cm-label">Calculation Method</label>' +
         '<div class="cm-seg" id="cm-cg-calc">' +
           '<button class="cm-seg-btn active" data-val="mostRecent" data-action="cmCreateToggle" data-group="cm-cg-calc">Most Recent</button>' +
@@ -1258,8 +1245,45 @@ window.DashClassManager = (function() {
     if (field === 'name' && nameEl) nameEl.textContent = value.trim();
   }
 
+  // T-UI-02 helpers ──────────────────────────────────────────────────
+  // Default grading_system by grade level: 8–9 → proficiency, 10–12 → letter.
+  // Falls back to proficiency when the grade isn't a number we recognize.
+  function _cmDefaultGradingSystem(course) {
+    var gl = parseInt((course && course.gradeLevel) || '', 10);
+    if (!isNaN(gl) && gl >= 10 && gl <= 12) return 'letter';
+    return 'proficiency';
+  }
+
+  // Does the course have at least one assessment Category (T-UI-12)?
+  // Checks, in order: the future window.v2.listCategories cache, the
+  // get_gradebook payload, and the assessment.category_id fallback. Until
+  // T-UI-12 ships the dedicated Category row + the read-path starts returning
+  // the categories array, this returns false and the disabled state shows.
+  function _cmHasCategories(cid) {
+    if (!cid) return false;
+    try {
+      var cats = (typeof _cache !== 'undefined' && _cache.categories && _cache.categories[cid]) || null;
+      if (cats && cats.length > 0) return true;
+      var gb = (typeof _cache !== 'undefined' && _cache.v2Gradebook && _cache.v2Gradebook[cid]) || null;
+      if (gb && Array.isArray(gb.categories) && gb.categories.length > 0) return true;
+      var assArr = (typeof getAssessments === 'function') ? getAssessments(cid) : [];
+      for (var i = 0; i < (assArr || []).length; i++) {
+        if (assArr[i] && assArr[i].category_id) return true;
+      }
+    } catch (e) { /* best-effort detection */ }
+    return false;
+  }
+
   function cmSetGradingSystem(val) {
     if (!cmSelectedCourse) return;
+    // Block letter / both when the course has no assessment categories —
+    // INSTRUCTIONS.md §12.9 / §2.1 U2 / Q11=A. Proficiency always writes.
+    if ((val === 'letter' || val === 'both') && !_cmHasCategories(cmSelectedCourse)) {
+      if (typeof showSyncToast === 'function') {
+        showSyncToast('Create a category first — Letter and Both require at least one assessment category.', 'info');
+      }
+      return;
+    }
     updateCourse(cmSelectedCourse, { gradingSystem: val });
     renderClassManager();
   }
@@ -1282,31 +1306,9 @@ window.DashClassManager = (function() {
     updateCourse(cmSelectedCourse, { decayWeight: parseInt(val, 10) / 100 });
   }
 
-  function cmToggleReportPct(on) {
-    if (!cmSelectedCourse) return;
-    var cc = getCourseConfig(cmSelectedCourse);
-    cc.reportAsPercentage = on;
-    saveCourseConfig(cmSelectedCourse, cc);
-  }
-
-  function cmToggleCatWeights(on) {
-    document.getElementById('cm-cw-sliders').style.display = on ? '' : 'none';
-    if (!cmSelectedCourse) return;
-    var cc = getCourseConfig(cmSelectedCourse);
-    if (!on) { cc.categoryWeights = { summative:1.0, formative:0.0 }; }
-    saveCourseConfig(cmSelectedCourse, cc);
-  }
-
-  function cmUpdateCatWeights(val) {
-    var summ = parseInt(val, 10);
-    var form = 100 - summ;
-    document.getElementById('cm-cw-summ').textContent = summ + '%';
-    document.getElementById('cm-cw-form').textContent = form + '%';
-    if (!cmSelectedCourse) return;
-    var cc = getCourseConfig(cmSelectedCourse);
-    cc.categoryWeights = { summative: summ/100, formative: form/100 };
-    saveCourseConfig(cmSelectedCourse, cc);
-  }
+  // T-UI-02 retired: cmToggleReportPct (U16 replaced by grading_system),
+  // cmToggleCatWeights + cmUpdateCatWeights (legacy binary summative/formative
+  // slider, replaced by T-UI-12 Category management). Deleted 2026-04-21.
 
   /* ── Re-link Curriculum ─────────────────────────────────── */
   function cmStartRelink(cid) {
@@ -1885,14 +1887,13 @@ window.DashClassManager = (function() {
 
   function handleInput(el) {
     if (el.dataset.actionInput === 'cmDecaySlider') { cmUpdateDecay(el.value); return true; }
-    if (el.dataset.actionInput === 'cmCwRange') { cmUpdateCatWeights(el.value); return true; }
+    // T-UI-02 retired: cmCwRange (legacy summative/formative slider).
     return false;
   }
 
   function handleChange(el) {
     if (el.dataset.actionChange === 'cmCSV') { cmHandleCSV(el); return true; }
-    if (el.dataset.actionChange === 'cmCwEnabled') { cmToggleCatWeights(el.checked); return true; }
-    if (el.dataset.actionChange === 'cmReportPct') { cmToggleReportPct(el.checked); return true; }
+    // T-UI-02 retired: cmCwEnabled + cmReportPct (deleted 2026-04-21).
     if (el.dataset.actionChange === 'cmSubjectColor') { cmUpdateSubjectColor(el.dataset.subid, el.value); return true; }
     if (el.dataset.actionChange === 'cmStdSubject') { cmUpdateStdSubject(el.dataset.secid, el.value); return true; }
     if (el.dataset.actionChange === 'cmStdColor') { cmUpdateStdColor(el.dataset.secid, el.value); return true; }

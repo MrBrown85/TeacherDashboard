@@ -599,7 +599,11 @@ window.TeamsImport = (function() {
       // 0. Create new class if importing without an existing course
       if (!cid) {
         var className = (tiClassName || '').trim() || 'Imported Class';
-        var newCourse = createCourse({ name: className, gradingSystem: 'points' });
+        // T-UI-02 · Teams imports default to proficiency; teacher upgrades to
+        // letter/both from Course Settings after adding categories (points as
+        // a course-level grading_system was removed 2026-04-21; per-assessment
+        // score_mode='points' remains valid on individual assessments).
+        var newCourse = createCourse({ name: className, gradingSystem: 'proficiency' });
         cid = newCourse.id;
         tiCourseId = cid;
         tiCreatedCourseId = cid;

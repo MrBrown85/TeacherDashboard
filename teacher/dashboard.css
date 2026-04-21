@@ -539,6 +539,13 @@
 .cm-seg-btn:last-child { border-right:none; }
 .cm-seg-btn:hover { background:var(--overlay-hover); }
 .cm-seg-btn.active { background:var(--active); color:#fff; }
+/* T-UI-02 · disabled segment (letter/both when no categories) */
+.cm-seg-btn.cm-seg-btn-disabled {
+  color:var(--text-3); cursor:not-allowed; background:transparent;
+  text-decoration:line-through; text-decoration-color:var(--text-3);
+}
+.cm-seg-btn.cm-seg-btn-disabled:hover { background:transparent; color:var(--text-3); }
+.cm-seg-hint-locked { color:var(--text-3); font-size:var(--text-xs); margin-top:4px; font-style:italic; }
 
 /* ── Curriculum Wizard ── */
 .cw-steps { display:flex; align-items:center; gap:8px; margin-bottom:20px; }
