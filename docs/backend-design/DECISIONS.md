@@ -135,6 +135,20 @@ One seed file, two use cases. Saves a content-building effort.
 
 ---
 
+### 50. `save_course_score` hotfix policy (2026-04-20)
+
+**A** — No-op on `main` until `rebuild-v2` ships.
+
+The `save_course_score` RPC never existed on `gradebook-prod`; the canonical-schema migration referenced a name scheme that was later replaced by v2. Every `_persistScoreToCanonical` call since PR #63 (2026-04-18) silently failed. The Phase 1 hotfix in the reconciliation plan turned the call into a no-op on `main` while `rebuild-v2` was still in verification. When `rebuild-v2` merged (Phase 4.2, 2026-04-20), real v2 dispatch replaced the no-op.
+
+### 51. `rebuild-v2` → `main` merge strategy (2026-04-20)
+
+**A** — `--no-ff` merge (reconciliation plan Task 4.1 option A.ii).
+
+Chosen over fast-forward because: (1) matches GitHub's default "Create a merge commit" PR behavior, (2) preserves the phase-structure boundary as a single discoverable commit (`git log --merges` surfaces it), (3) enables a whole-rebuild revert via `git revert -m 1` if ever needed. The 60+ commit long-lived feature branch benefits from having its boundary marked; the individual Phase commits are still reachable for archaeology. A second `--no-ff` merge brought in `phase-5.2-complete` (Phase 0-2 reconciliation work). Local only — push embargo still in effect.
+
+---
+
 ## Operational setup
 
 | # | Question | Answer | Impact |
@@ -200,3 +214,8 @@ Implementation can now start. Recommended kickoff order:
 6. Build the category-management UI (new feature per Q25, Q26).
 7. Wire existing UI components (gradebook, dashboard, reports) to the new API.
 8. Offline write queue (Q33) as a dedicated workstream after core is stable.
+
+
+---
+
+> **Last verified 2026-04-20** against `gradebook-prod` + post-merge `main` (Phase 5 doc sweep, reconciliation plan 2026-04-20).

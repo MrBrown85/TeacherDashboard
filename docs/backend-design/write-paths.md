@@ -1527,3 +1527,8 @@ Every non-ephemeral input row from `All Inputs` is covered below. Rows excluded 
 | 271 | §15.4 Relink |
 | 309 | §16.1 Reset demo |
 | 310 | §16.2 Clear data |
+
+
+---
+
+> **Last verified 2026-04-20** against `gradebook-prod` + post-merge `main` (Phase 5 doc sweep, reconciliation plan 2026-04-20).

@@ -195,3 +195,8 @@ Within 30 days of the breach, conduct a post-incident review that includes:
 **Prepared by:** Colin Brown
 **Contact:** brown_colin@surreyschools.ca
 **Date:** March 22, 2026
+
+
+---
+
+> **Last re-verified 2026-04-20** against post-merge `main` — no policy changes required by the v2 RPC rebuild (retention cron, breach procedure, and PIA concern data handling, not API shape).

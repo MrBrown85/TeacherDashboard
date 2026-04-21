@@ -597,3 +597,8 @@ Being honest about remaining gaps that touch the session contract but aren't ses
 - **Data export on account deletion.** §5 destroys everything immediately. Jurisdictions with data-portability rules (GDPR) require an export option before deletion. Not in the inputs; flagged for product/legal.
 
 None of these block a first implementation — they're the next layer of hardening.
+
+
+---
+
+> **Last verified 2026-04-20** against `gradebook-prod` + post-merge `main` (Phase 5 doc sweep, reconciliation plan 2026-04-20).

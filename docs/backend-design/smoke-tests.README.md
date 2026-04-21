@@ -130,3 +130,8 @@ which is all a CI pipeline needs.
 
 If we grow past ~30 blocks and need the tap output, pgTAP becomes the
 better trade-off. For now, 14 blocks is fine.
+
+
+---
+
+> **Last verified 2026-04-20** against `gradebook-prod` + post-merge `main` (Phase 5 doc sweep, reconciliation plan 2026-04-20).

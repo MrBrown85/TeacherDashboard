@@ -643,3 +643,8 @@ Every aggregate in §1 is computed on read. This is deliberate.
 5. **Decaying-average boundary condition.** With `decay_weight = 0.65`, a single score contributes 65% weight on insertion; with many scores, old ones fade fast. This is the spreadsheet's behavior. Confirm it matches what teachers expect — some gradebooks use the opposite convention (new = 1-dw, running = dw). The formula in §1.5's helper matches the old code.
 6. **Per-section calc_method override.** Currently `calc_method` is a course-wide setting. Use cases don't show per-section variation, but it's conceivable a teacher would want "most recent" for one competency and "decaying average" for another. Add later if asked.
 7. **Rubric with zero linked criteria for a tag.** If a rubric-based assessment has no criteria linking to a tag, that assessment contributes nothing to that tag's proficiency — treated as `NOT_APPLICABLE`, not zero. Confirm this is the right choice (alternative: still count the assessment, with value = the rubric overall). Current choice is cleaner.
+
+
+---
+
+> **Last verified 2026-04-20** against `gradebook-prod` + post-merge `main` (Phase 5 doc sweep, reconciliation plan 2026-04-20).

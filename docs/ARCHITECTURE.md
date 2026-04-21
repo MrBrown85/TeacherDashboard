@@ -181,36 +181,35 @@ Multi-namespace design with **public-schema RPCs as the only client interface** 
 | `projection`  | Read-optimized projections                            | `dashboard_student_summary`, `flag_tag`, `student_flag`                                                                     |
 | `integration` | Import staging                                        | `import_job`, `import_row`                                                                                                  |
 
-Public RPCs the client calls (selection):
+Public v2 RPCs the client calls (selection; `window.v2.*` namespace unless noted):
 
-| Read                                              | Write                                                                                  |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `list_teacher_courses`                            | `create_course`, `update_course`                                                       |
-| `get_teacher_preferences`                         | `save_teacher_preferences`                                                             |
-| `get_course_policy`                               | `save_course_policy`                                                                   |
-| `get_report_config`                               | `save_report_config`                                                                   |
-| `list_course_outcomes`                            | `save_learning_map`                                                                    |
-| `list_course_roster`                              | `enroll_student`, `update_enrollment`, `update_student`, `withdraw_enrollment`         |
-| `list_course_assessments`                         | `create_assessment`, `update_assessment`, `delete_assessment`                          |
-| `list_course_scores`                              | `save_course_score`, `bulk_save_course_scores`, `delete_course_score`                  |
-| `list_course_observations`                        | `create_observation`, `update_observation`, `delete_observation`                       |
-| `get_student_goals`                               | `save_student_goals`                                                                   |
-| `list_student_reflections`                        | `save_student_reflection`                                                              |
-| `list_section_overrides`                          | `save_section_override`, `clear_section_override`                                      |
-| `list_term_ratings_for_course`, `get_term_rating` | `upsert_term_rating`                                                                   |
-| `list_assignment_statuses`                        | `save_assignment_status`                                                               |
-| `list_import_jobs`, `list_import_rows`            | `stage_import`, `validate_import_job`, `commit_import_job`                             |
-| `projection.list_student_flags`                   | `projection.add_student_flag`, `projection.remove_student_flag`, `toggle_student_flag` |
+| Area                  | Read                                        | Write                                                                                                                                             |
+| --------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Auth / teacher        | `bootstrap_teacher` (boot-time)             | `save_teacher_preferences`, `soft_delete_teacher`, `restore_teacher`                                                                              |
+| Courses               | `list_teacher_courses`                      | `create_course`, `update_course`, `archive_course`, `duplicate_course`, `delete_course`                                                           |
+| Gradebook (composite) | `get_gradebook(p_course_id)`                | —                                                                                                                                                 |
+| Student profile       | `get_student_profile(p_enrollment_id)`      | `upsert_note` / `delete_note`, `upsert_goal`, `upsert_reflection`, `upsert_section_override` / `clear_section_override`, `bulk_attendance`        |
+| Students + roster     | (rolled into `get_gradebook`)               | `create_student_and_enroll`, `update_student`, `update_enrollment`, `withdraw_enrollment`, `reorder_roster`, `bulk_apply_pronouns`                |
+| Assessments           | (rolled into `get_gradebook`)               | `create_assessment`, `update_assessment`, `duplicate_assessment`, `delete_assessment`, `save_assessment_tags`, `save_collab`                      |
+| Scoring               | (rolled into `get_gradebook`)               | `upsert_score`, `set_score_status`, `upsert_tag_score`, `upsert_rubric_score`, `fill_rubric`, `save_score_comment`, `clear_score` / `*_row_scores` / `*_column_scores` |
+| Observations          | (rolled into `get_gradebook`)               | `create_observation`, `update_observation`, `delete_observation`, `upsert_observation_template`, `delete_observation_template`, `create_custom_tag` |
+| Learning map          | (rolled into `get_gradebook`)               | `upsert_subject` / `delete_subject` / `reorder_subjects` and parallel triples for `competency_group`, `section`, `tag`, `module`; `upsert_category` / `delete_category`; `upsert_rubric` / `delete_rubric` |
+| Term ratings          | (rolled into `get_student_profile`)         | `save_term_rating` (composite: narrative + dimensions + 4 join tables in one call)                                                                |
+| Report config + prefs | (rolled into `bootstrap_teacher`)           | `apply_report_preset`, `save_report_config`, `toggle_report_block`                                                                                |
+| Imports               | —                                           | `import_roster_csv`, `import_teams_class`, `import_json_restore`                                                                                  |
 
 **Sync patterns by entity:**
 
-- **Students** (`saveStudents`): diffs prev vs new → routes to `enroll_student` / `update_enrollment` + `update_student` / `withdraw_enrollment`. Patches cache `id` to canonical `enrollment_id`, stores `personId = student_id`. Per-course async queue serializes saves so rapid clicks don't double-enroll.
-- **Assessments** (`saveAssessments`): same diff pattern → `create_assessment` / `update_assessment` / `delete_assessment`. `tagIds` filtered to UUIDs only so demo-mode text codes don't fail the canonical UUID cast.
-- **Scores** (`upsertScore`): single-row → `save_course_score`. UUID-gated on all four IDs (cid/sid/aid/tid) — if any is still local, only localStorage holds the score until IDs resolve.
-- **Observations** (`addQuickOb` / `updateQuickOb` / `deleteQuickOb`): single-row → `create_observation` / `update_observation` / `delete_observation`. Create patches cache `id` to canonical `observation_id`.
-- **Per-course reads** (`initData`): RPC results are normalized into the existing cache/helper surface so page modules continue to use `getStudents`, `getSections`, `getAllTags`, `getScores`, etc. without needing to understand the canonical wire format directly.
+- **Boot** (`initAllCourses`): calls `bootstrap_teacher(email, display_name)` — idempotent seed of Teacher + TeacherPreference + Welcome Class on first sign-in — then `list_teacher_courses()`. Policy fields (grading_system, calc_method, decay_weight, timezone, late_work_policy) arrive on each course row; the lazy `get_course_policy()` is retired.
+- **Per-course load** (`_doInitData`): single `get_gradebook(p_course_id)` call returns `{ course, students, assessments, cells, row_summaries }`. `_v2GradebookToCache` normalizes into the existing `_cache.students[cid]` + `_cache.assessments[cid]` shape so page modules continue calling `getStudents`, `getAssessments`, etc. unchanged. Raw payload stashed on `_cache.v2Gradebook[cid]` for `has_rubric` lookups in the scoring dispatch.
+- **Students** (`saveStudents`): diffs prev vs new → `create_student_and_enroll` / `update_enrollment` + `update_student` / `withdraw_enrollment`. Cached `id` is patched to `enrollment_id`, `personId = student_id`. Per-course async queue serializes writes.
+- **Assessments** (`saveAssessments`): same diff pattern → `create_assessment` / `update_assessment` / `delete_assessment`. `tagIds` filtered to UUIDs only so demo-mode text codes don't fail UUID cast.
+- **Scores** (`_persistScoreToCanonical` + `upsertCellScore`): dispatch inspects `_cache.v2Gradebook[cid].assessments[aid].has_rubric` to route tag/criterion entries to `upsert_tag_score` vs `upsert_rubric_score`; overall per-cell writes go to `upsert_score`; status pills to `set_score_status`; comments to `save_score_comment`; clear actions to `clear_score` / `clear_row_scores` / `clear_column_scores`.
+- **Observations** (`addQuickOb` / `updateQuickOb` / `deleteQuickOb`): `create_observation` / `update_observation` / `delete_observation`. Create patches cache `id` to canonical `observation_id`. Multi-student + tag capture is available via `window.createObservationRich` / `updateObservationRich`.
+- **Term ratings** (`upsertTermRating`): dispatches through `window.v2.saveTermRating` which translates camelCase payload (narrativeHtml, workHabitsRating, dimensions, strengthTagIds, etc.) to snake_case `save_term_rating` wire; omitted keys leave fields/sets alone, empty `[]` wipes.
+- **Offline queue** (`window.v2Queue`): FIFO write queue in `fv-sync-queue-v1` localStorage with dead-letter at `fv-sync-dead-letter-v1`. 3-attempt backoff (1s/5s/30s), auto-flush on `online` + 60s periodic retry. Opt-in via `v2Queue.callOrEnqueue(endpoint, payload)`.
 
-All canonical RPC writes are gated on `gb-demo-mode !== '1'` AND `_useSupabase` so demo mode and offline mode stay 100% local. All RPCs are fire-and-forget with `console.warn` on error.
+All RPC writes are gated on `gb-demo-mode !== '1'` AND `_useSupabase` so demo mode and offline mode stay 100% local. All RPCs are fire-and-forget with `console.warn` on error unless callers `await` the returned promise.
 
 **localStorage keys:** `gb-{dataKey}-{courseId}` (e.g., `gb-students-{uuid}`, `gb-scores-{uuid}`). Course IDs are now UUIDs except in demo mode where the seed uses text IDs (`sci8`, etc.).
 

@@ -133,3 +133,8 @@ The design is **complete for v1**. Remaining actions are not design work:
 - **Bucket 3 UI work** — category wizard step, display_mode toggle, rubric editor per-criterion inputs, term rating auto-suggest wiring, long-form draft preservation. These are the user-facing additions that pay for the rebuild.
 
 **Accepted by the rebuild:** categories, rubric flexibility, `grading_system='both'` mode, term rating auto-suggest, long-form draft preservation. Everything else keeps the existing UI shape.
+
+
+---
+
+> **Last verified 2026-04-20** against `gradebook-prod` + post-merge `main` (Phase 5 doc sweep, reconciliation plan 2026-04-20).

@@ -96,3 +96,8 @@ Phase 4.10 of the v2 rebuild (2026-04-19). Auth, write paths, and read paths lan
 - **Conflict resolution UX.** Last-write-wins is simple but can lose work if a teacher edits the same score on two devices while both are offline. Document this clearly in release notes.
 - **Queue corruption.** A localStorage parse error could drop queued writes. Defensive: every queue mutation is atomic; corruption is logged and the bad entry skipped.
 - **Schema drift.** If the server schema changes while a teacher has 200 queued writes against an old schema, replay may fail. Mitigation: minor schema changes are backward-compatible for a release cycle.
+
+
+---
+
+> **Last verified 2026-04-20** against `gradebook-prod` + post-merge `main` (Phase 5 doc sweep, reconciliation plan 2026-04-20).

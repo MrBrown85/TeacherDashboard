@@ -738,3 +738,8 @@ Summary of revisions applied during review:
 6. **Student ownership model.** Students are owned by teacher (`teacher_id` FK). If a student appears in another teacher's courses, they'd need a separate Student record. Is this the intended model, or should Student be independent with Enrollment carrying the full relationship?
 
 7. **ObservationTemplate creation.** Row 159 shows quick-posting from templates but no rows show template *creation or editing*. Are templates app-provided (seed data), or teacher-created through a UI that wasn't inventoried?
+
+
+---
+
+> **Last verified 2026-04-20** against `gradebook-prod` + post-merge `main` (Phase 5 doc sweep, reconciliation plan 2026-04-20).
