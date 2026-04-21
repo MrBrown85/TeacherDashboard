@@ -11,8 +11,15 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
   webServer: {
-    command: 'npx serve -l 8347',
+    // Build dist/ with dummy credentials substituted, then serve. The raw
+    // source has `__SUPABASE_URL__` / `__SUPABASE_KEY__` placeholders that
+    // the Supabase client init chokes on; production uses a Netlify edge
+    // function to substitute real values, and tests use dummy ones so the
+    // client initializes cleanly. Real auth behavior is mocked via
+    // helpers.js `mockAuth`.
+    command: 'npm run build:e2e && npx serve dist -l 8347',
     port: 8347,
     reuseExistingServer: true,
+    timeout: 60_000,
   },
 });

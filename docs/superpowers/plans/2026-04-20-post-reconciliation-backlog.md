@@ -82,10 +82,16 @@
 
 ### P3.4 · Fix Playwright e2e webServer to serve the built `dist/` with credentials injected
 
-- [ ] **Blocks P1.2 and the entire existing e2e suite.** Current `playwright.config.js` runs `npx serve -l 8347` against the source tree; `__SUPABASE_URL__` / `__SUPABASE_KEY__` placeholders are never substituted, so `getSupabase()` returns null and login forms render but their JS fails to wire up. Ran `auth.spec.js` on 2026-04-20 — all 8 tests failed at the first locator.
-- Two options: (a) change `webServer.command` to `npm run build && npx serve dist -l 8347` and add a pre-step that does the sed substitution (mirrors the `dev:local` flow from Phase 3.1-a), or (b) run `netlify dev` so the `inject-env` edge function handles substitution at request time.
-- Option (a) is probably more reliable for CI (no Netlify CLI dependency). Option (b) is closer to production parity.
-- Once fixed, unskip `e2e/regression-smoke.spec.js` (skeleton written 2026-04-20, commit TBD) and expect it to pass end-to-end.
+- [x] *Shipped 2026-04-20 via commit TBD.* Added `scripts/build-e2e.sh` (wraps `build.sh`, then sed-substitutes `__SUPABASE_URL__` / `__SUPABASE_KEY__` with syntactically-valid dummies) + `npm run build:e2e` script. Updated `playwright.config.js` webServer command to `npm run build:e2e && npx serve dist -l 8347` with 60s timeout. Result: went from 0 passing → **123 passing / 18 failing / 1 skipped** out of 142. The remaining 18 are content-mismatch (not infrastructure) and tracked under P3.5.
+
+### P3.5 · Reconcile 18 remaining e2e failures against post-merge UI
+
+- [ ] After P3.4 unblocked the e2e infra, these specs still fail:
+  - `gradebook.spec.js` × 4 — filter button, Scores/Summary tab rendering, tab-switching
+  - `mobile.spec.js` × 11 — sidebar toggle, dashboard content rendering, heatmap, grid layouts, edge cases at 320/375px
+  - `reports.spec.js` × 3 — preset buttons, block toggles, print button
+- None of these are infrastructure — the pages load, auth is mocked, data is seeded. The tests reference UI affordances that have either moved, renamed, or regressed during the v2 rebuild. A focused session per spec (~15 min each) should resolve most.
+- Priority order: gradebook (highest use), then reports, then mobile.
 
 ---
 

@@ -309,5 +309,6 @@ Claude appends one line per completed task. Format: `YYYY-MM-DD | session-<n> | 
 - \`2026-04-20 | session-5 | cleanup | removed throwaway worktrees .claude/worktrees/merge-test (was main) and .claude/worktrees/verify-rebuild-v2 (was rebuild-v2). main branch now checked out on primary repo path. Other pre-existing worktrees (heuristic-leakey + 4 older colin/*) left intact.\`
 - \`2026-04-20 | session-5 | backlog-P1.2 | added e2e/regression-smoke.spec.js skeleton (skipped pending P3.4 infra fix). Pre-probe of existing e2e suite found all 8 auth.spec.js tests failing — webServer serves raw source without credential substitution. New P3.4 backlog item tracks the fix.\`
 - \`2026-04-20 | session-5 | backlog-P1.0 | DISCOVERED: fullvision.ca serving 503 "usage_exceeded" from Netlify post-push. Team Dev plan quota hit. Live site dark until user addresses billing. New P1.0 backlog item tracks the remediation options.\`
+- \`2026-04-20 | session-5 | backlog-P3.4 | fixed Playwright webServer: new scripts/build-e2e.sh + npm run build:e2e + updated playwright.config.js to build dist with dummy credentials substituted then serve. Went from 0 passing → 123/141 e2e tests passing. Remaining 18 content-mismatch failures logged as P3.5 (not infra; test-vs-UI reconciliation).\`
 
 *(next session, keep appending.)*
