@@ -755,6 +755,10 @@ window.DashClassManager = (function() {
           '<button class="cm-seg-btn' + (method==='mode'?' active':'') + '" data-action="cmSetCalcMethod" data-value="mode">Mode</button>' +
           '<button class="cm-seg-btn' + (method==='decayingAvg'?' active':'') + '" data-action="cmSetCalcMethod" data-value="decayingAvg">Decaying Avg</button>' +
         '</div>' +
+        // Contextual description beneath the selected method — copied verbatim
+        // from Project Phoneox (src/components/courses/grading-config.tsx:100-115)
+        // so explanatory copy stays consistent across the React and JS builds.
+        '<div class="cm-hint" style="margin-top:6px">' + _cmCalcMethodDescription(method) + '</div>' +
       '</div>' +
       '<div class="cm-field" style="' + (method==='decayingAvg'?'':'display:none') + '">' +
         '<label class="cm-label">Decay Weight</label>' +
@@ -1253,6 +1257,23 @@ window.DashClassManager = (function() {
     var gl = parseInt((course && course.gradeLevel) || '', 10);
     if (!isNaN(gl) && gl >= 10 && gl <= 12) return 'letter';
     return 'proficiency';
+  }
+
+  // Calculation-method descriptions (verbatim from Project Phoneox React build
+  // `src/components/courses/grading-config.tsx:100-115`). Keep these two copies
+  // in sync — changes to one should land in the other.
+  function _cmCalcMethodDescription(method) {
+    var map = {
+      mostRecent:
+        'Only the latest score counts. If a student scores 2, then 3, then 4, their grade is 4. Earlier scores are ignored entirely. This is the BC standard for competency-based grading \u2014 it answers "where is the student now?" not "how did they do on average."',
+      highest:
+        'Only the best score counts. If a student scores 2, then 4, then 3, their grade is 4. This rewards students who demonstrate mastery at any point and removes the penalty for early struggles while learning new material.',
+      mode:
+        'The most repeated score is used. If a student scores 3, 3, 4, and 2, their grade is 3 because it appeared most often. This reflects the level a student performs at most consistently, filtering out one-off results.',
+      decayingAvg:
+        'A weighted average where recent scores count more than older ones. If a student scores 2, then 3, then 4, the grade will be closer to 4 than a simple average. Use the slider below to control how much more recent work matters.',
+    };
+    return esc(map[method] || map.mostRecent);
   }
 
   // Does the course have at least one assessment Category (T-UI-12)?
