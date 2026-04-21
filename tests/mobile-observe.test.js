@@ -326,19 +326,27 @@ describe('Observation feed edge cases', () => {
   });
 
   it('renders multiple date groups correctly', () => {
-    const today = new Date().toISOString();
-    const yesterday = new Date(Date.now() - 86400000).toISOString();
-    const lastWeek = new Date(Date.now() - 5 * 86400000).toISOString();
-    mockDataLayer({
-      getAllQuickObs: () => [
-        { id: 'ob1', studentId: 'stu1', text: 'today', sentiment: 'strength', created: today, dims: [] },
-        { id: 'ob2', studentId: 'stu1', text: 'yesterday', sentiment: 'growth', created: yesterday, dims: [] },
-        { id: 'ob3', studentId: 'stu1', text: 'last week', sentiment: 'concern', created: lastWeek, dims: [] },
-      ],
-    });
-    const html = MObserve.renderFeed(CID);
-    expect(html).toContain('Today');
-    expect(html).toContain('Yesterday');
+    // Freeze time away from UTC-midnight so `.toISOString()` and
+    // dateGroupLabel's local-date math agree on "today".
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-20T12:00:00Z'));
+    try {
+      const today = new Date().toISOString();
+      const yesterday = new Date(Date.now() - 86400000).toISOString();
+      const lastWeek = new Date(Date.now() - 5 * 86400000).toISOString();
+      mockDataLayer({
+        getAllQuickObs: () => [
+          { id: 'ob1', studentId: 'stu1', text: 'today', sentiment: 'strength', created: today, dims: [] },
+          { id: 'ob2', studentId: 'stu1', text: 'yesterday', sentiment: 'growth', created: yesterday, dims: [] },
+          { id: 'ob3', studentId: 'stu1', text: 'last week', sentiment: 'concern', created: lastWeek, dims: [] },
+        ],
+      });
+      const html = MObserve.renderFeed(CID);
+      expect(html).toContain('Today');
+      expect(html).toContain('Yesterday');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

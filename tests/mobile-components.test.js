@@ -189,7 +189,20 @@ describe('MComponents.relativeTime', () => {
 });
 
 /* ── dateGroupLabel ─────────────────────────────────────────── */
+// The fixtures in these suites compute dates relative to `new Date()` and
+// compare against dateGroupLabel's internal local-date math. Straddling a
+// UTC-midnight boundary makes `.toISOString()` return a different day than
+// local `new Date()`, causing flakes. Freeze time to mid-day UTC so the
+// fixture and the comparison agree on "today".
 describe('MComponents.dateGroupLabel', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-20T12:00:00Z'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('returns "Today" for today', () => {
     const today = new Date().toISOString().substring(0, 10);
     expect(MComponents.dateGroupLabel(today)).toBe('Today');
@@ -411,6 +424,15 @@ describe('MComponents.avatarInitials edge cases', () => {
 
 /* ── dateGroupLabel edge cases ──────────────────────────────── */
 describe('MComponents.dateGroupLabel edge cases', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-20T12:00:00Z'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+
   it('returns "This Week" for 2 days ago', () => {
     const twoDays = new Date(Date.now() - 2 * 86400000).toISOString().substring(0, 10);
     expect(MComponents.dateGroupLabel(twoDays)).toBe('This Week');
