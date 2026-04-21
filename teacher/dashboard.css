@@ -547,6 +547,34 @@
 .cm-seg-btn.cm-seg-btn-disabled:hover { background:transparent; color:var(--text-3); }
 .cm-seg-hint-locked { color:var(--text-3); font-size:var(--text-xs); margin-top:4px; font-style:italic; }
 
+/* T-UI-12 · Category management inline row */
+.cm-cat-field { margin-top:14px; }
+.cm-cat-list { display:flex; flex-direction:column; gap:6px; }
+.cm-cat-row {
+  display:flex; align-items:center; gap:6px;
+  padding:4px 6px; border-radius:var(--radius-sm);
+  transition:background 0.12s;
+}
+.cm-cat-row:hover { background:var(--overlay-hover); }
+.cm-cat-row.dragging { opacity:0.5; }
+.cm-cat-handle {
+  font-size:0.78rem; color:var(--text-3); cursor:grab; padding:0 2px;
+  letter-spacing:-2px; user-select:none;
+}
+.cm-cat-handle:active { cursor:grabbing; }
+.cm-cat-name { flex:1; min-width:120px; }
+.cm-cat-weight { width:64px; text-align:right; }
+.cm-cat-pct { color:var(--text-2); font-size:var(--text-sm); margin-right:4px; }
+.cm-cat-footer {
+  display:flex; justify-content:space-between; align-items:center;
+  margin-top:8px; gap:10px; flex-wrap:wrap;
+}
+.cm-cat-sum { font-size:var(--text-sm); color:var(--text-2); }
+.cm-cat-sum strong { color:var(--text); font-weight:600; }
+.cm-cat-sum-over { color:var(--priority); }
+.cm-cat-sum-over strong { color:var(--priority); }
+.cm-cat-sum-warn { font-style:italic; font-size:var(--text-xs); }
+
 /* ── Curriculum Wizard ── */
 .cw-steps { display:flex; align-items:center; gap:8px; margin-bottom:20px; }
 .cw-step {

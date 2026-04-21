@@ -3720,6 +3720,12 @@ window.v2.upsertCategory = function (params) {
   });
 };
 window.v2.deleteCategory = function (id) { return _rpcOrNoop('delete_category', { p_id: id }); };
+window.v2.listCategories = function (courseId) {
+  return _rpcOrNoop('list_categories', { p_course_id: courseId });
+};
+window.v2.reorderCategories = function (ids) {
+  return _rpcOrNoop('reorder_categories', { p_ids: (ids || []).filter(_isUuid) });
+};
 
 /* Rubric — composite save: rubric row + criteria diff + criterion_tag replace,
    all in one transaction.  criteria payload:

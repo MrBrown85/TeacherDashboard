@@ -50,7 +50,7 @@ No AI co-author. No AI references in branch or commit content (`feedback_no_ai_r
 
 ### A.2 · T-UI-12 — Category management inline row · ~3 hours
 
-- [ ] **File:** `teacher/dash-class-manager.js` — clone the Modules panel pattern; replace the binary summative/formative block at line 761.
+- [x] *Shipped 2026-04-21 commit TBD.* Added `_cmRenderCategoriesField` inline row pattern in `teacher/dash-class-manager.js` — inserted inside the Grading & Calculation section, directly below the grading_system segmented control. Per-row: drag handle + name input + weight % number input + delete ×. "+ Add category" link + running sum (`Sum: <n> / 100%`, turns `var(--priority)` when >100) in the footer. Live warn on keystroke via `cmCatWeightLive` (updates the sum display only, no persist); blur-commit via `cmCatWeight` (persists only when sum ≤ 100 — the `fv_check_category_weight_sum` trigger still enforces server-side). Drag-reorder via delegated `dragstart/dragover/drop/dragend` listeners, atomic persist via `window.v2.reorderCategories`. New backend RPCs: `list_categories(p_course_id)` + `reorder_categories(p_ids)` deployed as migration `fullvision_v2_category_list_and_reorder` (both security-invoker, grant authenticated; live smoke verified list + reorder + weight-cap rejection). Two new `window.v2.*` dispatch helpers with unit tests (+2 tests; 807 total passing). Also resolves T-UI-02's disabled-state: once a teacher adds their first category, `_cmHasCategories` returns true on the next render and the Letter/Both segments enable.
 - Per-row controls: name input + weight % input + drag handle + delete ×.
 - "+ Add category" button below the list.
 - Running sum at bottom: `Sum: 85 / 100 %` — `var(--text-2)` when ≤100, `var(--priority)` when >100.

@@ -746,6 +746,7 @@ window.DashClassManager = (function() {
         '</div>' +
         (hasCats ? '' : '<div class="cm-hint cm-seg-hint-locked">' + esc(gradeLockReason) + '</div>') +
       '</div>' +
+      _cmRenderCategoriesField(cmSelectedCourse) +
       '<div class="cm-field">' +
         '<label class="cm-label">Calculation Method</label>' +
         '<div class="cm-seg">' +
@@ -1255,15 +1256,13 @@ window.DashClassManager = (function() {
   }
 
   // Does the course have at least one assessment Category (T-UI-12)?
-  // Checks, in order: the future window.v2.listCategories cache, the
-  // get_gradebook payload, and the assessment.category_id fallback. Until
-  // T-UI-12 ships the dedicated Category row + the read-path starts returning
-  // the categories array, this returns false and the disabled state shows.
+  // After T-UI-12, _cmCategoryState is the source of truth. Falls back to
+  // _cache.v2Gradebook.categories / assessment.category_id so the disabled
+  // state is correct even before list_categories has resolved.
   function _cmHasCategories(cid) {
     if (!cid) return false;
     try {
-      var cats = (typeof _cache !== 'undefined' && _cache.categories && _cache.categories[cid]) || null;
-      if (cats && cats.length > 0) return true;
+      if (_cmCategoryState[cid] && _cmCategoryState[cid].rows && _cmCategoryState[cid].rows.length > 0) return true;
       var gb = (typeof _cache !== 'undefined' && _cache.v2Gradebook && _cache.v2Gradebook[cid]) || null;
       if (gb && Array.isArray(gb.categories) && gb.categories.length > 0) return true;
       var assArr = (typeof getAssessments === 'function') ? getAssessments(cid) : [];
@@ -1272,6 +1271,193 @@ window.DashClassManager = (function() {
       }
     } catch (e) { /* best-effort detection */ }
     return false;
+  }
+
+  // T-UI-12 · Category management inline row.
+  // Per-course state: { rows: [{id?, name, weight, display_order}], loaded, loading }.
+  // Rows without `id` are new (not yet persisted). `loaded` flips true after
+  // list_categories resolves at least once for the course.
+  var _cmCategoryState = {};
+
+  function _cmCatState(cid) {
+    if (!_cmCategoryState[cid]) _cmCategoryState[cid] = { rows: [], loaded: false, loading: null };
+    return _cmCategoryState[cid];
+  }
+
+  function _cmLoadCategories(cid) {
+    if (!cid) return;
+    var st = _cmCatState(cid);
+    if (st.loaded || st.loading) return;
+    if (!window.v2 || !window.v2.listCategories || !_useSupabase) {
+      st.loaded = true;
+      return;
+    }
+    st.loading = window.v2.listCategories(cid).then(function (res) {
+      st.loading = null;
+      st.loaded = true;
+      if (res && !res.error && Array.isArray(res.data)) {
+        st.rows = res.data.map(function (r) {
+          return {
+            id: r.id,
+            name: r.name || '',
+            weight: Number(r.weight) || 0,
+            display_order: Number(r.display_order) || 0,
+          };
+        }).sort(function (a, b) { return a.display_order - b.display_order; });
+        renderClassManager();
+      }
+    }).catch(function () { st.loading = null; st.loaded = true; });
+  }
+
+  function _cmCatSum(cid) {
+    var rows = _cmCatState(cid).rows;
+    var s = 0;
+    for (var i = 0; i < rows.length; i++) s += Number(rows[i].weight) || 0;
+    return s;
+  }
+
+  function _cmRenderCategoriesField(cid) {
+    if (!cid) return '';
+    var st = _cmCatState(cid);
+    if (!st.loaded && !st.loading) setTimeout(function () { _cmLoadCategories(cid); }, 0);
+
+    var rows = st.rows || [];
+    var sum = _cmCatSum(cid);
+    var over = sum > 100;
+    var sumClass = over ? 'cm-cat-sum cm-cat-sum-over' : 'cm-cat-sum';
+    var html = '<div class="cm-field cm-cat-field">' +
+      '<label class="cm-label">Categories</label>' +
+      '<div class="cm-cat-list">';
+    if (rows.length === 0) {
+      html += '<div class="cm-hint" style="padding:6px 0">No categories yet. Add one to weight assessments and unlock Letter / Both grading.</div>';
+    }
+    rows.forEach(function (row, idx) {
+      html += '<div class="cm-cat-row"' + (row.id ? ' draggable="true" data-cat-drag="' + row.id + '"' : '') + '>' +
+        '<span class="cm-cat-handle" aria-hidden="true">\u22EE\u22EE</span>' +
+        '<input class="cm-input cm-cat-name" value="' + esc(row.name) + '" placeholder="Category name" data-action-blur="cmCatName" data-idx="' + idx + '">' +
+        '<input class="cm-input cm-cat-weight" type="number" min="0" max="100" step="1" value="' + (row.weight != null ? row.weight : '') + '" data-action-blur="cmCatWeight" data-action-input="cmCatWeightLive" data-idx="' + idx + '" aria-label="Weight percent">' +
+        '<span class="cm-cat-pct">%</span>' +
+        '<button class="cm-delete-mini" data-action="cmCatDelete" data-idx="' + idx + '" title="Delete category" aria-label="Delete category">\u2715</button>' +
+      '</div>';
+    });
+    html += '</div>' +
+      '<div class="cm-cat-footer">' +
+        '<button class="cm-add-link" data-action="cmCatAdd">+ Add category</button>' +
+        '<div class="' + sumClass + '" id="cm-cat-sum-' + cid + '">' +
+          'Sum: <strong>' + sum + '</strong> / 100%' +
+          (over ? ' <span class="cm-cat-sum-warn">(reduce weights to save)</span>' : '') +
+        '</div>' +
+      '</div>' +
+    '</div>';
+    return html;
+  }
+
+  function cmCatAdd() {
+    if (!cmSelectedCourse) return;
+    var st = _cmCatState(cmSelectedCourse);
+    st.rows.push({ id: null, name: '', weight: 0, display_order: st.rows.length });
+    renderClassManager();
+  }
+
+  function cmCatName(idx, value) {
+    if (!cmSelectedCourse) return;
+    var st = _cmCatState(cmSelectedCourse);
+    var row = st.rows[idx]; if (!row) return;
+    var name = (value || '').trim();
+    if (!name) return;
+    row.name = name;
+    _cmCatPersist(cmSelectedCourse, row);
+  }
+
+  function cmCatWeightLive(idx, value) {
+    if (!cmSelectedCourse) return;
+    var st = _cmCatState(cmSelectedCourse);
+    var row = st.rows[idx]; if (!row) return;
+    var v = parseFloat(value);
+    row.weight = isNaN(v) ? 0 : Math.max(0, v); // no hard-clamp to 100 per §12.7
+    var sumEl = document.getElementById('cm-cat-sum-' + cmSelectedCourse);
+    if (sumEl) {
+      var sum = _cmCatSum(cmSelectedCourse);
+      var over = sum > 100;
+      sumEl.className = over ? 'cm-cat-sum cm-cat-sum-over' : 'cm-cat-sum';
+      sumEl.innerHTML = 'Sum: <strong>' + sum + '</strong> / 100%' + (over ? ' <span class="cm-cat-sum-warn">(reduce weights to save)</span>' : '');
+    }
+  }
+
+  function cmCatWeight(idx /* , value */) {
+    if (!cmSelectedCourse) return;
+    var st = _cmCatState(cmSelectedCourse);
+    var row = st.rows[idx]; if (!row || !row.name) return;
+    if (_cmCatSum(cmSelectedCourse) > 100) {
+      if (typeof showSyncToast === 'function') showSyncToast('Category weights exceed 100% — reduce before saving.', 'info');
+      return;
+    }
+    _cmCatPersist(cmSelectedCourse, row);
+  }
+
+  function cmCatDelete(idx) {
+    if (!cmSelectedCourse) return;
+    var st = _cmCatState(cmSelectedCourse);
+    var row = st.rows[idx]; if (!row) return;
+    st.rows.splice(idx, 1);
+    if (row.id && window.v2 && window.v2.deleteCategory) window.v2.deleteCategory(row.id);
+    renderClassManager();
+  }
+
+  function _cmCatPersist(cid, row) {
+    if (!window.v2 || !window.v2.upsertCategory) { renderClassManager(); return; }
+    window.v2.upsertCategory({
+      id: row.id,
+      courseId: cid,
+      name: row.name,
+      weight: row.weight,
+      displayOrder: row.display_order,
+    }).then(function (res) {
+      if (res && !res.error) {
+        if (!row.id && res.data) row.id = res.data;
+        renderClassManager();
+      }
+    });
+  }
+
+  // Drag-reorder using delegated document listeners. Drop on another row → move.
+  var _cmCatDragId = null;
+  function _initCmCatDrag() {
+    _addDocListener('dragstart', function (e) {
+      var row = e.target.closest && e.target.closest('.cm-cat-row[data-cat-drag]');
+      if (!row) return;
+      _cmCatDragId = row.dataset.catDrag;
+      row.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    _addDocListener('dragover', function (e) {
+      if (!_cmCatDragId) return;
+      var row = e.target.closest && e.target.closest('.cm-cat-row[data-cat-drag]');
+      if (row && row.dataset.catDrag !== _cmCatDragId) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+    });
+    _addDocListener('drop', function (e) {
+      if (!_cmCatDragId || !cmSelectedCourse) return;
+      var row = e.target.closest && e.target.closest('.cm-cat-row[data-cat-drag]');
+      if (!row) return;
+      e.preventDefault();
+      var st = _cmCatState(cmSelectedCourse);
+      var fromIdx = st.rows.findIndex(function (r) { return r.id === _cmCatDragId; });
+      var toIdx = st.rows.findIndex(function (r) { return r.id === row.dataset.catDrag; });
+      if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) { _cmCatDragId = null; return; }
+      var moved = st.rows.splice(fromIdx, 1)[0];
+      st.rows.splice(toIdx, 0, moved);
+      st.rows.forEach(function (r, i) { r.display_order = i; });
+      _cmCatDragId = null;
+      renderClassManager();
+      if (window.v2 && window.v2.reorderCategories) {
+        var ids = st.rows.map(function (r) { return r.id; }).filter(Boolean);
+        window.v2.reorderCategories(ids);
+      }
+    });
+    _addDocListener('dragend', function () {
+      document.querySelectorAll('.cm-cat-row.dragging').forEach(function (el) { el.classList.remove('dragging'); });
+      _cmCatDragId = null;
+    });
   }
 
   function cmSetGradingSystem(val) {
@@ -1842,6 +2028,8 @@ window.DashClassManager = (function() {
       'cmApplyBulk':          function() { cmApplyBulk(); },
       'cmSetGradingSystem':   function() { cmSetGradingSystem(el.dataset.value); },
       'cmSetCalcMethod':      function() { cmSetCalcMethod(el.dataset.value); },
+      'cmCatAdd':             function() { cmCatAdd(); },
+      'cmCatDelete':          function() { cmCatDelete(parseInt(el.dataset.idx, 10)); },
       'cmToggleColorPalette': function() { cmToggleColorPalette(el); },
       'cmPickColor':          function() { cmPickColor(el); },
       'cmDeleteSubject':      function() { cmDeleteSubject(el.dataset.subid); },
@@ -1887,6 +2075,7 @@ window.DashClassManager = (function() {
 
   function handleInput(el) {
     if (el.dataset.actionInput === 'cmDecaySlider') { cmUpdateDecay(el.value); return true; }
+    if (el.dataset.actionInput === 'cmCatWeightLive') { cmCatWeightLive(parseInt(el.dataset.idx, 10), el.value); return true; }
     // T-UI-02 retired: cmCwRange (legacy summative/formative slider).
     return false;
   }
@@ -1909,6 +2098,8 @@ window.DashClassManager = (function() {
     if (el.dataset.actionBlur === 'cmUpdateName') { cmUpdateField('name', el.value, el); return true; }
     if (el.dataset.actionBlur === 'cmUpdateGrade') { cmUpdateField('gradeLevel', el.value); return true; }
     if (el.dataset.actionBlur === 'cmUpdateDesc') { cmUpdateField('description', el.value); return true; }
+    if (el.dataset.actionBlur === 'cmCatName') { cmCatName(parseInt(el.dataset.idx, 10), el.value); return true; }
+    if (el.dataset.actionBlur === 'cmCatWeight') { cmCatWeight(parseInt(el.dataset.idx, 10), el.value); return true; }
     if (el.dataset.actionBlur === 'cmCompGroupName') { cmUpdateCompGroupName(el.dataset.grpid, el.value); return true; }
     if (el.dataset.actionBlur === 'cmSubjectName') { cmUpdateSubjectName(el.dataset.subid, el.value); return true; }
     if (el.dataset.actionBlur === 'cmStdCode') { cmUpdateStdCode(el.dataset.secid, el.value); return true; }
@@ -1934,7 +2125,7 @@ window.DashClassManager = (function() {
     handleInput: handleInput,
     handleChange: handleChange,
     handleBlur: handleBlur,
-    initDrag: _initCmStdDrag,
+    initDrag: function() { _initCmStdDrag(); _initCmCatDrag(); },
     destroy: _removeAllListeners,
     resetState: function() {
       classManagerOpen = false;

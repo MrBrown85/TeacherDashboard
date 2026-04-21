@@ -183,6 +183,17 @@ describe('v2 learning-map structural dispatch (window.v2.*)', () => {
       await window.v2.deleteCategory(ID1);
       expect(client.calls[0]).toEqual({ name: 'delete_category', payload: { p_id: ID1 } });
     });
+
+    // T-UI-12 additions
+    it('listCategories passes the course id', async () => {
+      await window.v2.listCategories(CID);
+      expect(client.calls[0]).toEqual({ name: 'list_categories', payload: { p_course_id: CID } });
+    });
+
+    it('reorderCategories filters to UUIDs', async () => {
+      await window.v2.reorderCategories([ID1, 'junk', ID2]);
+      expect(client.calls[0]).toEqual({ name: 'reorder_categories', payload: { p_ids: [ID1, ID2] } });
+    });
   });
 
   // ---- Rubric (composite) ---------------------------------------------
