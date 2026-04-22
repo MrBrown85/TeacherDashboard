@@ -1,6 +1,6 @@
 # FullVision v2 — Claude Code Task Queue
 
-Every remaining task packaged as a self-contained Claude Code session. Copy a task's prompt block into a fresh session; it has enough context to act without prior conversation.
+Every active task is packaged as a self-contained Claude Code session. Completed items stay in place as historical checkpoints once marked `[DONE]`.
 
 **Branch:** `main`. Historical references to `rebuild-v2` / PR `#76` below are pre-merge notes and should not drive current work.
 
@@ -12,6 +12,10 @@ Every remaining task packaged as a self-contained Claude Code session. Copy a ta
 - Project `CLAUDE.md` — Demo Mode verification rule, no-AI-refs in git, project title is "FullVision"
 
 **Core rule:** UI stays as literal existing files. Never rewrite visual language. Every new control uses existing CSS classes and tokens. Every UI change is visually verified in Demo Mode before claiming done.
+
+**Already shipped on `main` (2026-04-21):** `T-UI-02` (`cd8922f`), `T-UI-12` (`fd95043`, follow-up `3665af5`), `T-UI-09` + `T-UI-10` (`8ea914b`), `T-UI-06` / `T-UI-07` / `T-UI-08` (desktop offline UX slice, see `HANDOFF.md` session-11), and `T-OPS-01` (live-only completion recorded in `HANDOFF.md` as `5.2-live`).
+
+**2026-04-21 local follow-up:** the desktop category-driven grading slice is now present in the working tree (`shared/data.js`, `shared/calc.js`, `teacher/page-assignments.js`, `teacher/page-gradebook.js`, `teacher/page-reports.js`, `teacher/ui.js`, `teacher/report-blocks.js`). Residual non-desktop / history-style `assessment.type` presentation is tracked as backlog item `P2.6`, not as a new task block here.
 
 ---
 
@@ -27,7 +31,7 @@ Each task block has:
 - **Acceptance** — observable completion criteria
 - **Budget** — rough session size
 
-Mark tasks done by editing the ID to **[DONE]** and adding a commit hash. Do not delete task blocks.
+Mark tasks done by editing the ID to **[DONE]** and adding a commit hash where one exists. Do not delete task blocks.
 
 ---
 
@@ -35,31 +39,151 @@ Mark tasks done by editing the ID to **[DONE]** and adding a commit hash. Do not
 
 These unblock the UI tasks and prevent "why isn't my change visible?" confusion.
 
-### T-WIRE-01 · Audit legacy save\* calls
+### [DONE] T-WIRE-01 · Audit legacy save\* calls
+
+**Status:** Completed 2026-04-22. Full audit in `HANDOFF.md` Discovered gaps (2026-04-22 T-WIRE-01). Found two categories of unmigrated writes: (A) score writes in `selectScore`/`setScore`/inline-cell-edit/points-mode/mobile that call `saveScores` instead of `upsertScore`, and (B) all learning-map CRUD in `dash-class-manager.js` that only calls `saveLearningMap` (local) without dispatching `window.v2.*` RPCs. Follow-up tasks T-WIRE-01a, T-WIRE-01b, T-WIRE-02 added below.
 
 **Goal:** Confirm every UI write action calls a `window.v2.*` helper, not a legacy `save*` / `_canonical*` stub.
+
+**Depends on:** nothing
+
+**Acceptance:** Audit report committed to `HANDOFF.md`; any unmigrated UI actions identified with a plan. ✓
+
+---
+
+### T-WIRE-01a · Fix score writes in assignments + gradebook + mobile
+
+**Goal:** Replace `saveScores`-only calls in primary score-entry paths with `upsertScore` so scores reach Supabase.
 
 **Prompt:**
 
 ```
-Read docs/backend-design/HANDOFF.md to see which legacy functions
-were replaced with window.v2.* helpers during Phases 3–4. Then grep the
-teacher/ and teacher-mobile/ directories for any remaining call sites of
-saveScores, saveRubrics, saveLearningMap, save_*, _canonical*, sb.from,
-sb.rpc (other than window.v2 dispatch, shared/supabase.js, and
-shared/offline-queue.js). Report each hit with file:line and say
-whether it's dead code, fallback path, or an unmigrated UI action. Do
-not make changes yet — first produce the audit, then propose a minimal
-follow-up patch. Verify in Demo Mode after any changes.
+Read docs/backend-design/HANDOFF.md (T-WIRE-01 discovered gap, 2026-04-22).
+The following score-entry paths call saveScores (local only) instead of
+upsertScore (which also dispatches _persistScoreToCanonical → v2 RPC):
+
+1. teacher/page-assignments.js — setScore() at line 1035: replace
+   saveScores(cid, sc) with upsertScore(cid, sid, aid, tagId, value, ...).
+2. teacher/page-assignments.js — selectScore() at line 1062: same fix.
+3. teacher/page-assignments.js line 1005: "notSubmitted" writes zeros —
+   add upsertScore call per tag after the saveScores call.
+4. teacher/page-gradebook.js — startCellEdit commit() at line 1420:
+   the commit function builds allScores and calls saveScores(cid, allScores).
+   Replace with per-entry upsertScore calls for each (sid, aid, tid) that changed.
+5. teacher/page-gradebook.js — setPointsScore at line 3691 in data.js:
+   add window.upsertCellScore(cid, sid, aid, raw) call after saveScores.
+6. teacher-mobile/tab-grade.js lines 257, 305: same pattern — replace
+   saveScores with upsertScore per entry.
+
+upsertScore signature: upsertScore(cid, sid, aid, tid, scoreVal, date, type, note).
+It handles both the local cache update (was saveScores) and the v2 RPC dispatch.
+_useSupabase and demo-mode guards are already inside upsertScore — no extra checks needed.
+
+Do not change saveRubrics, saveLearningMap, or any non-score save* calls.
+Run npm test after changes. Verify score entry in Demo Mode (scores should
+persist locally as before; in signed-in mode they should now also reach gradebook-prod).
+Commit as "T-WIRE-01a: route score-entry paths through upsertScore for v2 dispatch".
+Append to HANDOFF.md activity log.
 ```
 
-**Likely files:** `teacher/**/*.js`, `teacher-mobile/**/*.js`, `shared/data.js`
+**Likely files:** `teacher/page-assignments.js`, `teacher/page-gradebook.js`, `teacher-mobile/tab-grade.js`, `shared/data.js` (setPointsScore)
 
-**Depends on:** nothing
+**Depends on:** T-WIRE-01
 
-**Acceptance:** Audit report committed to `HANDOFF.md`; any unmigrated UI actions identified with a plan. If the audit finds dead code only, note that and move on.
+**Acceptance:** `selectScore`, `setScore`, `commit()`, `setPointsScore`, and mobile entry all call `upsertScore`. `npm test` green. Demo-Mode verified.
+
+**Budget:** ~1 hour
+
+---
+
+### T-WIRE-01b · Fix "Clear cell" and Teams import dispatch
+
+**Goal:** Wire "Clear cell" to `window.clearScore` and Teams CSV import to `window.v2.importTeamsClass`.
+
+**Prompt:**
+
+```
+Read docs/backend-design/HANDOFF.md (T-WIRE-01 discovered gap, 2026-04-22).
+
+Two targeted fixes:
+
+1. teacher/page-gradebook.js line 1275 — "Clear cell" context menu calls
+   saveScores(cid, scores) after removing entries. Add a call to
+   window.clearScore(enrollmentId, assessmentId) for the remote write.
+   window.clearScore wraps clear_score RPC (see shared/data.js).
+   The enrollmentId is `sid` and assessmentId is `aid` from the closure.
+
+2. teacher/teams-import.js line 705 — Teams CSV import writes scores with
+   saveScores(cid, scores) locally. window.v2.importTeamsClass exists (Phase 4.9).
+   However: importTeamsClass takes the full parsed payload (course + students +
+   assessments + scores) — not a scores blob. Check how tiParsedFile is structured
+   and whether the existing importTeamsClass RPC accepts the Teams-import format.
+   If it does, call window.v2.importTeamsClass(tiParsedFile) before saveScores.
+   If the format doesn't match, add a comment noting the gap and create a T-BE-02
+   task for the adapter.
+
+Run npm test. Commit as "T-WIRE-01b: clear-cell v2 dispatch + Teams import audit".
+Append to HANDOFF.md activity log.
+```
+
+**Likely files:** `teacher/page-gradebook.js`, `teacher/teams-import.js`
+
+**Depends on:** T-WIRE-01
+
+**Acceptance:** Clear-cell calls `window.clearScore`. Teams import dispatches v2 or gap is documented.
 
 **Budget:** ~30 min
+
+---
+
+### T-WIRE-02 · Learning-map CRUD v2 dispatch in dash-class-manager.js
+
+**Goal:** Every subject / section / group / tag mutation in the class manager also calls the matching `window.v2.*` RPC so learning maps persist to Supabase.
+
+**Prompt:**
+
+```
+Read docs/backend-design/HANDOFF.md (T-WIRE-01 discovered gap, 2026-04-22) and
+shared/data.js to find the window.v2.* learning-map helpers (Phase 4.5):
+  window.v2.upsertSubject / deleteSubject / reorderSubjects
+  window.v2.upsertCompetencyGroup / deleteCompetencyGroup / reorderCompetencyGroups
+  window.v2.upsertSection / deleteSection / reorderSections
+  window.v2.upsertTag / deleteTag / reorderTags
+
+teacher/dash-class-manager.js calls saveLearningMap(cid, map) for every mutation
+but never calls these RPCs. The full list of call sites is in the HANDOFF discovered-gap entry.
+
+For each mutation function in dash-class-manager.js, add a paired window.v2.* call:
+  - cmAddSubject / cmUpdateSubjectName / cmUpdateSubjectColor / cmDeleteSubject
+    → v2.upsertSubject (add/update) or v2.deleteSubject (delete)
+  - cmAddCompGroup / cmUpdateCompGroupName / cmUpdateCompGroupColor / cmDeleteCompGroup
+    → v2.upsertCompetencyGroup / deleteCompetencyGroup
+  - cmUpdateStdGroup (assigns section to group) → v2.upsertSection (patch groupId)
+  - Tag add / rename / color / delete → v2.upsertTag / deleteTag
+  - Drag-reorder for subjects/groups/sections/tags → matching v2.reorder* RPC
+
+Pattern: call saveLearningMap first (keep local in sync), then fire the v2 RPC.
+The v2 helpers accept camelCase and handle snake_case mapping internally (see data.js).
+
+Read write-paths.md §4 for the exact RPC payload shapes. The RPCs require
+canonical UUIDs; local ids like "custom_abc123" will fail — for local-only objects
+(not yet synced), call upsertSubject/Section/Tag which will create and return a
+canonical id. Patch the local map with the returned canonical id after the RPC.
+This id-patching pattern mirrors what P2.5 did for saveRubrics.
+
+This is a larger task. Work through one function group at a time (subjects, then
+groups, then sections/tags). Run npm test after each group. Demo-Mode verification
+required. Commit as "T-WIRE-02: learning-map mutations dispatch to v2 RPCs".
+Append to HANDOFF.md activity log.
+```
+
+**Likely files:** `teacher/dash-class-manager.js`, `shared/data.js`
+
+**Depends on:** T-WIRE-01
+
+**Acceptance:** Creating/editing/deleting subjects, groups, sections, tags in the class manager persists to `gradebook-prod`. Canonical ids are patched back into the local map. `npm test` green. Demo-Mode verified.
+
+**Budget:** 2–3 sessions
 
 ---
 
@@ -67,7 +191,9 @@ follow-up patch. Verify in Demo Mode after any changes.
 
 Can run in any order, in parallel. Each lands as its own commit.
 
-### T-UI-01 · Hide term-rating auto-generate button
+### [DONE] T-UI-01 · Hide term-rating auto-generate button
+
+**Status:** Shipped on `main` 2026-04-21 in `teacher/report-questionnaire.js`. The toolbar no longer renders the deferred `Generate` button; generator code remains behind the hidden UI entry point.
 
 **Goal:** The existing "auto-generate narrative" button in the term-rating editor is hidden in v1. Do NOT wire to a "coming soon" modal — just hide.
 
@@ -95,7 +221,9 @@ auto-generate button (deferred to external workstream)".
 
 ---
 
-### T-COPY-01 · Delete-account dialog 30-day grace copy
+### [DONE] T-COPY-01 · Delete-account dialog 30-day grace copy
+
+**Status:** Shipped on `main` 2026-04-21. Desktop account menu now says `Delete Account`, the dialog copy matches INSTRUCTIONS.md §12.4 exactly, and the live flow is stricter than the original task budget assumed: typed-email confirmation + password re-entry + `v2.softDeleteTeacher()` + sign-out.
 
 **Goal:** Update the existing delete-account confirmation dialog with the exact soft-delete copy from INSTRUCTIONS.md §12.4.
 
@@ -129,9 +257,11 @@ and reading the copy. Commit.
 
 ---
 
-### T-COPY-02 · Welcome Class banner + auto-seed on first sign-in
+### [DONE] T-COPY-02 · Welcome Class banner + auto-seed on first sign-in
 
-**Goal:** When a newly-verified teacher lands for the first time, the Welcome Class is auto-seeded (HANDOFF 5.1 shipped `shared/demo-seed.js`) and a banner renders per INSTRUCTIONS.md §12.3.
+**Status:** Shipped on `main` 2026-04-21. `shared/data.js` now seeds an empty Welcome Class once on fresh bootstrap using the existing `shared/demo-seed.js` helper, `teacher/router.js` consumes a one-shot gradebook route hint, and `teacher/page-gradebook.js` renders the dismissible `--focus-banner-*` banner when the seeded sample class is active.
+
+**Goal:** A first-time teacher lands in a populated Welcome Class and sees the in-product banner from INSTRUCTIONS.md §12.3.
 
 **Prompt:**
 
@@ -143,11 +273,14 @@ Per INSTRUCTIONS.md §12.3, the Welcome Class banner must render with:
 
 Two pieces of work:
 
-1. Verify that first-verified-sign-in auto-seeds the Welcome Class via
-   shared/demo-seed.js (HANDOFF 5.1). If the auto-seed isn't wired to
-   the bootstrap path yet, add the call. It should fire ONCE on the
-   teacher's first sign-in when Teacher and TeacherPreference rows are
-   fresh-created (see auth-lifecycle.md §1.3).
+1. Verify whether first-verified-sign-in actually auto-seeds the
+   Welcome Class via shared/demo-seed.js. Current code review says the
+   bootstrap path still creates only the bare Welcome Class row, so do
+   not assume sample students/assessments are already wired. If the
+   sign-in path is still empty, connect the existing demo-seed helper to
+   the first-sign-in bootstrap so it fires ONCE when Teacher and
+   TeacherPreference rows are fresh-created (see auth-lifecycle.md
+   §1.3). Reuse the existing generator; do not build a second seed path.
 
 2. Render a banner inside the gradebook view when the active course is
    the auto-seeded Welcome Class. Use existing --focus-banner-bg and
@@ -165,7 +298,7 @@ stays dismissed.
 
 **Depends on:** T-WIRE-01 (if audit reveals bootstrap path changes)
 
-**Acceptance:** New teacher → signs in for first time → lands in gradebook with Welcome Class banner using `--focus-banner-bg`. Dismiss persists.
+**Acceptance:** New teacher → signs in for first time → lands in a populated Welcome Class with the `--focus-banner-bg` banner. Dismiss persists.
 
 **Budget:** 45 min
 
@@ -175,7 +308,9 @@ stays dismissed.
 
 Each lands as its own commit. Can run in parallel after T-WIRE-01.
 
-### T-UI-02 · `grading_system` segmented control in Course Settings
+### [DONE] T-UI-02 · `grading_system` segmented control in Course Settings (`cd8922f`)
+
+**Status:** Shipped on `main`. Follow-ups: `3665af5` tightened the saved-category gate, and `df7d131` added adjacent grading-panel polish. Keep this block as the historical acceptance/spec reference.
 
 **Goal:** Add the 3-way segmented control (proficiency / letter / both) in the course-policy panel. Disabled state when no Categories.
 
@@ -256,7 +391,9 @@ persists after reload.
 
 ---
 
-### T-UI-04 · Restore-account prompt on sign-in
+### [DONE] T-UI-04 · Restore-account prompt on sign-in
+
+**Status:** Shipped on `main` 2026-04-21. `login-auth.js` now runs `bootstrap_teacher` before redirect; when `deleted_at` is set it shows the restore prompt with `Restore` / `Continue deletion`, calls `restore_teacher` on confirm, and signs the user back out if they continue deletion.
 
 **Goal:** When a teacher with `deleted_at IS NOT NULL` signs in during the 30-day grace window, show a prompt to restore the account.
 
@@ -299,6 +436,8 @@ see the modal. Click Restore, sign in again, no modal.
 
 ### T-UI-05 · Data export menu entry
 
+**Status:** Audit completed 2026-04-21. `window.v2.exportMyData` and backend RPC `export_my_data` are still missing in this repo, so this task remains blocked on `T-BE-01` before the UI can ship as a real download action.
+
 **Goal:** Add "Export my data" to the user-menu dropdown + secondary button in delete-account dialog.
 
 **Prompt:**
@@ -340,7 +479,9 @@ confirm it contains expected data.
 
 ---
 
-### T-UI-06 · "N unsynced" badge on user avatar
+### [DONE] T-UI-06 · "N unsynced" badge on user avatar
+
+**Status:** Shipped on `main` 2026-04-21. `teacher/ui.js` now renders the avatar badge in the dock, `shared/offline-queue.js` exposes `subscribe(...)` for live queue updates, and `teacher/styles.css` reuses the `.obs-badge` pattern with the late-work amber override. The shipped implementation counts queued + dead-lettered items so failed syncs remain visible/actionable.
 
 **Goal:** A badge on the user avatar showing the count of writes in the offline queue.
 
@@ -378,7 +519,9 @@ disappear once the queue drains.
 
 ---
 
-### T-UI-07 · Offline banner strip
+### [DONE] T-UI-07 · Offline banner strip
+
+**Status:** Shipped on `main` 2026-04-21. `teacher/ui.js` renders the banner shell, `teacher/styles.css` adds the new `.offline-banner` rule plus the body/dock offset, and `teacher/router.js` refreshes the state after each dock render. The banner is driven by `navigator.onLine` / queue stats and pushes content down instead of overlaying it.
 
 **Goal:** A thin amber banner at the top when `navigator.onLine === false`.
 
@@ -415,7 +558,9 @@ Re-enable → banner disappears.
 
 ## Tier 4 — Medium controls (1–2 hours each)
 
-### T-UI-08 · Sync status popover (anchored to badge)
+### [DONE] T-UI-08 · Sync status popover (anchored to badge)
+
+**Status:** Shipped on `main` 2026-04-21. The desktop dock badge now opens a popover showing queue counts, relative last-sync time, retry, and dead-letter dismiss actions. `retry-sync` now routes to the real `window.v2Queue.flush()` path, and focused coverage lives in `tests/ui-sync-status.test.js` plus the new queue-subscription assertions in `tests/offline-queue.test.js`.
 
 **Goal:** Clicking the unsynced-count badge opens a popover showing queue detail.
 
@@ -457,7 +602,9 @@ retry flush.
 
 ---
 
-### T-UI-09 · Rubric per-criterion weight input
+### [DONE] T-UI-09 · Rubric per-criterion weight input (`8ea914b`)
+
+**Status:** Shipped together with `T-UI-10` in the rubric editor. Follow-up completed 2026-04-22: `saveRubrics(...)` now routes through the canonical rubric RPC path and rehydrates server ids after save.
 
 **Goal:** A numeric input per criterion in the rubric editor, storing `criterion.weight`.
 
@@ -495,7 +642,9 @@ criteria, save, reopen — confirm values persist.
 
 ---
 
-### T-UI-10 · Rubric per-level value inputs (disclosure)
+### [DONE] T-UI-10 · Rubric per-level value inputs (disclosure) (`8ea914b`)
+
+**Status:** Shipped together with `T-UI-09` in the rubric editor. Follow-up completed 2026-04-22: `saveRubrics(...)` now routes through the canonical rubric RPC path and rehydrates server ids after save.
 
 **Goal:** Four numeric inputs per criterion for `level_N_value`, hidden under a disclosure that defaults closed.
 
@@ -535,7 +684,9 @@ values persist and defaults are only used where not overridden.
 
 ---
 
-### T-UI-11 · Session-expired modal with draft preservation
+### [DONE] T-UI-11 · Session-expired modal with draft preservation
+
+**Status:** Shipped on `main` 2026-04-21. Long-form surfaces now register draft-preservation context (`teacher/page-reports.js` term questionnaire and `teacher/page-observations.js` capture surface), `shared/data.js` tries `refreshSession()` first on auth-shaped RPC failures, and `teacher/ui.js` shows the password re-auth modal only for those contexts. The 30-minute idle timeout in `shared/supabase.js` now marks long-form sessions expired instead of hard redirecting, so the next save path can reopen the session without losing the draft.
 
 **Goal:** On 401 in the term-rating narrative or observation capture, show a modal that preserves the form state.
 
@@ -582,7 +733,9 @@ re-auth, confirm draft still there and save succeeds.
 
 ## Tier 5 — Largest single UI task
 
-### T-UI-12 · Category management inline row in Course Settings
+### [DONE] T-UI-12 · Category management inline row in Course Settings (`fd95043`, follow-up `3665af5`)
+
+**Status:** Shipped on `main`. A later 2026-04-21 local follow-up finished the downstream desktop wiring this task was meant to unlock: assignments + gradebook now use category selectors/filters/badges and desktop letter displays read the category-weighted pipeline. Residual non-desktop/history cleanup is backlog item `P2.6`. Keep this block as the historical acceptance/spec reference.
 
 **Goal:** The Category CRUD inline row in Course Settings. Clones the existing Modules-panel pattern.
 
@@ -640,7 +793,9 @@ dropdown now shows the new categories.
 
 ## Tier 6 — Operational (infrastructure, pre-cutover)
 
-### T-OPS-01 · Custom SMTP for `noreply@fullvision.ca`
+### [DONE] T-OPS-01 · Custom SMTP for `noreply@fullvision.ca` (live completion; see `HANDOFF.md` `5.2-live`)
+
+**Status:** Completed live on 2026-04-20. No repo commit exists because the final work was DNS + Supabase configuration.
 
 **Goal:** Emails from Supabase Auth (verification, password reset) come from the custom domain.
 
@@ -771,31 +926,22 @@ Use the current backlog instead:
 
 **Can run in parallel (no dependencies between them):**
 
-- T-UI-01 (hide button) · T-COPY-01 (dialog copy) · T-COPY-02 (welcome class)
-- T-UI-02 · T-UI-03 · T-UI-04 · T-UI-05 · T-UI-06 · T-UI-07 — all after T-WIRE-01
-- T-OPS-01 · T-OPS-02 · T-OPS-03 — infrastructure, can run any time
+- T-UI-03 · T-UI-05 — both after T-WIRE-01
+- T-OPS-02 · T-OPS-03 — infrastructure, can run any time
+- Already shipped on `main`: T-UI-02, T-UI-12, T-UI-09, T-UI-10, T-UI-06, T-UI-07, T-UI-08, T-UI-11, T-OPS-01, T-UI-01, T-COPY-01, T-COPY-02, T-UI-04
 
 **Must be serial:**
 
-- T-UI-08 (sync popover) waits on T-UI-06 (badge exists first)
-- T-UI-09 and T-UI-10 easier together (same rubric editor file)
-- T-UI-12 (Category row) waits on T-UI-02 (segmented control exists, needs updating when categories populate)
+- Historical note: T-UI-09 and T-UI-10 shipped together in `8ea914b`
+- Historical note: T-UI-12 shipped after T-UI-02 and its saved-category follow-up landed in `3665af5`
 - Historical note: the old T-OPS-04 cutover used to wait on everything else; current work no longer depends on that task.
 
 **Recommended session ordering for one-Claude-Code-session-at-a-time:**
 
 1. T-WIRE-01 (audit)
-2. T-UI-01, T-COPY-01 (two quick wins)
-3. T-UI-02 (grading_system toggle — biggest behavioral unlock)
-4. T-UI-12 (Category row — so the toggle's disabled state goes away)
-5. T-UI-09 + T-UI-10 (rubric weights + levels together)
-6. T-UI-11 (session-expired modal)
-7. T-UI-06 then T-UI-08 (badge + popover)
-8. T-UI-07 (offline banner)
-9. T-UI-03, T-UI-04, T-UI-05 (timezone, restore prompt, export)
-10. T-COPY-02 (welcome class banner + auto-seed)
-11. T-OPS-01, 02, 03 (infra — any order)
-12. T-OPS-04 is historical only; use the active backlog plans for current production follow-up work
+2. T-UI-03, T-UI-05 (timezone, export)
+3. T-OPS-02, T-OPS-03 (infra — any order)
+4. T-OPS-04 is historical only; use the active backlog plans for current production follow-up work
 
 ---
 
@@ -815,9 +961,7 @@ Use the current backlog instead:
 ## Future tasks (spawn as needed)
 
 - **T-BE-01** · Backend `export_my_data` RPC (if T-UI-05 audit finds it missing)
-- **T-BE-02** · Category CRUD RPCs if missing (create/update/delete/reorder Category)
-- **T-BE-03** · `restore_teacher` RPC confirmation (check HANDOFF 4.8 — spec says `v2.restoreTeacher` exists)
-- **T-TEST-01** · E2E Playwright flow: sign-up → verify → welcome class → score entry → report → sign-out
+- **T-TEST-01** · Expand the shipped `e2e/regression-smoke.spec.js` auth smoke into a fuller Playwright flow: live email verification/test-project path (if available), Welcome Class → score entry → report generation
 - **T-TEST-02** · E2E: soft-delete account → sign-in within 30d → restore
 - **T-TEST-03** · E2E: offline queue fills → reconnect → queue drains
 - **T-OPS-05** · Weekly JSON export cron

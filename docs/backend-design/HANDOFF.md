@@ -7,10 +7,10 @@
 ```
 You are continuing the FullVision v2 rebuild. This is a long-running multi-session effort coordinated through a handoff doc.
 
-Read docs/backend-design/HANDOFF.md in full. It contains: ground truth, safety gates, what's done, the active work queue, and the conventions you must follow.
+Read docs/backend-design/HANDOFF.md in full. It contains: ground truth, safety gates, what's done, and links to the active plan docs and conventions you must follow.
 
 Then:
-1. Pick the top-most unchecked task in the Active work queue.
+1. Pick the top-most unchecked task from the active plan docs listed under Remaining work.
 2. Execute it within the Safety gates (stop and ask if you hit one).
 3. When done, tick the box and append a line to the Activity log.
 4. Stop and return control — do not batch into the next task.
@@ -42,7 +42,7 @@ Set via `/model` and `/effort` before each session. Standard 200k context is eno
 
 You are continuing an ongoing rebuild. **Read this whole file before touching anything.** Then:
 
-1. Pick the next unchecked item from **Active work queue** (top-most unchecked line is next).
+1. Pick the next unchecked item from the active plan docs listed under **Remaining work**.
 2. Execute it autonomously, **respecting the Safety gates** (below).
 3. When done, check the box (`[x]`), append a one-line entry to the **Activity log** at the bottom, commit any artifact updates alongside the migration/code change.
 4. Stop (return to user) if:
@@ -103,7 +103,7 @@ If the user said "yes" to one action in a past session, **do not** assume it ext
 
 ---
 
-## Current state (updated 2026-04-21)
+## Current state (updated 2026-04-22)
 
 The rebuild/reconciliation work is complete and lives on `main`. The phase queue below is preserved as a historical record, not as the current execution driver.
 
@@ -118,19 +118,29 @@ The rebuild/reconciliation work is complete and lives on `main`. The phase queue
 ### Main FullVision repo (branch `main`, pushed)
 
 - **`shared/supabase.js`** — audited clean (auth-only).
-- **`shared/data.js`** — boot path (`initAllCourses` / `_doInitData`) calls the v2 RPCs. `_canonicalCoursesToBlob`, `_v2GradebookToCache`, `_persistScoreToCanonical`, `_canonical{Enroll,UpdateStudent,UpdateEnrollment,Withdraw}`, `_canonicalCreate/Update/DeleteAssessment`, `_persistObservationCreate/Update/Delete` all routed to v2 RPCs. Legacy per-course RPC fan-out is unreachable (retained for reference).
+- **`shared/data.js`** — boot path (`initAllCourses` / `_doInitData`) calls the v2 RPCs. `_canonicalCoursesToBlob`, `_v2GradebookToCache`, `_persistScoreToCanonical`, `_canonical{Enroll,UpdateStudent,UpdateEnrollment,Withdraw}`, `_canonicalCreate/Update/DeleteAssessment`, `_persistObservationCreate/Update/Delete` all routed to v2 RPCs. `_v2GradebookToCache` now hydrates category rows into `_cache.categories[cid]`, and assessment payloads round-trip `category_id`. Fresh first sign-in now detects an empty Welcome Class, applies the existing `shared/demo-seed.js` payload once, and queues a one-shot gradebook landing. Legacy per-course RPC fan-out is unreachable (retained for reference).
+- **`shared/supabase.js` + `login-auth.js`** — account lifecycle is further along: `reauthenticateWithPassword(...)` now re-checks credentials for sensitive actions, sign-in runs the restore-account check before redirect, deleted teachers see the restore prompt with `Restore` / `Continue deletion`, and long-form surfaces now use the draft-safe session-expired path instead of losing work on the 30-minute idle timeout.
 - **`window.v2.*` namespace** — 40+ thin RPC wrappers covering everything the backend exposes: course / category / module / rubric / subject / competency-group / section / tag CRUD + reorder; student + enrollment + roster + bulk pronouns + CSV import; assessment CRUD + collab; scoring (cell/tag/rubric/status/comment/fill/clear); observations + templates + custom tags; student-record writes + `getStudentProfile`; `saveTermRating`; ReportConfig + preferences + teacher-lifecycle; imports (CSV, Teams, JSON restore).
-- **`shared/offline-queue.js`** — `window.v2Queue` FIFO + dead-letter + 3-attempt backoff + auto-flush, wired into `teacher/app.html` and `teacher-mobile/index.html`.
+- **`shared/offline-queue.js`** — `window.v2Queue` FIFO + dead-letter + 3-attempt backoff + auto-flush, wired into `teacher/app.html` and `teacher-mobile/index.html`. It now also exposes `subscribe(...)` so desktop/mobile UI can react to queue/network changes without polling.
 - **`scripts/dev-local.mjs` / `npm run dev:local`** — local signed-in dev flow now lives on `main`; no Netlify preview/build credits are needed for local verification.
+- **`shared/calc.js`** — category-aware helpers now exist for the letter pipeline: `courseShowsLetterGrades`, `getAssessmentOverallScore`, `getCategoryAverage`, `qToPercentage`, `percentageToLetter`, and `getCourseLetterData`. Desktop/report surfaces can now derive letter + percentage from weighted categories instead of the old summative/formative split.
+- **`teacher/dash-class-manager.js`** — Tier-A course-settings UI is live on `main`: 3-way `grading_system` segmented control, inline category management, saved-category gating for Letter/Both, Mean + Median calc methods, grading/calc descriptions, and late-work-policy editing.
+- **`teacher/page-assignments.js`** — assessment create/edit/export flows are now category-aware: the legacy type toggle is replaced by a Category dropdown, filters are `All / Categorized / No Category`, and exported JSON/CSV include categories. The rubric editor also supports per-criterion weights and per-level value overrides, and `saveRubrics(...)` now dispatches canonical rubric writes through `window.v2.upsertRubric`, rehydrates canonical rubric/criterion ids from Supabase, and patches linked assessment `rubricId` values back onto the server-safe ids.
+- **`teacher/page-gradebook.js` + desktop report/header surfaces** — gradebook filters, badges, and add-assessment popover now use categories; row/summary/report letter displays read `getCourseLetterData` so Letter/Both mode follows the category-weighted pipeline on desktop. Gradebook also carries the dismissible Welcome Class sample banner when the seeded course is active.
+- **`teacher/ui.js` + `teacher/styles.css` + `teacher/router.js`** — desktop offline UX now ships: unsynced badge on the account avatar, sync-status popover (queue counts, last-sync time, dead-letter dismiss/retry), and the offline banner strip that pushes the dock down while offline. The old sync toast retry action now calls the real queue flush path.
+- **`teacher/page-reports.js` + `teacher/page-observations.js` + `teacher/ui.js`** — the two long-form surfaces now register draft-preservation auth context. On term-rating narrative saves or observation capture writes, the v2 dispatch layer tries `refreshSession()` first; if refresh fails, a password modal keeps the draft visible, retries the failed write on success, and offers a copy-draft escape hatch on dismiss.
+- **`teacher/ui.js`** — desktop account menu now uses a real Delete Account flow instead of the local-only “Clear This Device” affordance: exact 30-day grace copy, typed-email confirm, password re-entry, `window.v2.softDeleteTeacher()`, then sign-out.
+- **Quality baseline** — `npm test` currently passes `834` tests with `1` skipped (run on 2026-04-22).
+- **Playwright baseline** — `e2e/regression-smoke.spec.js` now covers the local auth/write/sign-out/sign-in/read round-trip with a durable fake backend harness in `e2e/helpers.js`; targeted verification is green for that smoke plus `e2e/auth.spec.js`, `e2e/gradebook.spec.js`, and `e2e/score-entry.spec.js` (`27` passing on 2026-04-22).
 - **Feature flags** on `window`: `__V2_GRADEBOOK_READY` (default true), `__V2_WRITE_PATHS_READY` (false — legacy `gb-retry-queue` replay gated off until the bulk `_syncToSupabase` machinery is retired).
 - **GitHub state:** no open app PRs are required for the rebuild; stale gap-fill PR #79 was closed as superseded by `main`.
 
 ### Remaining work
 
 - The active next-work lists are now:
+  - [`docs/superpowers/plans/2026-04-21-ui-v1-feature-gap.md`](../superpowers/plans/2026-04-21-ui-v1-feature-gap.md) — Tier A is shipped on `main`; remaining open UI work starts in Tier B.
   - [`docs/superpowers/plans/2026-04-20-post-reconciliation-backlog.md`](../superpowers/plans/2026-04-20-post-reconciliation-backlog.md)
-  - [`docs/superpowers/plans/2026-04-21-ui-v1-feature-gap.md`](../superpowers/plans/2026-04-21-ui-v1-feature-gap.md)
-- Highest-signal unresolved items today: Netlify quota / `fullvision.ca` 503 (`P1.0`), leaked publishable key cleanup (`P1.1`), auth round-trip Playwright smoke (`P1.2`), and rubric persistence wiring `saveRubrics -> window.v2.upsertRubric` (`P2.5`).
+- Highest-signal unresolved items today: Netlify quota / `fullvision.ca` 503 (`P1.0`), leaked publishable key cleanup (`P1.1`), data export backend gap (`T-UI-05` + `T-BE-01 export_my_data`), the remaining non-desktop category-migration cleanup (`P2.6`), and the course timezone UI gap (`T-UI-03`).
 - The dormant legacy fan-out in `_doInitData` and the bulk `_syncToSupabase` block are now cleanup/backlog work, not blockers.
 
 ---
@@ -227,6 +237,34 @@ Earlier bugs fixed inline (mostRecent ambiguity, decaying_avg ambiguity, missing
 - **2026-04-20 (Phase 5.3 pre-check):** `docs/ARCHITECTURE.md` §"Data-layer overview" table (~lines 190–210) still lists the pre-rebuild canonical-schema RPC names (`save_course_score`, `save_section_override`, `save_student_goals`, `save_student_reflection`, `save_learning_map`, `projection.add_student_flag`, `projection.remove_student_flag`, `bulk_save_course_scores`, `delete_course_score`, etc.) as the current write surface. None of these exist on `gradebook-prod`. Remediation: regenerate the table against live RPCs as part of Phase 5.2 of the reconciliation plan.
 
 ---
+
+- **2026-04-22 (T-WIRE-01 audit):** Grep of `teacher/` + `teacher-mobile/` for legacy save\* / sb.rpc call sites found two categories of unmigrated UI actions:
+
+  **A — Score writes that never reach Supabase** (`saveScores` instead of `upsertScore`):
+  - `teacher/page-gradebook.js:1420` — inline cell-edit `commit()`. Score-mode (cycle-click) uses `upsertScore` (✓ dispatches v2); inline text edit uses `saveScores` (✗ local only). Fix: replace bulk `saveScores(cid, allScores)` with per-entry `upsertScore(cid, sid, aid, tid, val)` calls inside `commit()`.
+  - `teacher/page-gradebook.js:1275` — "Clear cell" context menu calls `saveScores` without calling `window.clearScore(enrollmentId, assessmentId)`. Fix: add `window.clearScore` call.
+  - `teacher/page-assignments.js:setScore (line 1035)` — called by `selectTagLevel` (tag-level click in sidebar). Uses `saveScores` only. Fix: use `upsertScore` instead.
+  - `teacher/page-assignments.js:selectScore (line 1062)` — level-button click. Uses `saveScores` only. Fix: use `upsertScore` instead.
+  - `teacher/page-assignments.js:1005` — "notSubmitted" status writes zero scores via `saveScores`. Fix: pair with `upsertScore` (value=0) calls.
+  - `teacher/page-gradebook.js:setPointsScore` calls `saveScores` in points-mode "isPtsCol" entry. Fix: add `window.upsertCellScore(cid, enrollmentId, assessmentId, raw)` call alongside.
+  - `teacher-mobile/tab-grade.js:257, 305` — mobile score entry. Fix: use `upsertScore`.
+  - Undo callbacks (`page-gradebook.js:1510`, `page-assignments.js:1101/1146`) restore local state; borderline acceptable for v1 since undo is ephemeral.
+
+  **B — Learning-map CRUD that never reaches Supabase** (`saveLearningMap` only, no `window.v2.*`):
+  - `teacher/dash-class-manager.js` (~25 call sites: lines 153, 232, 261, 1208, 1599, 1623, 1782, 1795, 1803, 1810, 1843, 1856, 1861, 1879, 1887, 1894, 1904, 1920, 1950, 1967, 1977, 1987, 1996, 2005, 2012, 2038, 2055). Every subject / section / competency-group / tag / reorder mutation writes only to `saveLearningMap` (local). `window.v2.upsertSubject`, `deleteSubject`, `upsertSection`, etc. exist but are never called from the UI. Fix: add paired `window.v2.*` dispatch alongside each mutation in dash-class-manager. This is a larger task and should be a dedicated session (new task: **T-WIRE-02 — learning-map v2 dispatch**).
+
+  **C — Import paths that bypass v2 RPCs** (local-only):
+  - `teacher/teams-import.js:705` — Teams CSV import writes scores via `saveScores`; `window.v2.importTeamsClass` exists but is not called here. Fix: call `window.v2.importTeamsClass` instead of writing locally.
+  - `teacher/page-assignments.js:1631–1638` — Legacy local JSON `importData()`. Calls save\* locally; should use `window.v2.importJsonRestore` for remote persistence. Lower priority (this is a "restore from file" escape hatch, not a primary path).
+
+  **D — Acceptable local-only (no fix needed)**:
+  - `teacher/page-assignments.js:853` — removes score rows from local cache after `delete_assessment`; DB cascade already cleaned remote. OK.
+  - `teacher/ui.js:781` — cleans up local scores blob after `window.v2.deleteStudent`. OK.
+
+  **Recommended follow-up sequence** (new tasks to add to TASKS.md):
+  1. **T-WIRE-01a** — Fix score writes in `setScore` / `selectScore` / `commit()` / `setPointsScore` in page-assignments.js + page-gradebook.js + tab-grade.js. Replace `saveScores` with `upsertScore`; add `window.upsertCellScore` for points-mode overall cell. ~1 session.
+  2. **T-WIRE-01b** — Fix "Clear cell" to call `window.clearScore`; fix Teams import to dispatch `window.v2.importTeamsClass`. ~30 min.
+  3. **T-WIRE-02** — Learning-map CRUD v2 dispatch in dash-class-manager.js. ~2 sessions.
 
 ## Conventions Claude must follow
 
@@ -339,5 +377,14 @@ Claude appends one line per completed task. Format: `YYYY-MM-DD | session-<n> | 
 - \`2026-04-21 | session-7 | e2e-gradebook-reports | fixed approved gradebook + reports e2e mismatches (seedScores normalization + report-tab selectors) and re-ran targeted Playwright slice: 17 gradebook/reports tests + 1 score-entry helper test passing.\`
 - \`2026-04-21 | session-7 | handoff-refresh | removed stale pre-push / rebuild-v2 operational guidance from HANDOFF; current next work now lives in the backlog plans, not this completed phase queue.\`
 - \`2026-04-21 | session-7 | docs-sweep | refreshed CLAUDE.md, INSTRUCTIONS.md, TASKS.md, ARCHITECTURE.md, README.md, backlog P2.4, and regenerated fullvision-documentation-inventory.xlsx to remove stale rebuild-v2 / missing-file / inventory references. decisions.html + spec-vs-ui-diff remain separate follow-up docs.\`
+- \`2026-04-21 | session-8 | docs-sync | refreshed HANDOFF live guidance to point at the real active plans, recorded Tier-A UI completion + current 815-pass unit baseline in Current state, and reconciled TASKS.md so shipped work (T-UI-02 / T-UI-12 / T-UI-09 / T-UI-10 / T-OPS-01) is marked done while open work now starts at the remaining Tier-B/UI backlog.\`
+- \`2026-04-21 | session-9 | category-doc-sync | reconciled HANDOFF/TASKS/backlog/gap-plan with the current local category slice: desktop assignments + gradebook + report/header letter surfaces now use category-aware paths, Welcome Class auto-seed is marked back to open because bootstrap still lands an empty course, and new backlog item P2.6 tracks remaining type-based dashboard/student/report-history/mobile cleanup. Tests remain 815 passed + 1 skipped.\`
+- \`2026-04-21 | session-10 | welcome-auth-lifecycle | Welcome Class now auto-seeds on fresh bootstrap, lands once in gradebook, and shows a dismissible sample-class banner; term-rating auto-generate is hidden; sign-in now prompts restore when deleted_at is set; desktop Delete Account now uses exact 30-day grace copy + typed email + password reauth + soft-delete. Added 10 focused tests across welcome-class, report-questionnaire, login restore, and delete-account paths. Full suite 825 passed + 1 skipped.\`
+- \`2026-04-21 | session-11 | offline-desktop-ux | desktop offline UX shipped: shared/offline-queue.js now exposes subscribe(...); teacher/ui.js + teacher/styles.css + teacher/router.js render an amber offline banner, unsynced avatar badge, and sync-status popover with queue counts, relative last-sync time, retry, and dead-letter dismiss. Added tests/offline-queue.test.js subscription coverage + tests/ui-sync-status.test.js. Full suite 829 passed + 1 skipped.\`
+- \`2026-04-21 | session-12 | session-expired-longform | long-form session-expiry UX shipped: shared/data.js now guards v2 RPCs with silent refresh + modal fallback, teacher/page-reports.js and teacher/page-observations.js register draft-preservation context, shared/supabase.js marks long-form idle expiry instead of hard sign-out, and teacher/ui.js renders the password re-auth modal + copy-draft escape hatch. Added tests/data-session-expired-guard.test.js. Full suite 832 passed + 1 skipped.\`
+- \`2026-04-22 | session-13 | backlog-P2.5 | rubric canonical persistence shipped: shared/data.js now syncs saveRubrics/deleteRubric through window.v2.upsertRubric/deleteRubric, rehydrates canonical rubric + criterion ids from rubric/criterion/criterion_tag, and patches linked assessment rubricIds; teacher/page-assignments.js now follows the canonical id when auto-selecting a newly saved rubric. Added tests/data-rubrics-v2-sync.test.js. Full suite 834 passed + 1 skipped. Demo-Mode verification still pending user.\`
+- \`2026-04-22 | session-14 | backlog-P1.2 | Playwright auth round-trip smoke shipped at e2e/regression-smoke.spec.js using a durable fake-auth harness in e2e/helpers.js (local sign-up -> sign-in -> Welcome Class gradebook -> score write -> sign-out -> sign-in -> same score visible). Targeted Playwright verification: regression smoke + auth + gradebook + score-entry = 27 passing. Unit suite remains 834 passed + 1 skipped.\`
+
+- `2026-04-22 | session-15 | T-WIRE-01 | audit complete — see Discovered gaps below for the full inventory. No code changes in this session; follow-up patches queued.`
 
 _(next session, keep appending.)_
