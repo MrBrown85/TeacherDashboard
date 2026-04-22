@@ -642,6 +642,15 @@ window.PageObservations = (function() {
     _addDocListener('keydown', _handleKeydown);
 
     render();
+    if (typeof setLongFormAuthContext === 'function') {
+      setLongFormAuthContext({
+        kind: 'observation-capture',
+        getDraftText: function () {
+          var input = document.getElementById('capture-input');
+          return input ? input.value || '' : '';
+        },
+      });
+    }
     overrideSidebarLinks();
 
     requestAnimationFrame(function() { document.getElementById('main').scrollTop = 0; });
@@ -659,6 +668,7 @@ window.PageObservations = (function() {
     _students = [];
     _studentsById = {};
     closeAllPopovers();
+    if (typeof clearLongFormAuthContext === 'function') clearLongFormAuthContext('observation-capture');
     delete window._pageSwitchCourse;
   }
 

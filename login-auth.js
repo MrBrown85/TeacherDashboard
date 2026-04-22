@@ -11,8 +11,12 @@
  * To add a new portal: create the directory, add its entry in the switch below,
  * and set the corresponding portal value when creating accounts.
  * ─────────────────────────────────────────────────────────────────────────── */
+function getPortal(user) {
+  return (user && user.user_metadata && user.user_metadata.portal) || 'teacher';
+}
+
 function portalRedirect(user) {
-  var portal = (user && user.user_metadata && user.user_metadata.portal) || 'teacher';
+  var portal = getPortal(user);
   var preferMobile =
     portal === 'teacher' && window.innerWidth <= 768 && localStorage.getItem('td-mobile-pref') !== 'desktop';
 
@@ -25,6 +29,79 @@ function portalRedirect(user) {
     default:
       return (window.location.href = preferMobile ? '/teacher-mobile/' : '/teacher/app.html');
   }
+}
+
+function formatDeletionDeadline(deletedAt) {
+  var ts = Date.parse(deletedAt || '');
+  if (!isFinite(ts)) return '30 days from now';
+  return new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  }).format(new Date(ts + 30 * 24 * 60 * 60 * 1000));
+}
+
+function showRestoreAccountPrompt(deletionDate) {
+  return new Promise(function (resolve) {
+    var overlay = document.createElement('div');
+    overlay.className = 'confirm-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-labelledby', 'restore-account-title');
+    overlay.innerHTML = `<div class="confirm-card">
+      <div class="confirm-title" id="restore-account-title">Restore Account</div>
+      <div class="confirm-message">Your account is scheduled for deletion on ${deletionDate}. Restore it now?</div>
+      <div class="confirm-actions">
+        <button class="confirm-cancel" id="restore-continue-btn">Continue deletion</button>
+        <button class="confirm-ok primary" id="restore-confirm-btn">Restore</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+
+    function close(result) {
+      overlay.remove();
+      resolve(result);
+    }
+
+    overlay.querySelector('#restore-confirm-btn').focus();
+    overlay.querySelector('#restore-confirm-btn').onclick = function () {
+      close(true);
+    };
+    overlay.querySelector('#restore-continue-btn').onclick = function () {
+      close(false);
+    };
+  });
+}
+
+async function maybePromptRestoreAccount(user) {
+  if (getPortal(user) !== 'teacher') return true;
+  var sb = getSupabase();
+  if (!sb) return true;
+
+  var bootRes = await sb.rpc('bootstrap_teacher', {
+    p_email: (user && user.email) || '',
+    p_display_name: (user && user.user_metadata && user.user_metadata.display_name) || null,
+  });
+  if (bootRes.error) throw bootRes.error;
+
+  var teacher = bootRes.data || {};
+  if (!teacher.deleted_at) return true;
+
+  var shouldRestore = await showRestoreAccountPrompt(formatDeletionDeadline(teacher.deleted_at));
+  if (!shouldRestore) {
+    try {
+      await sb.auth.signOut();
+    } catch (e) {
+      /* best effort */
+    }
+    showSuccess('Account deletion left in place. Sign in again within 30 days to restore it.');
+    return false;
+  }
+
+  var restoreRes = await sb.rpc('restore_teacher', {});
+  if (restoreRes.error) throw restoreRes.error;
+  showSuccess('Account restored. Redirecting…');
+  return true;
 }
 
 /* ── Redirect if already logged in ─────────────────────────── */
@@ -58,6 +135,8 @@ function portalRedirect(user) {
       var result = await sb.auth.getSession();
       var session = result.data.session;
       if (session) {
+        var shouldRedirect = await maybePromptRestoreAccount(session.user);
+        if (!shouldRedirect) return;
         portalRedirect(session.user);
         return;
       }
@@ -109,6 +188,12 @@ async function handleSignIn(e) {
     var email = document.getElementById('si-email').value.trim();
     var password = document.getElementById('si-password').value;
     var result = await signIn(email, password);
+    var shouldRedirect = await maybePromptRestoreAccount(result.user);
+    if (!shouldRedirect) {
+      btn.disabled = false;
+      btn.textContent = 'Sign In';
+      return;
+    }
     portalRedirect(result.user);
   } catch (err) {
     showError(err.message || 'Sign in failed. Please try again.');

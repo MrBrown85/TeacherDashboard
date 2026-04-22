@@ -24,10 +24,10 @@
 
 ### P1.2 · Playwright end-to-end smoke: sign-up → write → sign-out → sign-in → read
 
-- [ ] Covers the full auth+persistence round-trip the unit tests can't reach.
-- Suggested flow: new account sign-up → email verification → Welcome Class appears → enter a score → sign out → sign back in → confirm the score survives.
-- Lives at `tests/e2e/regression-core.spec.ts` (new).
-- Runs locally via `npm run test:e2e` and in CI behind a nightly trigger (per-PR is overkill given the ~90s runtime).
+- [x] Shipped 2026-04-22 as `e2e/regression-smoke.spec.js`.
+- Covers the local auth+persistence round-trip the unit tests can't reach: sign-up → sign-in → Welcome Class gradebook → score write → sign out → sign back in → confirm the same score survives.
+- Uses `mockPersistentAuthFlow(...)` in `e2e/helpers.js` to provide a durable fake auth/backend harness, because this local checkout does not have a live Supabase/SMTP test project for real email verification.
+- Verified locally with `npx playwright test e2e/regression-smoke.spec.js` plus the adjacent helper-dependent slice `e2e/auth.spec.js e2e/gradebook.spec.js e2e/score-entry.spec.js` (`27` passing total on 2026-04-22).
 
 ### P1.3 · Lift the push embargo on `main`
 
@@ -64,9 +64,15 @@
 
 ### P2.5 · Wire `saveRubrics` UI → `window.v2.upsertRubric`
 
-- [ ] Discovered 2026-04-21 while shipping T-UI-09/T-UI-10. The rubric editor in `teacher/page-assignments.js` persists via `saveRubrics(cid, arr)` which writes only to localStorage via `_saveCourseField('rubrics', …)`. The v2 `window.v2.upsertRubric` composite RPC exists and is unit-tested, but nothing in the UI invokes it — so rubric creations / edits on main (including the new weight + levelValues fields) don't reach `gradebook-prod`.
-- Scope: add a thin adapter in `saveRubrics` that maps the editor's internal shape (`criteria[i].levels = { 4, 3, 2, 1 }` + `weight` + `levelValues`) into the v2 composite payload (`level4Descriptor` etc., plus `linkedTagIds` from `tagIds`) and dispatches one `window.v2.upsertRubric` per rubric when `_useSupabase`.
-- Affects every teacher who has non-trivial rubrics once the SMTP / quota issues are resolved and teachers start using the product. High leverage, small code.
+- [x] Shipped 2026-04-22. `saveRubrics(cid, arr)` in `shared/data.js` now maps the editor’s local rubric shape into the v2 composite `upsert_rubric` payload, queues canonical upserts/deletes per course, re-reads `rubric` / `criterion` / `criterion_tag` rows to replace temporary local ids with canonical ids, and patches linked assessment `rubricId` values so subsequent assessment saves point at the real server rubric. `teacher/page-assignments.js` now waits for that canonical id map when a newly created rubric is auto-selected in the assessment form.
+- Verification: new `tests/data-rubrics-v2-sync.test.js` covers canonical id rehydration + linked-assessment patching + delete dispatch, and the full suite is green at `834 passed, 1 skipped`.
+
+### P2.6 · Finish category migration in the remaining UI surfaces
+
+- [ ] Discovered 2026-04-21 after the desktop category slice landed in `shared/data.js`, `shared/calc.js`, `teacher/page-assignments.js`, `teacher/page-gradebook.js`, `teacher/page-reports.js`, `teacher/ui.js`, and `teacher/report-blocks.js`.
+- Residual `assessment.type` / summative-formative assumptions still exist in secondary surfaces: `teacher/page-dashboard.js`, `teacher/page-student.js`, parts of `teacher/report-blocks.js`, and some shared calc coverage/count helpers that still treat "summative evidence" as the only meaningful evidence bucket.
+- Scope: replace S/F badges, two-bucket report/history groupings, and "has evidence" counters with category-aware display logic; reuse `getCourseLetterData` / `courseShowsLetterGrades` where the UI is deciding whether to show letter outputs; keep the current local fallback `type: 'summative'` write field only as compatibility glue for score rows until the old paths are retired.
+- This is follow-on cleanup, not a blocker for the desktop grading loop that now works with categories. Priority is dashboard first, then student page, then remaining report/mobile presentation.
 
 ---
 

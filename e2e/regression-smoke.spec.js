@@ -1,68 +1,74 @@
-/**
- * Regression smoke — P1.2 from the post-reconciliation backlog.
- *
- * Flow: sign up → Welcome Class auto-seeds → enter a score → sign out →
- * sign back in → score survives.
- *
- * WHY THIS MATTERS: unit tests stub `getSupabase()` and assert the dispatch
- * payload. They can't catch breakage in: the login form wiring, session
- * restoration on reload, bootstrap_teacher's Welcome Class seeding, or the
- * v2 cache → localStorage → reload round-trip that keeps data alive across
- * sessions.
- *
- * CURRENT STATUS: skipped. The Playwright webServer config
- * (`playwright.config.js`) uses `npx serve -l 8347` which serves raw source
- * without credential substitution — the login form renders empty because
- * `__SUPABASE_URL__` / `__SUPABASE_KEY__` placeholders are never replaced
- * and `getSupabase()` returns null. Every existing e2e test silently fails
- * the same way right now.
- *
- * TO UNBLOCK: either (a) change `webServer.command` to build dist + serve
- * dist with credentials substituted, matching the `dev:local` flow
- * introduced by the reconciliation plan, or (b) spin up `netlify dev`
- * which runs the inject-env edge function on each request. Tracked in the
- * backlog as a new item (P3.4).
- */
 import { test, expect } from '@playwright/test';
+import {
+  mockPersistentAuthFlow,
+  SMOKE_WELCOME_COURSE,
+  SMOKE_WELCOME_STUDENTS,
+  SMOKE_WELCOME_ASSESSMENT,
+} from './helpers.js';
 
-// Skip the full regression flow until the e2e infra is repaired. Leaving
-// the spec skeleton in place means the next session picks up where this
-// one left off rather than re-designing from scratch.
-test.describe.skip('Regression smoke (P1.2) — BLOCKED on e2e infra', () => {
-  test('sign-up → welcome class → enter score → sign out → sign in → score survives', async ({ page }) => {
+test.describe('Regression smoke (P1.2)', () => {
+  test.beforeEach(async ({ page }) => {
+    await mockPersistentAuthFlow(page);
+  });
+
+  test('sign-up -> sign-in -> welcome class -> enter score -> sign-out -> sign-in -> score survives', async ({
+    page,
+  }) => {
     const email = `smoke-${Date.now()}@example.com`;
     const password = 'test1234!';
+    const teacherName = 'Smoke Tester';
+    const firstStudentId = SMOKE_WELCOME_STUDENTS[0].id;
+    const assessmentId = SMOKE_WELCOME_ASSESSMENT.id;
+    const tagId = SMOKE_WELCOME_ASSESSMENT.tagIds[0];
+    let writtenValue = '';
+    const scoreCell = page.locator(
+      `td.gb-score[data-sid="${firstStudentId}"][data-aid="${assessmentId}"][data-tid="${tagId}"]`,
+    );
 
-    // 1. Sign up
     await page.goto('/login.html');
+
     await page.locator('#tab-signup').click();
-    await page.locator('#su-name').fill('Smoke Tester');
+    await page.locator('#su-name').fill(teacherName);
     await page.locator('#su-email').fill(email);
     await page.locator('#su-password').fill(password);
     await page.locator('#su-confirm').fill(password);
     await page.locator('#form-signup button[type="submit"]').click();
 
-    // 2. (Email verification would happen here in a real flow — skipped for
-    //     local smoke; requires test-Supabase project with auto-confirm)
+    await expect(page.locator('#auth-success')).toContainText('Check your email for a confirmation link.');
 
-    // 3. Land on dashboard with Welcome Class auto-seeded
-    await page.waitForURL(/\/teacher\/app/);
-    await expect(page.locator('text=Welcome Class').first()).toBeVisible();
-
-    // 4. Navigate to gradebook and enter a score on the seeded assessment
-    //    (requires Welcome Class seed data; bootstrap_teacher creates empty
-    //     course on first login today — P4.2 promotes Q43 seed into it)
-
-    // 5. Sign out
-    await page.locator('[data-action="sign-out"]').click();
-    await page.waitForURL(/\/login/);
-
-    // 6. Sign back in
+    await page.locator('#tab-signin').click();
     await page.locator('#si-email').fill(email);
     await page.locator('#si-password').fill(password);
     await page.locator('#form-signin button[type="submit"]').click();
 
-    // 7. Assert the score from step 4 is still visible
-    //    ...
+    await page.waitForURL(/\/teacher\/app/);
+    await expect(page.getByRole('combobox', { name: 'Select course' })).toHaveValue(SMOKE_WELCOME_COURSE.id);
+
+    await page.evaluate(courseId => {
+      window.location.hash = '#/gradebook?course=' + courseId;
+    }, SMOKE_WELCOME_COURSE.id);
+    await expect(scoreCell).toBeVisible();
+
+    await scoreCell.click();
+    writtenValue = ((await scoreCell.locator('.gb-score-val').textContent()) || '').trim();
+    expect(writtenValue).not.toBe('');
+    expect(writtenValue).not.toBe('·');
+    expect(writtenValue).not.toBe('—');
+
+    await page.locator('[data-action="toggleUserMenu"]').click();
+    await page.locator('[data-action="signOut"]').click();
+    await page.waitForURL(/\/login(?:\.html)?/);
+    await page.goto('/login.html');
+
+    await page.locator('#si-email').fill(email);
+    await page.locator('#si-password').fill(password);
+    await page.locator('#form-signin button[type="submit"]').click();
+
+    await page.waitForURL(/\/teacher\/app/);
+    await page.evaluate(courseId => {
+      window.location.hash = '#/gradebook?course=' + courseId;
+    }, SMOKE_WELCOME_COURSE.id);
+    await expect(page.locator('body')).toContainText(SMOKE_WELCOME_STUDENTS[0].firstName);
+    await expect(scoreCell.locator('.gb-score-val')).toHaveText(writtenValue);
   });
 });

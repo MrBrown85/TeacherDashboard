@@ -59,10 +59,10 @@ function renderBlockAcademicSummary(cid, student) {
   const overallRound = Math.round(overall);
   const cc = getCourseConfig(cid);
   const usePercentage = cc.reportAsPercentage || false;
+  const letterData = getCourseLetterData(cid, student.id);
   let overallDisplay, overallHeading;
   if (usePercentage && overall > 0) {
-    const letterData = calcLetterGrade(overall);
-    overallDisplay = letterData ? letterData.pct + '%' : Math.round((overall / 4) * 100) + '%';
+    overallDisplay = letterData && letterData.R != null ? letterData.R + '%' : Math.round((overall / 4) * 100) + '%';
     overallHeading = 'Overall Grade';
   } else {
     overallDisplay = overall > 0 ? PROF_LABELS[overallRound] : 'No Evidence';

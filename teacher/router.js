@@ -42,6 +42,17 @@ window.Router = (function() {
   var _currentPage = null;
   var _booted = false;
 
+  function _consumeBootstrapRoute() {
+    try {
+      var hinted = localStorage.getItem('gb-post-bootstrap-route');
+      if (!hinted) return null;
+      localStorage.removeItem('gb-post-bootstrap-route');
+      return hinted.charAt(0) === '#' ? hinted.slice(1) : hinted;
+    } catch (e) {
+      return null;
+    }
+  }
+
   function _flushPendingEdits() {
     var active = document.activeElement;
     if (!active || typeof active.blur !== 'function') return;
@@ -79,6 +90,7 @@ window.Router = (function() {
     if (!mount) return;
     mount.innerHTML = renderDock(activePage);
     if (typeof _populateDockUser === 'function') _populateDockUser();
+    if (window.UI && typeof window.UI.refreshSyncStatusUI === 'function') window.UI.refreshSyncStatusUI();
   }
 
   /* ── Route handler ───────────────────────────────────────── */
@@ -184,7 +196,7 @@ window.Router = (function() {
 
     // Set default hash if none, then trigger initial route
     if (!location.hash || location.hash === '#' || location.hash === '#/') {
-      navigate('/dashboard', true);
+      navigate(_consumeBootstrapRoute() || '/dashboard', true);
     } else {
       _onRoute();
     }

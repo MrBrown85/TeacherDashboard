@@ -7,6 +7,7 @@ window.ReportQuestionnaire = (function() {
   var _renderReports = null;
   var _tqIncludeAssignFeedback = true;
   var _tqObsFilter = "all";
+  var _SHOW_AUTO_NARRATIVE = false;
 
   function configure(opts) {
     _activeCourse = opts.activeCourse;
@@ -1220,10 +1221,10 @@ function renderTermQuestionnaire(cid) {
         <div class="tq-toolbar-group">
           <button type="button" class="tq-tb-btn" data-action="tqExec" data-cmd="removeFormat" title="Clear Formatting"><svg viewBox="0 0 24 24"><path d="M17 4H7"/><path d="M12 4v7"/><path d="M4 20l16-16"/></svg></button>
         </div>
-        <button type="button" class="tq-tb-btn tq-tb-auto" data-action="tqAutoNarrative" data-sid="${sid}" title="Auto-generate from profile data" id="tq-auto-btn">
+        ${_SHOW_AUTO_NARRATIVE ? `<button type="button" class="tq-tb-btn tq-tb-auto" data-action="tqAutoNarrative" data-sid="${sid}" title="Auto-generate from profile data" id="tq-auto-btn">
           <svg viewBox="0 0 24 24"><path d="M12 2L9.5 9.5 2 12l7.5 2.5L12 22l2.5-7.5L22 12l-7.5-2.5z" fill="currentColor" stroke="none" opacity="0.7"/></svg>
           <span>Generate</span>
-        </button>
+        </button>` : ''}
         <button type="button" class="tq-tb-btn tq-tb-copy" data-action="tqCopyNarrative" title="Copy to Clipboard" id="tq-copy-btn">
           <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           <span>Copy</span>

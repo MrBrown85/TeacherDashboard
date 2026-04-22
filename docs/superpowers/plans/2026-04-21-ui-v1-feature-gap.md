@@ -13,13 +13,15 @@
 | Fact | Value |
 |---|---|
 | Branch | `main` (reconciliation plan shipped — 31+ commits past pre-session origin) |
-| Backend | all v2 RPCs live on `gradebook-prod`; 805/805 unit tests green; 123/141 e2e green (18 content-mismatch failures → P3.5) |
+| Backend | all v2 RPCs live on `gradebook-prod`; 834 passed / 1 skipped in the current unit suite; 123/141 e2e green (18 content-mismatch failures → P3.5) |
 | Source of truth for UI requirements | [`docs/backend-design/INSTRUCTIONS.md`](../../backend-design/INSTRUCTIONS.md) §2.1 U1–U17 + §12 exact-copy strings |
 | Source of truth for UI tokens/patterns | [`docs/backend-design/DESIGN-SYSTEM.md`](../../backend-design/DESIGN-SYSTEM.md) |
 | Source of truth for per-task prompts | [`docs/backend-design/TASKS.md`](../../backend-design/TASKS.md) |
 | Push embargo | Lifted. `main` pushed to origin. Netlify currently 503ing on "usage_exceeded" (P1.0 in post-reconciliation-backlog); UI work can still land + merge even while production is dark. |
 
 **Before first UI session:** read the three docs above in order. They are now authoritative and must not drift.
+
+**2026-04-21 local follow-up after Tier A:** the desktop category-driven grading slice is now in the working tree: assignments + gradebook use category selectors/filters/badges, and desktop report/header letter displays read the category-weighted `getCourseLetterData` pipeline. Residual `assessment.type` presentation/count paths outside that core loop are tracked in post-reconciliation backlog item `P2.6`.
 
 ---
 
@@ -68,7 +70,7 @@ No AI co-author. No AI references in branch or commit content (`feedback_no_ai_r
 
 - [x] *Shipped 2026-04-21 commit TBD.* Added a per-criterion `<details><summary>Customize point values</summary>` disclosure below the 4 level cards. Default closed (opens when `levelValues` is populated so existing overrides remain visible). When open: 4 ~48px inputs labeled L4 / L3 / L2 / L1 pre-filled with defaults 4/3/2/1. `updateCritLevelValue` handler lazily creates `levelValues` only when a teacher actually overrides a default — reverting to the default value auto-removes the override so clean criteria stay clean. Blur-commit via `critLevelValue` dispatcher.
 
-**Persistence caveat** (tracked as new item): the editor still saves through the legacy `saveRubrics → localStorage` pipeline; `window.v2.upsertRubric` is wired in the dispatch layer (Phase 4.5) but nothing in the UI calls it. Rubric writes don't reach `gradebook-prod` yet. New backlog item **P2.5** covers wiring `saveRubrics` to the v2 composite RPC.
+**Follow-up resolved 2026-04-22:** rubric persistence is now canonical. `saveRubrics(...)` dispatches the v2 composite RPC, rehydrates canonical rubric/criterion ids from Supabase after save, and patches linked assessment `rubricId` values so the rubric editor’s weight/value overrides now round-trip to `gradebook-prod`.
 
 ---
 
@@ -77,15 +79,15 @@ No AI co-author. No AI references in branch or commit content (`feedback_no_ai_r
 Each item is a full session with a ready-to-paste prompt in `TASKS.md`. These can land in any order after Tier A — `TASKS.md` notes their specific dependencies.
 
 - [ ] T-UI-03 — Course `timezone` picker (30 min)
-- [ ] T-UI-04 — Restore-account prompt on sign-in (1 h)
-- [ ] T-UI-05 — Data export menu entry (1 h; spawns backend `export_my_data` if missing)
-- [ ] T-UI-06 — "N unsynced" badge on user avatar (45 min; uses `window.v2Queue.stats()`)
-- [ ] T-UI-07 — Offline banner strip (30 min)
-- [ ] T-UI-08 — Sync status popover (1.5 h; depends on T-UI-06)
-- [ ] T-UI-11 — Session-expired modal with draft preservation (2 h)
-- [ ] T-COPY-01 — Delete-account 30-day grace copy (15 min)
-- [ ] T-COPY-02 — Welcome Class banner + auto-seed (45 min)
-- [ ] T-UI-01 — Hide term-rating auto-generate button (15 min)
+- [x] T-UI-04 — Restore-account prompt on sign-in (1 h)
+- [ ] T-UI-05 — Data export menu entry (1 h; backend audit confirmed `export_my_data` is still missing, so this remains blocked on `T-BE-01`)
+- [x] T-UI-06 — "N unsynced" badge on user avatar (45 min; desktop dock now reflects queue + dead-letter counts)
+- [x] T-UI-07 — Offline banner strip (30 min; banner pushes dock/content down while offline)
+- [x] T-UI-08 — Sync status popover (1.5 h; retry + dead-letter dismiss now live)
+- [x] T-UI-11 — Session-expired modal with draft preservation (2 h; term-rating + observation capture now use silent-refresh-then-modal flow)
+- [x] T-COPY-01 — Delete-account 30-day grace copy (15 min)
+- [x] T-COPY-02 — Welcome Class banner + auto-seed (45 min)
+- [x] T-UI-01 — Hide term-rating auto-generate button (15 min)
 
 ---
 
@@ -93,7 +95,7 @@ Each item is a full session with a ready-to-paste prompt in `TASKS.md`. These ca
 
 These can run in parallel with Tier A/B and do not require code.
 
-- [ ] T-OPS-01 — Custom SMTP for `noreply@fullvision.ca` (45 min + DNS wait) — already shipped per HANDOFF 5.2; verify with a live password reset.
+- [x] T-OPS-01 — Custom SMTP for `noreply@fullvision.ca` (live setup completed 2026-04-20; optional password-reset re-verify remains a smoke pass)
 - [ ] T-OPS-02 — Sentry project + DSN wiring (45 min)
 - [ ] T-OPS-03 — Park legacy site at `legacy.fullvision.ca` (30 min; DNS)
 - [ ] **P1.0 from post-reconciliation-backlog — Netlify quota fix** (user-only; production 503ing until resolved)
@@ -117,7 +119,7 @@ At the end of each session, the agent appends to `HANDOFF.md` activity log AND t
 
 When A.1 through A.4 are all checked:
 
-- [ ] Run the full unit suite: `npm test` — expect 805/805 passing + 1 skipped.
+- [ ] Run the full unit suite: `npm test` — expect 834 passed + 1 skipped.
 - [ ] Run the e2e suite: `npx playwright test` — expect ≥123 passing; any NEW failures from Tier A UI are real regressions (P3.5 existing failures are pre-existing).
 - [ ] Demo-Mode smoke of the four features end-to-end: create 3 categories → flip grading_system to Both → build a rubric with weighted criteria and one custom-value criterion → enter a score → reload → everything persists.
 - [ ] Append close-out line to `HANDOFF.md`: "Tier A UI v1 complete; backend + frontend linked for categories, grading modes, and rubric flexibility."

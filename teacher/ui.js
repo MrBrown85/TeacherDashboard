@@ -24,13 +24,25 @@ function sanitizeHtml(raw) {
 }
 
 /* ── Shared HTML: Unified Toolbar ──────────────────────────── */
+const OFFLINE_BANNER_COPY = "You're offline. Changes will sync when connection returns.";
+let _syncUIBound = false;
+let _syncUIUnsubscribe = null;
+let _sessionExpiredRetries = {};
+let _sessionExpiredCopyDraft = null;
+let _sessionExpiredModalOpen = false;
+
 function renderDock(activePage, rightHTML) {
+  _ensureSyncStatusUI();
   const ap = activePage === 'student' ? 'dashboard' : activePage;
   const seg = TB_PAGES.map(
     p => `<a href="${p.href}" class="tb-seg-link${p.id === ap ? ' tb-seg-active' : ''}">${p.label}</a>`,
   ).join('');
 
   const userMenu = `<div class="tb-user-menu">
+    <div class="tb-sync-anchor">
+      <button class="tb-sync-badge obs-badge" id="tb-sync-badge" data-action="toggleSyncPopover" title="View sync status" aria-label="View sync status" aria-expanded="false" hidden>0</button>
+      <div class="tb-sync-popover" id="tb-sync-popover" hidden></div>
+    </div>
     <button class="tb-user-btn" data-action="toggleUserMenu" title="Account" aria-label="Account menu" aria-expanded="false" aria-haspopup="true">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3 2.5-5 6-5s6 2 6 5"/></svg>
       <span class="tb-user-name" id="tb-user-name"></span>
@@ -38,12 +50,13 @@ function renderDock(activePage, rightHTML) {
     <div class="tb-user-dropdown">
       <button class="tb-user-signout" data-action="signOut">Sign Out</button>
       <div style="border-top:1px solid var(--border);margin-top:4px;padding-top:4px">
-        <button class="tb-user-delete" data-action="deleteAccount" style="font-size:var(--text-xs);color:var(--score-1);background:none;border:none;cursor:pointer;padding:4px 8px;width:100%;text-align:left">Clear This Device</button>
+        <button class="tb-user-delete" data-action="deleteAccount" style="font-size:var(--text-xs);color:var(--score-1);background:none;border:none;cursor:pointer;padding:4px 8px;width:100%;text-align:left">Delete Account</button>
       </div>
     </div>
   </div>`;
 
-  return `<nav id="app-dock" role="navigation" aria-label="Main navigation">
+  return `<div class="offline-banner" id="offline-banner" role="status" aria-live="polite" hidden>${OFFLINE_BANNER_COPY}</div>
+  <nav id="app-dock" role="navigation" aria-label="Main navigation">
     <div class="tb-group tb-left">
       <button class="tb-btn" data-action="toggleSidebar" title="Toggle Sidebar" aria-label="Toggle Sidebar">${TB_SIDEBAR_SVG}</button>
     </div>
@@ -52,6 +65,327 @@ function renderDock(activePage, rightHTML) {
     </div>
     <div class="tb-group tb-right">${rightHTML || ''}<div class="tb-sync" role="status" aria-label="Sync status"><div class="tb-sync-dot idle" id="sync-indicator-dot" title="All changes saved" aria-label="All changes saved"></div></div>${userMenu}</div>
   </nav>`;
+}
+
+function _getQueueStats() {
+  if (!window.v2Queue || typeof window.v2Queue.stats !== 'function') {
+    return { queued: 0, deadLettered: 0, lastFlushAt: null, online: navigator.onLine !== false, flushing: false };
+  }
+  var stats = window.v2Queue.stats() || {};
+  return {
+    queued: Number(stats.queued || 0),
+    deadLettered: Number(stats.deadLettered || 0),
+    lastFlushAt: stats.lastFlushAt || null,
+    online: stats.online !== false,
+    flushing: !!stats.flushing,
+  };
+}
+
+function _getUnsyncedCount(stats) {
+  return Number(stats.queued || 0) + Number(stats.deadLettered || 0);
+}
+
+function _formatRelativeTime(iso) {
+  if (!iso) return 'Not yet';
+  var ts = Date.parse(iso);
+  if (!ts) return 'Unknown';
+  var diffMs = Date.now() - ts;
+  if (diffMs < 60000) return 'Just now';
+  var diffMin = Math.round(diffMs / 60000);
+  if (diffMin < 60) return diffMin === 1 ? '1 minute ago' : diffMin + ' minutes ago';
+  var diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return diffHr === 1 ? '1 hour ago' : diffHr + ' hours ago';
+  var diffDay = Math.round(diffHr / 24);
+  return diffDay === 1 ? '1 day ago' : diffDay + ' days ago';
+}
+
+function _humanizeEndpoint(endpoint) {
+  return (endpoint || 'queued write')
+    .replace(/^v2\./, '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+}
+
+function _renderSyncDeadEntry(entry) {
+  var label = _humanizeEndpoint(entry && entry.endpoint);
+  var error = (entry && entry.last_error) || 'Retry failed';
+  return `<div class="tb-sync-dead-item">
+    <div class="tb-sync-dead-copy">
+      <div class="tb-sync-dead-title">${esc(label)}</div>
+      <div class="tb-sync-dead-error">${esc(error)}</div>
+    </div>
+    <button class="tb-sync-dead-dismiss" data-action="dismissSyncDeadLetter" data-id="${esc(entry && entry.id || '')}">Dismiss</button>
+  </div>`;
+}
+
+function _renderSyncPopoverContent(stats) {
+  var total = _getUnsyncedCount(stats);
+  var dead = window.v2Queue && typeof window.v2Queue.deadLetter === 'function' ? window.v2Queue.deadLetter() : [];
+  var summary = total > 0 ? total + ' unsynced' : 'All changes saved';
+  var pendingCopy = stats.queued === 1 ? '1 pending write' : stats.queued + ' pending writes';
+  var deadCopy = stats.deadLettered === 1 ? '1 needs attention' : stats.deadLettered + ' need attention';
+  var meta = [pendingCopy];
+  if (stats.deadLettered > 0) meta.push(deadCopy);
+  var deadHtml = dead.length
+    ? `<div class="tb-sync-dead-list">${dead.map(_renderSyncDeadEntry).join('')}</div>`
+    : `<div class="tb-sync-empty">No failed sync items.</div>`;
+  return `<div class="tb-sync-popover-card">
+    <div class="tb-sync-popover-header">
+      <div>
+        <div class="tb-sync-popover-title">${esc(summary)}</div>
+        <div class="tb-sync-popover-meta">${esc(meta.join(' · '))}</div>
+      </div>
+      <button class="tb-sync-action" data-action="retrySyncQueue">Retry</button>
+    </div>
+    <div class="tb-sync-popover-row">
+      <span>Connection</span>
+      <strong>${stats.online ? 'Online' : 'Offline'}</strong>
+    </div>
+    <div class="tb-sync-popover-row">
+      <span>Last sync</span>
+      <strong>${esc(_formatRelativeTime(stats.lastFlushAt))}</strong>
+    </div>
+    <div class="tb-sync-popover-section">Needs attention</div>
+    ${deadHtml}
+  </div>`;
+}
+
+function _setSyncPopoverOpen(isOpen) {
+  var popover = document.getElementById('tb-sync-popover');
+  var badge = document.getElementById('tb-sync-badge');
+  if (!popover) return;
+  popover.hidden = !isOpen;
+  popover.classList.toggle('open', !!isOpen);
+  if (badge) badge.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+}
+
+function _closeSyncPopover() {
+  _setSyncPopoverOpen(false);
+}
+
+function refreshSyncStatusUI() {
+  var stats = _getQueueStats();
+  var total = _getUnsyncedCount(stats);
+  var badge = document.getElementById('tb-sync-badge');
+  var popover = document.getElementById('tb-sync-popover');
+  var banner = document.getElementById('offline-banner');
+  var dot = document.getElementById('sync-indicator-dot');
+  var body = document.body;
+
+  if (banner) {
+    banner.hidden = !!stats.online;
+  }
+  if (body && body.classList && typeof body.classList.toggle === 'function') {
+    body.classList.toggle('offline-active', !stats.online);
+  }
+
+  if (badge) {
+    var label = total === 1 ? '1 unsynced change' : total + ' unsynced changes';
+    if (stats.deadLettered > 0) {
+      label += ' including ' + (stats.deadLettered === 1 ? '1 failed item' : stats.deadLettered + ' failed items');
+    }
+    badge.hidden = total <= 0;
+    badge.textContent = total > 99 ? '99+' : String(total);
+    badge.title = label;
+    badge.setAttribute('aria-label', label);
+  }
+
+  if (popover) {
+    popover.innerHTML = _renderSyncPopoverContent(stats);
+  }
+
+  if (dot) {
+    var dotStatus = 'idle';
+    var dotTitle = 'All changes saved';
+    if (stats.deadLettered > 0) {
+      dotStatus = 'error';
+      dotTitle = stats.deadLettered === 1 ? '1 sync item needs attention' : stats.deadLettered + ' sync items need attention';
+    } else if (!stats.online && total > 0) {
+      dotStatus = 'error';
+      dotTitle = total === 1 ? 'Offline — 1 change queued' : 'Offline — ' + total + ' changes queued';
+    } else if (stats.flushing || (stats.online && stats.queued > 0)) {
+      dotStatus = 'syncing';
+      dotTitle = stats.queued === 1 ? 'Syncing 1 queued change' : 'Syncing ' + stats.queued + ' queued changes';
+    }
+    dot.className = 'tb-sync-dot ' + dotStatus;
+    dot.title = dotTitle;
+    dot.setAttribute('aria-label', dotTitle);
+  }
+}
+
+function _ensureSyncStatusUI() {
+  if (_syncUIBound) return;
+  _syncUIBound = true;
+  if (window.v2Queue && typeof window.v2Queue.subscribe === 'function') {
+    _syncUIUnsubscribe = window.v2Queue.subscribe(function () {
+      refreshSyncStatusUI();
+    });
+  }
+  window.addEventListener('online', refreshSyncStatusUI);
+  window.addEventListener('offline', refreshSyncStatusUI);
+}
+
+async function retrySyncQueue() {
+  if (!window.v2Queue || typeof window.v2Queue.flush !== 'function') return;
+  var result = await window.v2Queue.flush();
+  refreshSyncStatusUI();
+  if (typeof showSyncToast === 'function') {
+    if (result && result.deadLettered > 0) showSyncToast('Some queued changes still need attention.', 'error');
+    else if (result && result.succeeded > 0) showSyncToast('Queued changes synced.', 'success');
+  }
+}
+
+function _getLocalStorageKeys() {
+  if (!localStorage) return [];
+  if (typeof localStorage.length === 'number' && typeof localStorage.key === 'function') {
+    var keys = [];
+    for (var i = 0; i < localStorage.length; i++) {
+      keys.push(localStorage.key(i));
+    }
+    return keys.filter(Boolean);
+  }
+  if (localStorage._store) return Object.keys(localStorage._store);
+  return Object.keys(localStorage).filter(function (key) {
+    return typeof localStorage[key] !== 'function';
+  });
+}
+
+function _getStoredAuthEmail() {
+  var keys = _getLocalStorageKeys();
+  for (var i = 0; i < keys.length; i++) {
+    var key = keys[i];
+    if (!/^sb-.*-auth-token$/.test(key || '')) continue;
+    try {
+      var parsed = JSON.parse(localStorage.getItem(key) || 'null') || {};
+      var email =
+        (parsed.user && parsed.user.email) ||
+        (parsed.currentSession && parsed.currentSession.user && parsed.currentSession.user.email) ||
+        (parsed.session && parsed.session.user && parsed.session.user.email) ||
+        '';
+      if (email) return email;
+    } catch (e) {
+      /* ignore malformed auth cache */
+    }
+  }
+  return '';
+}
+
+function _clearSessionExpiredState() {
+  _sessionExpiredRetries = {};
+  _sessionExpiredCopyDraft = null;
+  _sessionExpiredModalOpen = false;
+}
+
+function _copySessionExpiredDraft() {
+  if (!_sessionExpiredCopyDraft) return Promise.resolve(false);
+  var text = (_sessionExpiredCopyDraft() || '').trim();
+  if (!text) return Promise.resolve(false);
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    return navigator.clipboard.writeText(text).then(function () { return true; }, function () { return false; });
+  }
+  return Promise.resolve(false);
+}
+
+function _showSessionExpiredDraftToast() {
+  dismissSyncToast();
+  var toast = document.createElement('div');
+  toast.className = 'sync-toast error';
+  toast.id = 'sync-toast';
+  toast.setAttribute('role', 'alert');
+  toast.setAttribute('aria-live', 'assertive');
+  toast.innerHTML =
+    '<span>Session expired. Copy your draft before it is lost.</span><button class="sync-toast-btn" data-action="copy-session-draft">Copy Draft</button>';
+  document.body.appendChild(toast);
+}
+
+function queueSessionExpiredRetry(opts) {
+  opts = opts || {};
+  if (typeof opts.retry !== 'function') return;
+  var key = opts.key || 'default';
+  _sessionExpiredRetries[key] = opts.retry;
+  if (typeof opts.getDraftText === 'function') {
+    _sessionExpiredCopyDraft = opts.getDraftText;
+  }
+  if (_sessionExpiredModalOpen) return;
+  _sessionExpiredModalOpen = true;
+
+  var email = opts.email || _getStoredAuthEmail();
+  var overlay = document.createElement('div');
+  overlay.className = 'modal-overlay open';
+  overlay.id = 'session-expired-modal';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-labelledby', 'session-expired-title');
+  overlay.innerHTML = `<div class="modal-box session-expired-modal">
+    <div class="confirm-title" id="session-expired-title">Session Expired</div>
+    <div class="confirm-message">Enter your password to keep working without losing this draft.</div>
+    <div class="confirm-form">
+      <label class="confirm-field">
+        <span class="confirm-label">Email</span>
+        <input class="confirm-input" id="session-expired-email" type="email" value="${esc(email)}" autocomplete="email">
+      </label>
+      <label class="confirm-field">
+        <span class="confirm-label">Password</span>
+        <input class="confirm-input" id="session-expired-password" type="password" autocomplete="current-password" placeholder="Current password">
+      </label>
+    </div>
+    <div class="session-expired-note">Your draft stays on screen while you reconnect.</div>
+    <div class="confirm-error" id="session-expired-error" aria-live="polite"></div>
+    <div class="session-expired-actions">
+      <button class="confirm-cancel" id="session-expired-cancel">Not now</button>
+      <button class="confirm-ok primary" id="session-expired-submit">Continue</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+
+  var emailInput = overlay.querySelector('#session-expired-email');
+  var passwordInput = overlay.querySelector('#session-expired-password');
+  var errorEl = overlay.querySelector('#session-expired-error');
+  var cancelBtn = overlay.querySelector('#session-expired-cancel');
+  var submitBtn = overlay.querySelector('#session-expired-submit');
+
+  function closeModal(showDraftToast) {
+    overlay.remove();
+    _sessionExpiredModalOpen = false;
+    if (showDraftToast) _showSessionExpiredDraftToast();
+  }
+
+  cancelBtn.onclick = function () {
+    _sessionExpiredRetries = {};
+    closeModal(true);
+  };
+
+  overlay.addEventListener('click', function (evt) {
+    if (evt.target === overlay) {
+      _sessionExpiredRetries = {};
+      closeModal(true);
+    }
+  });
+
+  submitBtn.onclick = async function () {
+    errorEl.textContent = '';
+    submitBtn.disabled = true;
+    cancelBtn.disabled = true;
+    try {
+      await signIn(emailInput.value.trim(), passwordInput.value);
+      var retryKeys = Object.keys(_sessionExpiredRetries);
+      for (var i = 0; i < retryKeys.length; i++) {
+        var res = await _sessionExpiredRetries[retryKeys[i]]();
+        if (res && res.error) throw (res.error.sourceError || res.error);
+      }
+      _clearSessionExpiredState();
+      overlay.remove();
+      if (typeof showSyncToast === 'function') {
+        showSyncToast('Session restored. Draft saved.', 'success');
+      }
+    } catch (err) {
+      errorEl.textContent = (err && err.message) || 'Could not restore your session.';
+      submitBtn.disabled = false;
+      cancelBtn.disabled = false;
+    }
+  };
+
+  passwordInput.focus();
 }
 
 /* ── Populate user display name in dock ────────────────────── */
@@ -79,7 +413,12 @@ setTimeout(_populateDockUser, 0);
 // Close user dropdown on click outside
 document.addEventListener('click', function (e) {
   const menu = document.querySelector('.tb-user-menu');
-  if (menu && !menu.contains(e.target)) menu.classList.remove('open');
+  if (menu && !menu.contains(e.target)) {
+    menu.classList.remove('open');
+    const button = menu.querySelector('.tb-user-btn');
+    if (button) button.setAttribute('aria-expanded', 'false');
+    _closeSyncPopover();
+  }
 });
 
 /* ── Upcoming Birthdays ────────────────────────────────────── */
@@ -166,11 +505,11 @@ function renderStudentHeader(cid, sid, opts) {
     <div class="overall-val" style="color:${profColor}">${overall > 0 ? overall.toFixed(1) : '\u2014'}</div>
     <div class="overall-word" style="color:${profColor}">${PROF_LABELS[overallRounded] || 'No Evidence'}</div>
   </div>`;
-  if (typeof calcLetterGrade === 'function' && course.gradingSystem === 'letter' && overall > 0) {
-    const lg = calcLetterGrade(overall);
+  if (typeof getCourseLetterData === 'function' && courseShowsLetterGrades(course) && overall > 0) {
+    const lg = getCourseLetterData(cid, student.id);
     html += `<div class="letter-card">
-      <div class="letter-val">${lg.letter}</div>
-      <div class="letter-pct">${lg.pct}%</div>
+      <div class="letter-val">${lg && lg.S ? lg.S : '—'}</div>
+      <div class="letter-pct">${lg && lg.R != null ? lg.R + '%' : '—'}</div>
     </div>`;
   }
   html += `<div class="sh-spacer"></div>`;
@@ -611,6 +950,91 @@ function showConfirm(title, message, okLabel, okStyle, onConfirm) {
   document.addEventListener('keydown', trapHandler);
 }
 
+async function softDeleteAccountWithPassword(typedEmail, password) {
+  var currentUser = typeof getCurrentUser === 'function' ? await getCurrentUser() : null;
+  var expectedEmail = ((currentUser && currentUser.email) || '').trim();
+  if (!expectedEmail) throw new Error('Could not verify the current account email.');
+  if (((typedEmail || '').trim().toLowerCase()) !== expectedEmail.toLowerCase()) {
+    throw new Error('Type your account email exactly to confirm deletion.');
+  }
+  if (!password) throw new Error('Enter your password to confirm deletion.');
+  if (typeof reauthenticateWithPassword === 'function') {
+    await reauthenticateWithPassword(password);
+  }
+  if (!window.v2 || typeof window.v2.softDeleteTeacher !== 'function') {
+    throw new Error('Delete account is unavailable right now.');
+  }
+  var result = await window.v2.softDeleteTeacher();
+  if (result && result.error) throw result.error;
+  await signOut();
+}
+
+async function showDeleteAccountDialog() {
+  var currentUser = typeof getCurrentUser === 'function' ? await getCurrentUser() : null;
+  var email = ((currentUser && currentUser.email) || '').trim();
+  if (!email) {
+    if (typeof showSyncToast === 'function') showSyncToast('Could not load account details. Sign in again and retry.', 'error');
+    return;
+  }
+
+  var overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-labelledby', 'delete-account-title');
+  overlay.innerHTML = `<div class="confirm-card">
+    <div class="confirm-title" id="delete-account-title">Delete Account</div>
+    <div class="confirm-message">Deleting your account hides all your data immediately and permanently removes it after 30 days. You can cancel the deletion by signing in again within 30 days.</div>
+    <div class="confirm-help">Type <strong>${esc(email)}</strong> and enter your password to confirm.</div>
+    <div class="confirm-form">
+      <label class="confirm-field">
+        <span class="confirm-label">Email confirmation</span>
+        <input class="confirm-input" id="delete-account-email" type="email" autocomplete="email" placeholder="${esc(email)}">
+      </label>
+      <label class="confirm-field">
+        <span class="confirm-label">Password</span>
+        <input class="confirm-input" id="delete-account-password" type="password" autocomplete="current-password" placeholder="Current password">
+      </label>
+    </div>
+    <div class="confirm-error" id="delete-account-error" aria-live="polite"></div>
+    <div class="confirm-actions">
+      <button class="confirm-cancel" id="delete-account-cancel">Cancel</button>
+      <button class="confirm-ok danger" id="delete-account-confirm">Delete Account</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+
+  var cancelBtn = overlay.querySelector('#delete-account-cancel');
+  var confirmBtn = overlay.querySelector('#delete-account-confirm');
+  var emailInput = overlay.querySelector('#delete-account-email');
+  var passwordInput = overlay.querySelector('#delete-account-password');
+  var errorEl = overlay.querySelector('#delete-account-error');
+
+  function closeOverlay() {
+    overlay.remove();
+  }
+
+  cancelBtn.onclick = function () {
+    closeOverlay();
+  };
+  overlay.addEventListener('click', function (evt) {
+    if (evt.target === overlay) closeOverlay();
+  });
+  confirmBtn.onclick = async function () {
+    errorEl.textContent = '';
+    confirmBtn.disabled = true;
+    cancelBtn.disabled = true;
+    try {
+      await softDeleteAccountWithPassword(emailInput.value, passwordInput.value);
+    } catch (err) {
+      errorEl.textContent = err && err.message ? err.message : 'Could not delete account.';
+      confirmBtn.disabled = false;
+      cancelBtn.disabled = false;
+    }
+  };
+  emailInput.focus();
+}
+
 /* ── Shared delegated click handler for gb-ui.js components ── */
 var _sidebarClickFnName = null;
 
@@ -620,47 +1044,20 @@ document.addEventListener('click', function (e) {
   var action = el.dataset.action;
   var handlers = {
     toggleUserMenu: function () {
-      el.parentElement.classList.toggle('open');
+      var isOpen = el.parentElement.classList.toggle('open');
+      el.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    },
+    toggleSyncPopover: function () {
+      if (el.hidden) return;
+      var popover = document.getElementById('tb-sync-popover');
+      if (!popover) return;
+      _setSyncPopoverOpen(popover.hidden);
     },
     signOut: function () {
       signOut();
     },
-    deleteAccount: function () {
-      showConfirm(
-        'Clear This Device',
-        'This clears FullVision data from this browser and signs you out. Canonical server-side deletion is not wired up in the current schema migration, so this action is local-only for now.',
-        'Clear Local Data',
-        'danger',
-        async function () {
-          try {
-            const sb = typeof getSupabase === 'function' ? getSupabase() : null;
-            // Clear localStorage and mark as deliberately wiped (prevents re-seeding)
-            const keysToRemove = [];
-            for (let i = 0; i < localStorage.length; i++) {
-              const key = localStorage.key(i);
-              if (
-                key &&
-                (key.startsWith('gb-') || key.startsWith('gb_') || key.startsWith('sb-') || key.startsWith('td-'))
-              ) {
-                keysToRemove.push(key);
-              }
-            }
-            keysToRemove.forEach(k => localStorage.removeItem(k));
-            localStorage.setItem('gb-data-wiped', '1');
-            // Sign out and redirect to login page (separate page, not SPA)
-            if (sb) {
-              try {
-                await sb.auth.signOut();
-              } catch (e) {
-                /* best-effort */
-              }
-            }
-            window.location.href = 'login.html'; // intentional full navigation to login
-          } catch (err) {
-            alert('Local data clear failed: ' + (err.message || 'Unknown error. Please reload and try again.'));
-          }
-        },
-      );
+    deleteAccount: async function () {
+      await showDeleteAccountDialog();
     },
     toggleSidebar: function () {
       toggleSidebar();
@@ -681,6 +1078,14 @@ document.addEventListener('click', function (e) {
     },
     executeUndo: function () {
       executeUndo();
+    },
+    retrySyncQueue: async function () {
+      await retrySyncQueue();
+    },
+    dismissSyncDeadLetter: function () {
+      if (!window.v2Queue || typeof window.v2Queue.dismissDeadLetter !== 'function') return;
+      window.v2Queue.dismissDeadLetter(el.dataset.id);
+      refreshSyncStatusUI();
     },
   };
   if (handlers[action]) {
@@ -710,7 +1115,15 @@ document.addEventListener('click', function (e) {
   if (!btn) return;
   switch (btn.dataset.action) {
     case 'retry-sync':
-      if (typeof retrySyncs === 'function') retrySyncs();
+      retrySyncQueue();
+      dismissSyncToast();
+      break;
+    case 'copy-session-draft':
+      _copySessionExpiredDraft().then(function (copied) {
+        if (copied && typeof showSyncToast === 'function') {
+          showSyncToast('Draft copied to clipboard.', 'success');
+        }
+      });
       dismissSyncToast();
       break;
     case 'reload-page':
@@ -784,4 +1197,7 @@ window.UI = {
   showSyncToast,
   dismissSyncToast,
   showConfirm,
+  refreshSyncStatusUI,
+  retrySyncQueue,
+  queueSessionExpiredRetry,
 };

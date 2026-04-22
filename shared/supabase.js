@@ -114,6 +114,45 @@
   };
 
   /**
+   * Re-checks the current account password before a sensitive action.
+   * Uses the signed-in user's email as the identity source of truth.
+   * @param {string} password - The current account password
+   * @returns {Promise<object>} The refreshed Supabase sign-in payload
+   */
+  window.reauthenticateWithPassword = async function (password) {
+    const sb = getSupabase();
+    if (!sb) throw new Error('Supabase not initialized');
+    const user = await getCurrentUser();
+    const email = (user && user.email) || '';
+    if (!email) throw new Error('Could not verify the current account email.');
+    if (!password) throw new Error('Enter your password to continue.');
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    return data;
+  };
+
+  window.refreshSupabaseSession = async function () {
+    const sb = getSupabase();
+    if (!sb) throw new Error('Supabase not initialized');
+    const { data, error } = await sb.auth.refreshSession();
+    if (error) throw error;
+    if (!data || !data.session) throw new Error('No refreshed session returned.');
+    return data;
+  };
+
+  window.showSessionExpiredToast = function () {
+    var el = document.getElementById('sync-toast');
+    if (el) el.remove();
+    var toast = document.createElement('div');
+    toast.className = 'sync-toast error';
+    toast.id = 'sync-toast';
+    toast.setAttribute('role', 'alert');
+    toast.innerHTML =
+      '<span>Session expired</span><button class="sync-toast-btn" data-action="go-login">Sign In</button>';
+    document.body.appendChild(toast);
+  };
+
+  /**
    * Signs out the current user, clears application localStorage data, and redirects to login.
    * @returns {Promise<void>}
    */
@@ -240,17 +279,11 @@
   // Listen for auth state changes — notify on mid-session expiry
   window.onAuthChange(function (user, event) {
     if (event === 'TOKEN_REFRESHED' && !user) {
-      // Session expired while the app was open
-      if (typeof showSyncToast === 'function') {
-        var el = document.getElementById('sync-toast');
-        if (el) el.remove();
-        var toast = document.createElement('div');
-        toast.className = 'sync-toast error';
-        toast.id = 'sync-toast';
-        toast.setAttribute('role', 'alert');
-        toast.innerHTML =
-          '<span>Session expired</span><button class="sync-toast-btn" data-action="go-login">Sign In</button>';
-        document.body.appendChild(toast);
+      if (typeof isLongFormAuthContextActive === 'function' && isLongFormAuthContextActive()) {
+        if (typeof markLongFormSessionExpired === 'function') markLongFormSessionExpired();
+      } else if (typeof showSessionExpiredToast === 'function') {
+        // Session expired while the app was open
+        showSessionExpiredToast();
       }
     }
   });
@@ -273,6 +306,10 @@
   function resetIdleTimer() {
     if (_idleTimer) clearTimeout(_idleTimer);
     _idleTimer = setTimeout(function () {
+      if (typeof isLongFormAuthContextActive === 'function' && isLongFormAuthContextActive()) {
+        if (typeof markLongFormSessionExpired === 'function') markLongFormSessionExpired();
+        return;
+      }
       if (typeof signOut === 'function') signOut();
     }, IDLE_TIMEOUT);
   }

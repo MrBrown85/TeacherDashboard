@@ -32,6 +32,7 @@
 
   var _flushing = false;
   var _autoTimer = null;
+  var _listeners = [];
 
   function _uuid4() {
     // RFC4122 v4 via crypto if available
@@ -81,6 +82,29 @@
     catch (e) { console.warn('[v2Queue] dead-letter write failed:', e); }
   }
 
+  function _notify(kind, meta) {
+    var snapshot = stats();
+    _listeners.slice().forEach(function (listener) {
+      try {
+        listener({
+          kind: kind || 'update',
+          meta: meta || null,
+          stats: snapshot,
+        });
+      } catch (e) {
+        console.warn('[v2Queue] subscriber failed:', e);
+      }
+    });
+  }
+
+  function subscribe(listener) {
+    if (typeof listener !== 'function') return function () {};
+    _listeners.push(listener);
+    return function unsubscribe() {
+      _listeners = _listeners.filter(function (fn) { return fn !== listener; });
+    };
+  }
+
   /* Enqueue a write. endpoint = RPC name, payload = RPC params object.
      Returns { ok, id, reason? }.  Caller should update its optimistic
      cache AFTER receiving ok:true. */
@@ -105,6 +129,7 @@
     catch (e) {
       return { ok: false, reason: 'storage_full' };
     }
+    _notify('enqueue', { id: entry.id, endpoint: entry.endpoint });
     // Kick off a flush attempt if we came online.
     if (navigator.onLine) setTimeout(flush, 0);
     return { ok: true, id: entry.id };
@@ -130,6 +155,7 @@
     if (_flushing) return { processed: 0, succeeded: 0, deadLettered: 0, note: 'busy' };
     if (!navigator.onLine) return { processed: 0, succeeded: 0, deadLettered: 0, note: 'offline' };
     _flushing = true;
+    _notify('flush:start');
     var succeeded = 0;
     var deadLettered = 0;
     var processed = 0;
@@ -148,6 +174,7 @@
           q2.last_flush_at = new Date().toISOString();
           _writeQueue(q2);
           succeeded++;
+          _notify('flush:success', { id: head.id, endpoint: head.endpoint });
           continue;
         }
 
@@ -162,6 +189,7 @@
           qd.entries.shift();
           _writeQueue(qd);
           deadLettered++;
+          _notify('flush:dead-letter', { id: head.id, endpoint: head.endpoint, error: head.last_error });
           continue; // keep draining the rest
         }
 
@@ -171,12 +199,14 @@
         var qb = _readQueue();
         qb.entries[0] = head;
         _writeQueue(qb);
+        _notify('flush:retry', { id: head.id, endpoint: head.endpoint, attempts: head.attempts, error: head.last_error });
         var delay = BACKOFF_MS[Math.min(head.attempts, BACKOFF_MS.length) - 1];
         await _sleep(delay);
         if (!navigator.onLine) break;
       }
     } finally {
       _flushing = false;
+      _notify('flush:end');
     }
     return { processed: processed, succeeded: succeeded, deadLettered: deadLettered };
   }
@@ -189,6 +219,7 @@
       deadLettered:   d.length,
       lastFlushAt:    q.last_flush_at,
       online:         !!navigator.onLine,
+      flushing:       _flushing,
     };
   }
 
@@ -197,12 +228,14 @@
   function dismissDeadLetter(id) {
     var d = _readDead().filter(function (e) { return e.id !== id; });
     _writeDead(d);
+    _notify('dead-letter:dismiss', { id: id });
     return d.length;
   }
 
   function clear() {
     try { localStorage.removeItem(QUEUE_KEY); } catch (_) {}
     try { localStorage.removeItem(DEAD_KEY); } catch (_) {}
+    _notify('clear');
   }
 
   /* One-shot convenience: call the RPC directly if online, else enqueue.
@@ -234,7 +267,13 @@
   }
 
   /* Wire listeners — flush on reconnect, periodic retry while online. */
-  window.addEventListener('online', function () { flush(); });
+  window.addEventListener('online', function () {
+    _notify('network', { online: true });
+    flush();
+  });
+  window.addEventListener('offline', function () {
+    _notify('network', { online: false });
+  });
   if (!_autoTimer) {
     _autoTimer = setInterval(function () {
       if (navigator.onLine) {
@@ -254,6 +293,7 @@
     dismissDeadLetter:   dismissDeadLetter,
     clear:               clear,
     callOrEnqueue:       callOrEnqueue,
+    subscribe:           subscribe,
     MAX_ENTRIES:         MAX_ENTRIES,
     MAX_ATTEMPTS:        MAX_ATTEMPTS,
   };

@@ -16,6 +16,10 @@ var _tagProfCache = {};
 var _awCache = {};
 var _assessMapCache = {};    // cid → Map<assessmentId, assessment> — avoids O(n) find per score
 var _sectionByIdCache = {};  // cid → Map<sectionId, section>      — avoids repeated getSections().find()
+var _categoryMapCache = {};  // cid → Map<categoryId, category>
+var _assessmentOverallCache = {};
+var _categoryAvgCache = {};
+var _courseLetterCache = {};
 
 /** Clear all proficiency caches. Call when scores, assessments, overrides, or statuses change. */
 function clearProfCache() {
@@ -24,6 +28,10 @@ function clearProfCache() {
   _awCache = {};
   _assessMapCache = {};
   _sectionByIdCache = {};
+  _categoryMapCache = {};
+  _assessmentOverallCache = {};
+  _categoryAvgCache = {};
+  _courseLetterCache = {};
 }
 
 /** Get or build assessment weights map for a course. */
@@ -50,6 +58,13 @@ function _getSectionById(cid, sectionId) {
     _sectionByIdCache[cid] = new Map(getSections(cid).map(function(s) { return [s.id, s]; }));
   }
   return _sectionByIdCache[cid].get(sectionId);
+}
+
+function _getCategoryMap(cid) {
+  if (_categoryMapCache[cid]) return _categoryMapCache[cid];
+  var map = new Map((getCategories(cid) || []).map(function (c) { return [c.id, c]; }));
+  _categoryMapCache[cid] = map;
+  return map;
 }
 
 /** Convert a raw point score to a proficiency level using percentage boundaries.
@@ -82,6 +97,136 @@ function getCategoryWeights(cid) {
  * @returns {number} Assessment weight
  */
 function getAssessmentWeight(assessment) { return assessment.weight || 1; }
+
+function courseShowsLetterGrades(course) {
+  return !!course && (course.gradingSystem === 'letter' || course.gradingSystem === 'both');
+}
+
+function _normalizeAssessmentEntryValue(assessment, rawScore) {
+  if (rawScore == null || rawScore === '') return null;
+  var num = Number(rawScore);
+  if (!isFinite(num)) return null;
+  if (assessment && assessment.scoreMode === 'points' && assessment.maxPoints > 0) {
+    return Math.max(0, Math.min(4, (num / assessment.maxPoints) * 4));
+  }
+  return num;
+}
+
+function getAssessmentOverallScore(cid, studentId, assessmentId) {
+  var cacheKey = cid + ':' + studentId + ':' + assessmentId;
+  if (_assessmentOverallCache[cacheKey] !== undefined) return _assessmentOverallCache[cacheKey];
+
+  var assessment = _getAssessMap(cid).get(assessmentId);
+  if (!assessment) {
+    _assessmentOverallCache[cacheKey] = null;
+    return null;
+  }
+
+  var status = getAssignmentStatus(cid, studentId, assessmentId);
+  if (status === 'excused') {
+    _assessmentOverallCache[cacheKey] = null;
+    return null;
+  }
+  if (status === 'notSubmitted') {
+    _assessmentOverallCache[cacheKey] = 0;
+    return 0;
+  }
+
+  var studentScores = getScores(cid)[studentId] || [];
+  var values = studentScores
+    .filter(function (entry) { return entry.assessmentId === assessmentId; })
+    .map(function (entry) { return _normalizeAssessmentEntryValue(assessment, entry.score); })
+    .filter(function (value) { return value != null; });
+
+  if (values.length === 0) {
+    _assessmentOverallCache[cacheKey] = null;
+    return null;
+  }
+
+  var result = values.reduce(function (sum, value) { return sum + value; }, 0) / values.length;
+  _assessmentOverallCache[cacheKey] = result;
+  return result;
+}
+
+function getCategoryAverage(cid, studentId, categoryId) {
+  var cacheKey = cid + ':' + studentId + ':' + categoryId;
+  if (_categoryAvgCache[cacheKey] !== undefined) return _categoryAvgCache[cacheKey];
+
+  var values = getAssessments(cid)
+    .filter(function (assessment) {
+      return (assessment.categoryId || assessment.category_id || null) === categoryId;
+    })
+    .map(function (assessment) {
+      return getAssessmentOverallScore(cid, studentId, assessment.id);
+    })
+    .filter(function (value) {
+      return value != null;
+    });
+
+  if (values.length === 0) {
+    _categoryAvgCache[cacheKey] = null;
+    return null;
+  }
+
+  var result = values.reduce(function (sum, value) { return sum + value; }, 0) / values.length;
+  _categoryAvgCache[cacheKey] = result;
+  return result;
+}
+
+function qToPercentage(Q) {
+  if (Q == null) return null;
+  if (Q <= 0) return 0;
+  if (Q <= 2) return 55 + (Q - 1) * 13;
+  if (Q <= 3) return 68 + (Q - 2) * 14;
+  return Math.min(100, 82 + (Q - 3) * 14);
+}
+
+function percentageToLetter(R) {
+  if (R == null) return null;
+  if (R >= 86) return 'A';
+  if (R >= 73) return 'B';
+  if (R >= 67) return 'C+';
+  if (R >= 60) return 'C';
+  if (R >= 50) return 'C-';
+  return 'F';
+}
+
+function getCourseLetterData(cid, studentId) {
+  var cacheKey = cid + ':' + studentId;
+  if (_courseLetterCache[cacheKey]) return _courseLetterCache[cacheKey];
+
+  var categories = getCategories(cid) || [];
+  var Q = null;
+
+  if (categories.length > 0) {
+    var weightedSum = 0;
+    var weightTotal = 0;
+    categories.forEach(function (category) {
+      var avg = getCategoryAverage(cid, studentId, category.id);
+      if (avg == null) return;
+      var weight = Number(category.weight || 0);
+      weightedSum += weight * avg;
+      weightTotal += weight;
+    });
+    if (weightTotal > 0) Q = weightedSum / weightTotal;
+  } else {
+    var values = getAssessments(cid)
+      .map(function (assessment) { return getAssessmentOverallScore(cid, studentId, assessment.id); })
+      .filter(function (value) { return value != null; });
+    if (values.length > 0) {
+      Q = values.reduce(function (sum, value) { return sum + value; }, 0) / values.length;
+    }
+  }
+
+  var R = qToPercentage(Q);
+  var result = {
+    Q: Q,
+    R: R == null ? null : Math.round(R * 10) / 10,
+    S: percentageToLetter(R),
+  };
+  _courseLetterCache[cacheKey] = result;
+  return result;
+}
 
 /* ── Proficiency Calculation ────────────────────────────────── */
 /** Core algorithm: calculate a proficiency level from a group of scores using the specified method.
@@ -350,11 +495,8 @@ function getOverallProficiency(cid, studentId) {
  * @returns {{letter: string, pct: number}} Letter grade and corresponding percentage
  */
 function calcLetterGrade(avgProf) {
-  if (avgProf >= 3.50) return { letter:'A', pct: Math.min(100, Math.round(86 + (avgProf - 3.50) / 0.50 * 14)) };
-  if (avgProf >= 3.00) return { letter:'B', pct: Math.round(73 + (avgProf - 3.00) / 0.50 * 12) };
-  if (avgProf >= 2.00) return { letter:'C+', pct: Math.round(60 + (avgProf - 2.00) / 1.00 * 12) };
-  if (avgProf >= 1.25) return { letter:'D', pct: Math.round(50 + (avgProf - 1.25) / 0.75 * 9) };
-  return { letter:'F', pct: Math.round(avgProf / 1.25 * 50) };
+  var pct = qToPercentage(avgProf);
+  return { letter: percentageToLetter(pct), pct: pct == null ? null : Math.round(pct * 10) / 10 };
 }
 
 /** Determine the trend direction for a section by comparing the two most recent summative scores.
@@ -526,9 +668,15 @@ function renderGrowthSparkline(points) {
 /* ── Namespace ──────────────────────────────────────────────── */
 window.Calc = {
   clearProfCache,
+  courseShowsLetterGrades,
   pointsToProf,
   getCategoryWeights,
   getAssessmentWeight,
+  getAssessmentOverallScore,
+  getCategoryAverage,
+  qToPercentage,
+  percentageToLetter,
+  getCourseLetterData,
   calcProficiency,
   getTagScores,
   getTagProficiency,

@@ -110,7 +110,7 @@ function renderClassSummary(cid) {
   const sections = getSections(cid);
   let students = sortStudents(getStudents(cid), 'lastName');
   if (classSummaryAnon) students = anonymizeStudents(students);
-  const isLetter = course.gradingSystem === 'letter';
+  const isLetter = courseShowsLetterGrades(course);
 
   let html = `<h2 style="font-family:var(--font-base);font-size:1.3rem;margin-bottom:12px">${esc(course.name)} &mdash; Class Summary</h2>`;
   html += `<table class="class-summary-table">
@@ -141,8 +141,8 @@ function renderClassSummary(cid) {
     const ocolor = op > 0 ? PROF_COLORS[or2] : 'var(--text-3)';
     html += `<td data-prof="${or2}" style="color:${ocolor};font-weight:700">${olabel}</td>`;
     if (isLetter) {
-      const lg = op > 0 ? calcLetterGrade(op) : null;
-      html += `<td style="font-weight:700">${lg ? lg.letter + ' (' + lg.pct + '%)' : '—'}</td>`;
+      const letterData = getCourseLetterData(cid, st.id);
+      html += `<td style="font-weight:700">${letterData && letterData.S ? letterData.S + ' (' + letterData.R + '%)' : '—'}</td>`;
     }
     html += `</tr>`;
   });
@@ -273,18 +273,38 @@ function updatePickerLabel() {
   }
 }
 
+function _syncLongFormAuthContext() {
+  if (activeTab === 'questionnaire') {
+    if (typeof setLongFormAuthContext === 'function') {
+      setLongFormAuthContext({
+        kind: 'term-rating',
+        getDraftText: function () {
+          var editor = document.getElementById('tq-narrative');
+          return editor ? (editor.innerText || editor.textContent || '') : '';
+        },
+      });
+    }
+    return;
+  }
+  if (typeof clearLongFormAuthContext === 'function') {
+    clearLongFormAuthContext('term-rating');
+  }
+}
+
 /* ── Main render ─────────────────────────────────────────────── */
 function renderReports() {
   const cid = activeCourse;
   const output = document.getElementById('report-output');
 
   if (activeTab === 'summary') {
+    _syncLongFormAuthContext();
     output.innerHTML = renderClassSummary(cid);
     return;
   }
 
   if (activeTab === 'questionnaire') {
     output.innerHTML = renderTermQuestionnaire(cid);
+    _syncLongFormAuthContext();
     // Highlight active student in sidebar
     const students = getTqStudents();
     const activeSid = students[RQ.tqStudentIndex]?.id;
@@ -295,6 +315,8 @@ function renderReports() {
     });
     return;
   }
+
+  _syncLongFormAuthContext();
 
   // Progress reports — render two-panel builder layout
   const presetBtns = ['brief','standard','detailed'].map(p =>
@@ -719,6 +741,7 @@ function _configureQuestionnaire() {
   function destroy() {
     // Save any unsaved narrative
     if (RQ.tqNarrativeDirty) tqSaveCurrentIfNeeded();
+    if (typeof clearLongFormAuthContext === 'function') clearLongFormAuthContext('term-rating');
 
     _listeners.forEach(function(l) {
       document.removeEventListener(l.type, l.handler, l.options);

@@ -159,6 +159,94 @@ export const TEST_LEARNING_MAP = {
   ],
 };
 
+export const SMOKE_WELCOME_COURSE = {
+  id: 'welcome-class-smoke',
+  name: 'Welcome Class',
+  gradingSystem: 'proficiency',
+  calcMethod: 'mostRecent',
+  decayWeight: 0.65,
+  curriculumTags: ['SCI8'],
+};
+
+export const SMOKE_WELCOME_STUDENTS = [
+  {
+    id: 'welcome-stu-001',
+    firstName: 'Avery',
+    lastName: 'Adams',
+    preferred: 'Avery',
+    pronouns: '',
+    studentNumber: '2001',
+    email: '',
+    dateOfBirth: '',
+    designations: [],
+    enrolledDate: '',
+    attendance: [],
+    sortName: 'Adams Avery',
+  },
+  {
+    id: 'welcome-stu-002',
+    firstName: 'Jordan',
+    lastName: 'Bennett',
+    preferred: 'Jordan',
+    pronouns: '',
+    studentNumber: '2002',
+    email: '',
+    dateOfBirth: '',
+    designations: [],
+    enrolledDate: '',
+    attendance: [],
+    sortName: 'Bennett Jordan',
+  },
+];
+
+export const SMOKE_WELCOME_ASSESSMENT = {
+  id: 'welcome-assess-001',
+  title: 'Welcome Lab',
+  date: '2026-04-21',
+  type: 'summative',
+  tagIds: ['WELCOME-QAP'],
+  evidenceType: '',
+  notes: '',
+  coreCompetencyIds: [],
+  rubricId: '',
+  scoreMode: '',
+  maxPoints: 0,
+  weight: 1,
+  dueDate: '',
+  collaboration: 'individual',
+  moduleId: '',
+  pairs: [],
+  groups: [],
+  excludedStudents: [],
+  created: new Date('2026-04-21').toISOString(),
+};
+
+export const SMOKE_WELCOME_LEARNING_MAP = {
+  _flatVersion: 2,
+  subjects: [{ id: 'SCI8', name: 'Science 8', color: '#0891b2' }],
+  sections: [
+    {
+      id: 'WELCOME-QAP-SEC',
+      subject: 'SCI8',
+      name: 'Questioning and Predicting',
+      shortName: 'Questioning',
+      color: '#0891b2',
+      tags: [
+        {
+          id: 'WELCOME-QAP',
+          label: 'Question and Predict',
+          text: '',
+          color: '#0891b2',
+          subject: 'SCI8',
+          name: 'Questioning and Predicting',
+          shortName: 'Questioning',
+          i_can_statements: [],
+        },
+      ],
+    },
+  ],
+};
+
 // ── Mock auth ─────────────────────────────────────────────────
 
 /**
@@ -267,8 +355,18 @@ export async function mockAuth(page) {
       },
     });
 
-    // Fake the Supabase CDN global so createClient works
-    window.supabase = { createClient: () => makeFakeClient() };
+    // Pin the fake Supabase client so later scripts cannot swap in a real one.
+    var fakeSupabase = { createClient: () => window._supabase || makeFakeClient() };
+    window._supabase = makeFakeClient();
+    Object.defineProperty(window, 'supabase', {
+      configurable: true,
+      get: function () {
+        return fakeSupabase;
+      },
+      set: function () {
+        return true;
+      },
+    });
 
     // Also set __ENV so gb-supabase.js doesn't log errors
     window.__ENV = { SUPABASE_URL: 'https://fake.supabase.co', SUPABASE_KEY: 'fake-key' };
@@ -300,6 +398,459 @@ export async function mockAuth(page) {
   }, TEACHER);
 
   // Block the real Supabase CDN script from loading (we already injected a fake)
+  await page.route('**/vendor/supabase.min.js', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/javascript',
+      body: '/* mocked */',
+    }),
+  );
+  await page.route('**/cdn.jsdelivr.net/**supabase**', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/javascript',
+      body: '/* mocked */',
+    }),
+  );
+}
+
+/**
+ * Mock the full sign-up -> sign-in -> app -> sign-out -> sign-in flow with a
+ * durable fake backend that survives the app's normal localStorage wipe.
+ *
+ * This keeps the smoke test honest about the browser round-trip even when no
+ * real Supabase project / SMTP config is present in the local checkout.
+ */
+export async function mockPersistentAuthFlow(
+  page,
+  seed = {
+    course: SMOKE_WELCOME_COURSE,
+    learningMap: SMOKE_WELCOME_LEARNING_MAP,
+    students: SMOKE_WELCOME_STUDENTS,
+    assessment: SMOKE_WELCOME_ASSESSMENT,
+  },
+) {
+  await page.addInitScript(fixtures => {
+    const TOKEN_KEY = 'sb-novsfeqjhbleyyaztmlh-auth-token';
+    const DB_KEY = 'e2e-auth-smoke-db';
+    const SESSION_KEY = 'e2e-auth-smoke-session';
+
+    function clone(value) {
+      return value == null ? value : JSON.parse(JSON.stringify(value));
+    }
+
+    function normalizeEmail(email) {
+      return String(email || '')
+        .trim()
+        .toLowerCase();
+    }
+
+    function teacherIdFor(email) {
+      return (
+        'e2e-teacher-' +
+        normalizeEmail(email)
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '')
+      );
+    }
+
+    function loadDb() {
+      try {
+        return JSON.parse(localStorage.getItem(DB_KEY) || '{"users":{}}');
+      } catch (e) {
+        return { users: {} };
+      }
+    }
+
+    function saveDb(db) {
+      localStorage.setItem(DB_KEY, JSON.stringify(db));
+    }
+
+    function loadSession() {
+      try {
+        return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function persistSession(session) {
+      if (!session) return;
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+      localStorage.setItem(TOKEN_KEY, JSON.stringify(session));
+    }
+
+    function clearSession() {
+      localStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem(TOKEN_KEY);
+    }
+
+    function buildAppState(user) {
+      const course = clone(fixtures.course);
+      const learningMap = clone(fixtures.learningMap);
+      const students = clone(fixtures.students);
+      const assessment = clone(fixtures.assessment);
+      const cid = course.id;
+      const appState = {};
+      const config = {
+        activeCourse: cid,
+        displayName: user.display_name,
+        email: user.email,
+      };
+
+      appState['gb-courses'] = JSON.stringify({ [cid]: course });
+      appState['gb-config'] = JSON.stringify(config);
+      appState['gb-lastActiveCourse'] = cid;
+      appState['gb-learningMaps-' + cid] = JSON.stringify(learningMap);
+      appState['gb-students-' + cid] = JSON.stringify(students);
+      appState['gb-assessments-' + cid] = JSON.stringify([assessment]);
+      appState['gb-scores-' + cid] = JSON.stringify({});
+      appState['gb-observations-' + cid] = JSON.stringify({});
+      appState['gb-modules-' + cid] = JSON.stringify([]);
+      appState['gb-rubrics-' + cid] = JSON.stringify([]);
+      appState['gb-flags-' + cid] = JSON.stringify({});
+      appState['gb-goals-' + cid] = JSON.stringify({});
+      appState['gb-reflections-' + cid] = JSON.stringify({});
+      appState['gb-overrides-' + cid] = JSON.stringify({});
+      appState['gb-statuses-' + cid] = JSON.stringify({});
+      appState['gb-notes-' + cid] = JSON.stringify({});
+      appState['gb-termRatings-' + cid] = JSON.stringify({});
+      appState['gb-customTags-' + cid] = JSON.stringify([]);
+      appState['gb-courseConfigs-' + cid] = JSON.stringify({});
+      appState['gb-reportConfig-' + cid] = JSON.stringify({});
+      appState['gb-gradingScales-' + cid] = JSON.stringify({});
+      appState['gb-data-wiped'] = '1';
+      appState['gb-post-bootstrap-route'] = '/gradebook?course=' + cid;
+      appState['gb-welcome-class-seeded-local-' + cid] = '1';
+      return appState;
+    }
+
+    function applyAppState(appState) {
+      var keysToRemove = [];
+      for (var i = 0; i < localStorage.length; i++) {
+        var key = localStorage.key(i);
+        if (key && (key.indexOf('gb-') === 0 || key.indexOf('gb_') === 0 || key.indexOf('td-') === 0)) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(function (key) {
+        localStorage.removeItem(key);
+      });
+      Object.keys(appState || {}).forEach(function (key) {
+        localStorage.setItem(key, appState[key]);
+      });
+    }
+
+    function publicUser(record) {
+      return {
+        id: record.id,
+        email: record.email,
+        user_metadata: {
+          display_name: record.display_name,
+          portal: 'teacher',
+        },
+      };
+    }
+
+    function buildSession(record) {
+      const user = publicUser(record);
+      return {
+        access_token: 'e2e-smoke-token-' + Date.now(),
+        token_type: 'bearer',
+        expires_in: 86400,
+        expires_at: Math.floor(Date.now() / 1000) + 86400,
+        refresh_token: 'e2e-smoke-refresh-' + Date.now(),
+        user: user,
+      };
+    }
+
+    function loadCurrentUserRecord() {
+      const session = loadSession();
+      if (!session || !session.user || !session.user.email) return null;
+      const db = loadDb();
+      return db.users[normalizeEmail(session.user.email)] || null;
+    }
+
+    const originalSetItem = Storage.prototype.setItem;
+    if (!window.__e2ePatchedStorage) {
+      window.__e2ePatchedStorage = true;
+      Storage.prototype.setItem = function (key, value) {
+        originalSetItem.call(this, key, value);
+        if (this !== localStorage || typeof key !== 'string' || key.indexOf('gb-') !== 0) return;
+        const record = loadCurrentUserRecord();
+        if (!record) return;
+        if (!record.appState) record.appState = {};
+        record.appState[key] = String(value);
+        const db = loadDb();
+        db.users[normalizeEmail(record.email)] = record;
+        saveDb(db);
+      };
+    }
+
+    const existingSession = loadSession();
+    if (existingSession && existingSession.access_token) {
+      localStorage.setItem(TOKEN_KEY, JSON.stringify(existingSession));
+    } else {
+      localStorage.removeItem(TOKEN_KEY);
+    }
+
+    window.__ENV = { SUPABASE_URL: 'https://fake.supabase.co', SUPABASE_KEY: 'fake-key' };
+    window._idleTimeout = null;
+    window._resetIdleTimer = () => {};
+    window.__e2eAuthListeners = window.__e2eAuthListeners || [];
+
+    const noopPromise = value => Promise.resolve(value);
+    const emitAuthChange = (event, session) => {
+      (window.__e2eAuthListeners || []).forEach(cb => {
+        try {
+          cb(event, session ? clone(session) : null);
+        } catch (e) {
+          /* no-op */
+        }
+      });
+    };
+
+    function resolveTeacherRecord(email, displayName) {
+      const normalizedEmail = normalizeEmail(email);
+      const db = loadDb();
+      let record = db.users[normalizedEmail];
+      if (!record) {
+        record = {
+          id: teacherIdFor(normalizedEmail),
+          email: normalizedEmail,
+          password: '',
+          display_name: displayName || 'Smoke Teacher',
+          created_at: new Date().toISOString(),
+          deleted_at: null,
+          appState: null,
+        };
+      }
+      if (!record.appState) record.appState = buildAppState(record);
+      db.users[normalizedEmail] = record;
+      saveDb(db);
+      return record;
+    }
+
+    function fakeRpc(name, params) {
+      if (name === 'bootstrap_teacher') {
+        const record =
+          loadCurrentUserRecord() || resolveTeacherRecord(params && params.p_email, params && params.p_display_name);
+        return noopPromise({
+          data: {
+            id: record.id,
+            email: record.email,
+            display_name: record.display_name,
+            created_at: record.created_at,
+            deleted_at: record.deleted_at,
+            preferences: {
+              active_course_id: fixtures.course.id,
+              view_mode: null,
+              mobile_view_mode: null,
+              mobile_sort_mode: null,
+              card_widget_config: null,
+            },
+          },
+          error: null,
+        });
+      }
+      if (name === 'restore_teacher') {
+        const record = loadCurrentUserRecord();
+        if (record) {
+          record.deleted_at = null;
+          const db = loadDb();
+          db.users[normalizeEmail(record.email)] = record;
+          saveDb(db);
+        }
+        return noopPromise({ data: { restored: true }, error: null });
+      }
+      if (name === 'list_teacher_courses') {
+        return noopPromise({
+          data: [
+            {
+              id: fixtures.course.id,
+              name: fixtures.course.name,
+              grade_level: '',
+              description: '',
+              color: '',
+              is_archived: false,
+              display_order: 0,
+              grading_system: fixtures.course.gradingSystem,
+              calc_method: fixtures.course.calcMethod,
+              decay_weight: fixtures.course.decayWeight,
+              timezone: null,
+              late_work_policy: null,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+          ],
+          error: null,
+        });
+      }
+      if (name === 'get_gradebook') {
+        return noopPromise({
+          data: {
+            categories: [],
+            students: (fixtures.students || []).map(function (student, index) {
+              return {
+                enrollment_id: student.id,
+                student_id: student.id,
+                first_name: student.firstName,
+                last_name: student.lastName,
+                roster_position: index,
+                is_flagged: false,
+              };
+            }),
+            assessments: [
+              {
+                id: fixtures.assessment.id,
+                title: fixtures.assessment.title,
+                category_id: null,
+                score_mode: fixtures.assessment.scoreMode || 'proficiency',
+                max_points: fixtures.assessment.maxPoints || null,
+                has_rubric: false,
+                date_assigned: fixtures.assessment.date,
+                due_date: fixtures.assessment.dueDate || '',
+                display_order: 0,
+              },
+            ],
+            cells: {},
+            row_summaries: {},
+          },
+          error: null,
+        });
+      }
+      return noopPromise({ data: null, error: null });
+    }
+
+    const makeFakeClient = () => ({
+      auth: {
+        getSession: () => {
+          const session = loadSession();
+          if (window.location.pathname.indexOf('/teacher/app') !== -1) {
+            return noopPromise({ data: { session: null }, error: null });
+          }
+          return noopPromise({ data: { session: session ? clone(session) : null }, error: null });
+        },
+        getUser: () => {
+          const session = loadSession();
+          return noopPromise({ data: { user: session && session.user ? clone(session.user) : null }, error: null });
+        },
+        onAuthStateChange: cb => {
+          window.__e2eAuthListeners.push(cb);
+          const session = loadSession();
+          if (session) {
+            setTimeout(() => cb('SIGNED_IN', clone(session)), 0);
+          }
+          return {
+            data: {
+              subscription: {
+                unsubscribe: () => {
+                  window.__e2eAuthListeners = (window.__e2eAuthListeners || []).filter(function (fn) {
+                    return fn !== cb;
+                  });
+                },
+              },
+            },
+          };
+        },
+        signOut: () => {
+          clearSession();
+          emitAuthChange('SIGNED_OUT', null);
+          return noopPromise({ error: null });
+        },
+        resetPasswordForEmail: () => noopPromise({ data: {}, error: null }),
+        refreshSession: () => {
+          const session = loadSession();
+          if (!session) return noopPromise({ data: { session: null }, error: { message: 'No session' } });
+          persistSession(session);
+          emitAuthChange('TOKEN_REFRESHED', session);
+          return noopPromise({ data: { session: clone(session) }, error: null });
+        },
+        signUp: ({ email, password, options }) => {
+          const normalizedEmail = normalizeEmail(email);
+          const db = loadDb();
+          if (db.users[normalizedEmail]) {
+            return noopPromise({ data: null, error: { message: 'User already exists' } });
+          }
+          const record = {
+            id: teacherIdFor(normalizedEmail),
+            email: normalizedEmail,
+            password: password,
+            display_name:
+              (options && options.data && options.data.display_name) || normalizedEmail.split('@')[0] || 'Smoke Teacher',
+            created_at: new Date().toISOString(),
+            deleted_at: null,
+            appState: null,
+          };
+          record.appState = buildAppState(record);
+          db.users[normalizedEmail] = record;
+          saveDb(db);
+          return noopPromise({ data: { user: publicUser(record), session: null }, error: null });
+        },
+        signInWithPassword: ({ email, password }) => {
+          const normalizedEmail = normalizeEmail(email);
+          const db = loadDb();
+          const record = db.users[normalizedEmail];
+          if (!record || record.password !== password) {
+            return noopPromise({ data: null, error: { message: 'Invalid login credentials' } });
+          }
+          if (!record.appState) record.appState = buildAppState(record);
+          applyAppState(record.appState);
+          const session = buildSession(record);
+          persistSession(session);
+          db.users[normalizedEmail] = record;
+          saveDb(db);
+          emitAuthChange('SIGNED_IN', session);
+          return noopPromise({ data: { user: publicUser(record), session: clone(session) }, error: null });
+        },
+      },
+      rpc: fakeRpc,
+      from: () => {
+        const chain = {
+          select: () => chain,
+          eq: () => chain,
+          neq: () => chain,
+          in: () => chain,
+          order: () => chain,
+          limit: () => chain,
+          single: () => noopPromise({ data: null, error: null }),
+          upsert: () => noopPromise({ data: [], error: null }),
+          insert: () => noopPromise({ data: [], error: null }),
+          update: () => chain,
+          delete: () => chain,
+          then: resolve => resolve({ data: [], error: null }),
+        };
+        return chain;
+      },
+    });
+
+    const fakeSupabase = { createClient: () => window._supabase || makeFakeClient() };
+    window._supabase = makeFakeClient();
+    Object.defineProperty(window, 'supabase', {
+      configurable: true,
+      get: function () {
+        return fakeSupabase;
+      },
+      set: function () {
+        return true;
+      },
+    });
+
+    const seedObserver = new MutationObserver(() => {
+      if (typeof window.seedIfNeeded === 'function' && !window._seedStubbed) {
+        window._seedStubbed = true;
+        window.seedIfNeeded = async () => {};
+        window.migrateAllStudents = async () => {};
+      }
+    });
+    seedObserver.observe(document.documentElement, { childList: true, subtree: true });
+    setTimeout(() => {
+      if (typeof window.seedIfNeeded === 'function') window.seedIfNeeded = async () => {};
+      if (typeof window.migrateAllStudents === 'function') window.migrateAllStudents = async () => {};
+      seedObserver.disconnect();
+    }, 3000);
+  }, seed);
+
   await page.route('**/vendor/supabase.min.js', route =>
     route.fulfill({
       status: 200,
