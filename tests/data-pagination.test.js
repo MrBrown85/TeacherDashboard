@@ -18,6 +18,7 @@ const CID = '11111111-1111-1111-1111-111111111111';
 const STUDENT_ID = '33333333-3333-3333-3333-333333333333';
 const ENROLLMENT_ID = '22222222-2222-2222-2222-222222222222';
 const ASSESSMENT_ID = '55555555-5555-5555-5555-555555555555';
+const CATEGORY_ID = '44444444-4444-4444-4444-444444444444';
 
 function makeSupabaseClient(routes) {
   routes = routes || {};
@@ -47,6 +48,7 @@ describe('get_gradebook shape bridge + fallback', () => {
 
     [
       'students',
+      'categories',
       'assessments',
       'scores',
       'courseConfigs',
@@ -86,6 +88,14 @@ describe('get_gradebook shape bridge + fallback', () => {
                 is_flagged: false,
               },
             ],
+            categories: [
+              {
+                id: CATEGORY_ID,
+                name: 'Summative Evidence',
+                weight: 70,
+                display_order: 1,
+              },
+            ],
             assessments: [
               {
                 id: ASSESSMENT_ID,
@@ -95,6 +105,7 @@ describe('get_gradebook shape bridge + fallback', () => {
                 date_assigned: '2026-04-18',
                 due_date: '2026-04-25',
                 display_order: 1,
+                category_id: CATEGORY_ID,
               },
             ],
             cells: {},
@@ -117,11 +128,22 @@ describe('get_gradebook shape bridge + fallback', () => {
       }),
     ]);
 
+    expect(getCategories(CID)).toEqual([
+      expect.objectContaining({
+        id: CATEGORY_ID,
+        name: 'Summative Evidence',
+        weight: 70,
+        displayOrder: 1,
+      }),
+    ]);
+
     expect(getAssessments(CID)).toHaveLength(1);
     expect(getAssessments(CID)[0]).toEqual(
       expect.objectContaining({
         id: ASSESSMENT_ID,
         title: 'Essay 1',
+        categoryId: CATEGORY_ID,
+        category_id: CATEGORY_ID,
       }),
     );
   });
@@ -138,6 +160,7 @@ describe('get_gradebook shape bridge + fallback', () => {
 
     // Cache should be empty-but-valid arrays, not undefined
     expect(getStudents(CID)).toEqual([]);
+    expect(getCategories(CID)).toEqual([]);
     expect(getAssessments(CID)).toEqual([]);
   });
 });

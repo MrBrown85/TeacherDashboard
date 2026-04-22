@@ -1,5 +1,11 @@
 /**
- * Assignment status tests — gb-data.js
+ * setAssignmentStatus v2 dispatch — shared/data.js
+ *
+ * Local-cache status behavior is covered in data-scores.test.js.
+ * window.setCellStatus (direct RPC wrapper) is covered in
+ * data-scores-v2-dispatch.test.js. This file pins the wiring between
+ * the page-level setAssignmentStatus entry point and the set_score_status
+ * RPC, including the UUID guard that falls back to local-only.
  */
 
 const CID = 'status-test';
@@ -11,7 +17,6 @@ beforeEach(() => {
   localStorage.clear();
   _origGetSupabase = getSupabase;
   _origUseSupabase = _useSupabase;
-  _useSupabase = false;
 });
 
 afterEach(() => {
@@ -19,19 +24,8 @@ afterEach(() => {
   _useSupabase = _origUseSupabase;
 });
 
-describe('setAssignmentStatus', () => {
-  it('stores a status in local cache', () => {
-    setAssignmentStatus(CID, 'stu1', 'assess1', 'excused');
-    expect(getAssignmentStatus(CID, 'stu1', 'assess1')).toBe('excused');
-  });
-
-  it('clears a status when null is passed', () => {
-    setAssignmentStatus(CID, 'stu1', 'assess1', 'excused');
-    setAssignmentStatus(CID, 'stu1', 'assess1', null);
-    expect(getAssignmentStatus(CID, 'stu1', 'assess1')).toBeNull();
-  });
-
-  it('calls v2 set_score_status when Supabase is enabled and ids are UUIDs', async () => {
+describe('setAssignmentStatus v2 dispatch', () => {
+  it('calls set_score_status when Supabase is enabled and ids are UUIDs', async () => {
     const ENR = '11111111-1111-1111-1111-111111111111';
     const AID = '22222222-2222-2222-2222-222222222222';
     const rpcCalls = [];
@@ -46,7 +40,7 @@ describe('setAssignmentStatus', () => {
     setAssignmentStatus(CID, ENR, AID, 'late');
     await Promise.resolve();
 
-    const scoreStatusCall = rpcCalls.find(function (c) { return c.name === 'set_score_status'; });
+    const scoreStatusCall = rpcCalls.find((c) => c.name === 'set_score_status');
     expect(scoreStatusCall).toBeDefined();
     expect(scoreStatusCall.payload).toEqual({
       p_enrollment_id: ENR,
@@ -68,6 +62,6 @@ describe('setAssignmentStatus', () => {
     setAssignmentStatus(CID, 'stu1', 'assess1', 'late');
     await Promise.resolve();
 
-    expect(rpcCalls.find(function (c) { return c.name === 'set_score_status'; })).toBeUndefined();
+    expect(rpcCalls.find((c) => c.name === 'set_score_status')).toBeUndefined();
   });
 });

@@ -20,6 +20,15 @@ globalThis.localStorage = {
   setItem(k, v) { this._store[k] = String(v); },
   removeItem(k) { delete this._store[k]; },
   clear() { this._store = {}; },
+  key(i) { return Object.keys(this._store)[i] ?? null; },
+  get length() { return Object.keys(this._store).length; },
+};
+globalThis.sessionStorage = {
+  _store: {},
+  getItem(k) { return this._store[k] ?? null; },
+  setItem(k, v) { this._store[k] = String(v); },
+  removeItem(k) { delete this._store[k]; },
+  clear() { this._store = {}; },
 };
 // Minimal DOM element stub
 function _stubElement() {

@@ -78,10 +78,20 @@ describe('migrateStudent', () => {
     expect(result.designation).toBeUndefined();
   });
 
-  it('preserves already-migrated students', () => {
-    const modern = { firstName: 'Jane', lastName: 'Doe', designations: ['G'] };
+  it('generates sortName (LastName FirstName) when migrating from old format', () => {
+    const result = migrateStudent({ id: 's1', name: 'Alice Smith' });
+    expect(result.sortName).toBe('Smith Alice');
+    expect(result.firstName).toBe('Alice');
+    expect(result.lastName).toBe('Smith');
+  });
+
+  it('preserves already-migrated students including sortName', () => {
+    const modern = {
+      firstName: 'Jane', lastName: 'Doe', sortName: 'Doe Jane', designations: ['G']
+    };
     const result = migrateStudent(modern);
     expect(result.firstName).toBe('Jane');
+    expect(result.sortName).toBe('Doe Jane');
     expect(result.designations).toEqual(['G']);
   });
 
@@ -99,11 +109,21 @@ describe('migrateStudent', () => {
     expect(result.designations).toEqual([]);
   });
 
-  it('handles single name', () => {
-    const old = { name: 'Cher' };
-    const result = migrateStudent(old);
-    expect(result.firstName).toBe('Cher');
+  it('handles single name (no last name → sortName equals first name)', () => {
+    const result = migrateStudent({ id: 's1', name: 'Madonna' });
+    expect(result.firstName).toBe('Madonna');
     expect(result.lastName).toBe('');
+    expect(result.sortName).toBe('Madonna');
+  });
+
+  it('is idempotent — running twice gives same result', () => {
+    const first = migrateStudent({ id: 's1', name: 'Alice Smith', designation: 'Q' });
+    const snapshot = JSON.parse(JSON.stringify(first));
+    const second = migrateStudent(first);
+    expect(second.firstName).toBe(snapshot.firstName);
+    expect(second.lastName).toBe(snapshot.lastName);
+    expect(second.sortName).toBe(snapshot.sortName);
+    expect(second.designations).toEqual(snapshot.designations);
   });
 });
 

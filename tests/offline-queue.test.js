@@ -80,6 +80,29 @@ describe('v2Queue (offline write queue)', () => {
     });
   });
 
+  describe('subscribe', () => {
+    it('notifies queue listeners as the queue changes', async () => {
+      var events = [];
+      var unsubscribe = Q.subscribe(function (event) {
+        events.push({ kind: event.kind, queued: event.stats.queued, deadLettered: event.stats.deadLettered, flushing: event.stats.flushing });
+      });
+
+      Q.enqueue('rpc', { a: 1 });
+      expect(events[0]).toMatchObject({ kind: 'enqueue', queued: 1, deadLettered: 0, flushing: false });
+
+      setOnline(true);
+      await Q.flush();
+      expect(events.some(function (event) { return event.kind === 'flush:start' && event.flushing === true; })).toBe(true);
+      expect(events.some(function (event) { return event.kind === 'flush:success' && event.queued === 0; })).toBe(true);
+      expect(events[events.length - 1]).toMatchObject({ kind: 'flush:end', queued: 0, deadLettered: 0, flushing: false });
+
+      var countBeforeUnsubscribe = events.length;
+      unsubscribe();
+      Q.clear();
+      expect(events).toHaveLength(countBeforeUnsubscribe);
+    });
+  });
+
   describe('flush', () => {
     it('no-ops while offline', async () => {
       Q.enqueue('rpc', {});

@@ -258,23 +258,23 @@ describe('calcProficiency', () => {
 /* ── calcLetterGrade ──────────────────────────────────────── */
 describe('calcLetterGrade', () => {
   it('returns A for 3.50+', () => {
-    expect(calcLetterGrade(3.50)).toEqual({ letter: 'A', pct: 86 });
+    expect(calcLetterGrade(3.50)).toEqual({ letter: 'A', pct: 89 });
     expect(calcLetterGrade(4.0).letter).toBe('A');
-    expect(calcLetterGrade(4.0).pct).toBe(100);
+    expect(calcLetterGrade(4.0).pct).toBe(96);
   });
 
   it('returns B for 3.00-3.49', () => {
-    expect(calcLetterGrade(3.00)).toEqual({ letter: 'B', pct: 73 });
+    expect(calcLetterGrade(3.00)).toEqual({ letter: 'B', pct: 82 });
     expect(calcLetterGrade(3.25).letter).toBe('B');
   });
 
   it('returns C+ for 2.00-2.99', () => {
-    expect(calcLetterGrade(2.00)).toEqual({ letter: 'C+', pct: 60 });
-    expect(calcLetterGrade(2.50).letter).toBe('C+');
+    expect(calcLetterGrade(2.00)).toEqual({ letter: 'C+', pct: 68 });
+    expect(calcLetterGrade(2.25).letter).toBe('C+');
   });
 
-  it('returns D for 1.25-1.99', () => {
-    expect(calcLetterGrade(1.25)).toEqual({ letter: 'D', pct: 50 });
+  it('returns C- for 1.25-1.99', () => {
+    expect(calcLetterGrade(1.25)).toEqual({ letter: 'C-', pct: 58.3 });
   });
 
   it('returns F for below 1.25', () => {
