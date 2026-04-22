@@ -324,7 +324,7 @@ function _calcGroup(scores, method, decayWeight, assessmentWeights) {
       let avg = valid[0].score;
       for (let i = 1; i < valid.length; i++) {
         const w = (assessmentWeights && assessmentWeights[valid[i].assessmentId]) || 1;
-        const denom = (1 - dw) + dw * w;
+        const denom = 1 - dw + dw * w;
         avg = (avg * (1 - dw) + valid[i].score * dw * w) / denom;
       }
       return Math.round(avg);
