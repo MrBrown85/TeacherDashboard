@@ -212,4 +212,41 @@ describe('v2 scoring-dispatch', () => {
       expect(client.calls.find(function (c) { return c.name === 'clear_column_scores'; })).toBeDefined();
     });
   });
+
+  describe('setPointsScore v2 dispatch', () => {
+    beforeEach(function () {
+      _cache.assessments = _cache.assessments || {};
+      _cache.assessments[CID] = [{ id: AID_TAG, tagIds: [TAG_ID], type: 'summative', date: '2026-04-22' }];
+      _cache.scores = _cache.scores || {};
+      _cache.scores[CID] = {};
+    });
+
+    afterEach(function () {
+      delete _cache.assessments[CID];
+      delete _cache.scores[CID];
+      localStorage.removeItem('gb-demo-mode');
+    });
+
+    it('dispatches upsert_score for the overall cell value when ids are UUIDs', function () {
+      setPointsScore(CID, ENR, AID_TAG, 3.5);
+      var call = client.calls.find(function (c) { return c.name === 'upsert_score'; });
+      expect(call).toBeDefined();
+      expect(call.payload).toEqual({
+        p_enrollment_id: ENR,
+        p_assessment_id: AID_TAG,
+        p_value: 3.5,
+      });
+    });
+
+    it('skips dispatch when enrollment id is not a UUID', function () {
+      setPointsScore(CID, 'local-stu-id', AID_TAG, 3.5);
+      expect(client.calls.find(function (c) { return c.name === 'upsert_score'; })).toBeUndefined();
+    });
+
+    it('skips dispatch in demo mode', function () {
+      localStorage.setItem('gb-demo-mode', '1');
+      setPointsScore(CID, ENR, AID_TAG, 3.5);
+      expect(client.calls.find(function (c) { return c.name === 'upsert_score'; })).toBeUndefined();
+    });
+  });
 });

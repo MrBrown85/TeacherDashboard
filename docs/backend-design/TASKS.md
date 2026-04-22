@@ -51,7 +51,7 @@ These unblock the UI tasks and prevent "why isn't my change visible?" confusion.
 
 ---
 
-### T-WIRE-01a · Fix score writes in assignments + gradebook + mobile
+### [DONE] T-WIRE-01a · Fix score writes in assignments + gradebook + mobile
 
 **Goal:** Replace `saveScores`-only calls in primary score-entry paths with `upsertScore` so scores reach Supabase.
 

@@ -35,8 +35,6 @@ window.PageAssignments = (function() {
   var _mergeAnimating = false;
   var focusStudentId = null;
   var _searchTimer = null;
-  var newType = 'summative';
-
   // Collaboration delegation (now in assign-collab.js)
   var AC = AssignCollab;
   var newCollaboration;  // alias for reads in save logic
@@ -119,6 +117,25 @@ window.PageAssignments = (function() {
     render();
   }
 
+  function _getSortedCategories(cid) {
+    return (getCategories(cid) || []).slice().sort(function(a, b) {
+      var orderA = Number(a.displayOrder || 0);
+      var orderB = Number(b.displayOrder || 0);
+      if (orderA !== orderB) return orderA - orderB;
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+  }
+
+  function _getAssessmentCategoryId(assessment) {
+    return (assessment && (assessment.categoryId || assessment.category_id)) || '';
+  }
+
+  function _getCategoryName(cid, categoryId) {
+    if (!categoryId) return 'No Category';
+    var category = getCategoryById(cid, categoryId);
+    return category && category.name ? category.name : 'Unknown Category';
+  }
+
   function setAssessSearch(val) {
     assessSearch = (val || '').trim();
     clearTimeout(_searchTimer);
@@ -137,10 +154,10 @@ window.PageAssignments = (function() {
 
     var toolbarHtml = '<div class="assess-toolbar">' +
       '<select class="assess-course-select" data-action="assessSwitchCourse" aria-label="Select course">' + courseOptions + '</select>' +
-      '<div class="assess-seg-control" role="tablist" aria-label="Assessment type filter">' +
+      '<div class="assess-seg-control" role="tablist" aria-label="Assessment category filter">' +
         '<button class="assess-seg-btn' + (assessFilterType==='all'?' active':'') + '" data-action="setAssessTypeFilter" data-type="all" role="tab" aria-selected="' + (assessFilterType==='all') + '">All</button>' +
-        '<button class="assess-seg-btn' + (assessFilterType==='summative'?' active':'') + '" data-action="setAssessTypeFilter" data-type="summative" role="tab" aria-selected="' + (assessFilterType==='summative') + '">Summative</button>' +
-        '<button class="assess-seg-btn' + (assessFilterType==='formative'?' active':'') + '" data-action="setAssessTypeFilter" data-type="formative" role="tab" aria-selected="' + (assessFilterType==='formative') + '">Formative</button>' +
+        '<button class="assess-seg-btn' + (assessFilterType==='categorized'?' active':'') + '" data-action="setAssessTypeFilter" data-type="categorized" role="tab" aria-selected="' + (assessFilterType==='categorized') + '">Categorized</button>' +
+        '<button class="assess-seg-btn' + (assessFilterType==='uncategorized'?' active':'') + '" data-action="setAssessTypeFilter" data-type="uncategorized" role="tab" aria-selected="' + (assessFilterType==='uncategorized') + '">No Category</button>' +
       '</div>' +
       '<button class="assess-ungraded-chip' + (showUngraded?' active':'') + '" data-action="toggleUngraded" aria-pressed="' + showUngraded + '" aria-label="Show ungraded assessments only">\u26A0 Ungraded</button>' +
       '<div class="assess-search-wrap">' +
@@ -223,11 +240,13 @@ window.PageAssignments = (function() {
         ? (_allExpanded ? !_collapsedIds.has(a.id) : openAssessIds.has(a.id))
         : openAssessIds.has(a.id);
       var tagObjs = (a.tagIds||[]).map(function(tid) { return getTagById(cid, tid); }).filter(Boolean);
+      var categoryId = _getAssessmentCategoryId(a);
+      var categoryName = _getCategoryName(cid, categoryId);
       var c = '<div class="assess-card' + (isOpen?' open active':'') + '" id="ac-' + a.id + '" draggable="true"' +
         ' data-assess-drag="' + a.id + '"' +
         (isUncategorized ? ' data-assess-card-drop="' + a.id + '"' : '') + '>' +
         '<div class="assess-header" data-action="toggleAssess" data-aid="' + a.id + '">' +
-          '<span class="type-badge ' + (a.type==='summative'?'type-badge-s':'type-badge-f') + '">' + (a.type==='summative'?'S':'F') + '</span>' +
+          '<span class="type-badge ' + (categoryId ? 'type-badge-s' : 'type-badge-f') + '">' + esc(categoryName) + '</span>' +
           '<div class="assess-header-info">' +
             '<span class="assess-title">' + esc(a.title) + '</span>' +
             '<span class="assess-meta">' +
@@ -366,7 +385,11 @@ window.PageAssignments = (function() {
 
     // Apply filters
     var assessments = allAssessments;
-    if (assessFilterType !== 'all') assessments = assessments.filter(function(a) { return a.type === assessFilterType; });
+    if (assessFilterType === 'categorized') {
+      assessments = assessments.filter(function(a) { return !!_getAssessmentCategoryId(a); });
+    } else if (assessFilterType === 'uncategorized') {
+      assessments = assessments.filter(function(a) { return !_getAssessmentCategoryId(a); });
+    }
     if (assessSearch) {
       var q = assessSearch.toLowerCase();
       assessments = assessments.filter(function(a) {
@@ -426,7 +449,7 @@ window.PageAssignments = (function() {
     var dateAssigned = assess ? (assess.dateAssigned || assess.date || '') : new Date().toISOString().slice(0,10);
     var dateDue = assess ? (assess.date || '') : new Date().toISOString().slice(0,10);
     var dueDate = assess ? (assess.dueDate || '') : '';
-    var type = assess ? assess.type : 'summative';
+    var categoryId = _getAssessmentCategoryId(assess);
     var selTags = assess ? (assess.tagIds||[]) : [];
     var evidence = assess ? assess.evidenceType : 'written';
     var description = assess ? (assess.description || '') : '';
@@ -434,6 +457,7 @@ window.PageAssignments = (function() {
     var collaboration = assess ? (assess.collaboration || 'individual') : 'individual';
     AC.collaboration = collaboration; newCollaboration = collaboration;
     var allModules = getModules(cid);
+    var categories = _getSortedCategories(cid);
     var scoreMode = assess ? (assess.scoreMode || 'proficiency') : 'proficiency';
     var maxPoints = assess ? (assess.maxPoints || 100) : 100;
     var weight = assess ? (assess.weight || 1) : 1;
@@ -486,14 +510,17 @@ window.PageAssignments = (function() {
       '</div>' +
     '</div>';
 
-    // Type, Evidence, Collaboration, Module
+    // Category, Evidence, Collaboration, Module
     html += '<div class="af-row">' +
       '<div class="af-field" style="flex:1">' +
-        '<label class="af-label">Type</label>' +
-        '<div class="af-type-toggle">' +
-          '<button class="af-type-btn' + (type==='summative'?' active':'') + '" id="af-type-sum" data-action="setType" data-type="summative">Summative</button>' +
-          '<button class="af-type-btn' + (type==='formative'?' active':'') + '" id="af-type-form" data-action="setType" data-type="formative">Formative</button>' +
-        '</div>' +
+        '<label class="af-label">Category</label>' +
+        '<select class="af-input" id="af-category">' +
+          '<option value="">No Category</option>' +
+          categories.map(function(category) {
+            return '<option value="' + category.id + '"' + (category.id===categoryId?' selected':'') + '>' + esc(category.name) + '</option>';
+          }).join('') +
+        '</select>' +
+        (categories.length === 0 ? '<div class="af-rubric-info">No grading categories configured for this course yet.</div>' : '') +
       '</div>' +
       '<div class="af-field" style="flex:1">' +
         '<label class="af-label">Evidence Type</label>' +
@@ -630,14 +657,6 @@ window.PageAssignments = (function() {
     if (dueEl) dueEl.value = d.toISOString().slice(0,10);
   }
 
-  function setType(t) {
-    newType = t;
-    var s = document.getElementById('af-type-sum');
-    var f = document.getElementById('af-type-form');
-    if (s) s.className = 'af-type-btn' + (t==='summative'?' active':'');
-    if (f) f.className = 'af-type-btn' + (t==='formative'?' active':'');
-  }
-
   function setScoreMode(mode) {
     document.querySelectorAll('.af-scoremode-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.mode === mode); });
     var el = document.getElementById('af-scoremode');
@@ -649,7 +668,6 @@ window.PageAssignments = (function() {
 
   /* ── Assessment CRUD ────────────────────────────────────── */
   function showNewForm() {
-    newType = 'summative';
     _resetCollabState();
     _showingNewForm = true;
     _editingAssessId = null;
@@ -720,13 +738,18 @@ window.PageAssignments = (function() {
       return;
     }
     var evidence = (document.getElementById('af-evidence') || {}).value;
+    var categoryId = (document.getElementById('af-category') || {}).value || '';
     var moduleId = (document.getElementById('af-module') || {}).value || '';
     var coreCompetencyIds = Array.from(document.querySelectorAll('.af-cc-chip.active')).map(function(el) { return el.dataset.cc; });
     var assessments = getAssessments(activeCourse);
     var id = uid();
     var rubricId = (document.getElementById('af-rubric') || {}).value || '';
     var dueDate = (document.getElementById('af-due') || {}).value || '';
-    var newAssess = { id: id, title: title, date: date, dateAssigned: dateAssigned, type: newType, tagIds: tagIds, evidenceType: evidence, description: description, notes:'', created: new Date().toISOString() };
+    var newAssess = { id: id, title: title, date: date, dateAssigned: dateAssigned, type: 'summative', tagIds: tagIds, evidenceType: evidence, description: description, notes:'', created: new Date().toISOString() };
+    if (categoryId) {
+      newAssess.categoryId = categoryId;
+      newAssess.category_id = categoryId;
+    }
     if (dueDate) newAssess.dueDate = dueDate;
     if (moduleId) newAssess.moduleId = moduleId;
     if (rubricId) newAssess.rubricId = rubricId;
@@ -755,7 +778,6 @@ window.PageAssignments = (function() {
     var cid = activeCourse;
     var assess = getAssessments(cid).find(function(a) { return a.id === aid; });
     if (!assess) return;
-    newType = assess.type;
     AC.collaboration = assess.collaboration || 'individual';
     loadCollabData(assess);
     _showingNewForm = true; _editingAssessId = aid;
@@ -778,11 +800,14 @@ window.PageAssignments = (function() {
     var tagIds = Array.from(document.querySelectorAll('.af-tag-cb:checked')).map(function(cb) { return cb.value; });
     if (tagIds.length === 0) { var tc = document.querySelector('.af-tags-container'); if (tc) { tc.style.border = '2px solid var(--score-1)'; tc.scrollIntoView({behavior:'smooth'}); } return; }
     var evidence = (document.getElementById('af-evidence') || {}).value;
+    var categoryId = (document.getElementById('af-category') || {}).value || '';
     var assessments = getAssessments(activeCourse);
     var idx = assessments.findIndex(function(a) { return a.id === aid; });
     if (idx < 0) return;
     assessments[idx].title = title; assessments[idx].date = date; assessments[idx].dateAssigned = dateAssigned;
-    assessments[idx].type = newType; assessments[idx].tagIds = tagIds; assessments[idx].evidenceType = evidence; assessments[idx].description = description;
+    assessments[idx].tagIds = tagIds; assessments[idx].evidenceType = evidence; assessments[idx].description = description;
+    assessments[idx].categoryId = categoryId || undefined;
+    assessments[idx].category_id = categoryId || undefined;
     assessments[idx].dueDate = (document.getElementById('af-due') || {}).value || undefined;
     assessments[idx].moduleId = (document.getElementById('af-module') || {}).value || undefined;
     assessments[idx].rubricId = (document.getElementById('af-rubric') || {}).value || undefined;
@@ -971,13 +996,9 @@ window.PageAssignments = (function() {
     if (newStatus === 'notSubmitted') {
       var assess = getAssessments(cid).find(function(a) { return a.id === aid; });
       if (assess) {
-        var sc = getScores(cid); if (!sc[sid]) sc[sid] = [];
         (assess.tagIds || []).forEach(function(tagId) {
-          var idx = sc[sid].findIndex(function(s) { return s.assessmentId === aid && s.tagId === tagId; });
-          if (idx >= 0) sc[sid][idx].score = 0;
-          else sc[sid].push({ id: uid(), assessmentId: aid, tagId: tagId, score: 0, date: assess.date || '', type: assess.type || 'summative', note: '', created: new Date().toISOString() });
+          upsertScore(cid, sid, aid, tagId, 0, assess.date || '', assess.type || 'summative', '');
         });
-        saveScores(cid, sc);
       }
     }
     var row = document.querySelector('.score-row[data-status-student="' + sid + '"][data-status-assess="' + aid + '"]') ||
@@ -1002,12 +1023,8 @@ window.PageAssignments = (function() {
   }
 
   function setScore(cid, sid, aid, tagId, value) {
-    var sc = getScores(cid); if (!sc[sid]) sc[sid] = [];
     var assess = getAssessments(cid).find(function(a) { return a.id === aid; });
-    var idx = sc[sid].findIndex(function(s) { return s.assessmentId === aid && s.tagId === tagId; });
-    if (idx >= 0) { sc[sid][idx].score = value; }
-    else { sc[sid].push({ id: uid(), assessmentId: aid, tagId: tagId, score: value, date: assess?assess.date:'', type: assess?assess.type:'summative', note:'', created: new Date().toISOString() }); }
-    saveScores(cid, sc);
+    upsertScore(cid, sid, aid, tagId, value, assess ? assess.date : '', assess ? assess.type : 'summative', '');
   }
 
   function updateGroupUI(group, value) {
@@ -1027,14 +1044,10 @@ window.PageAssignments = (function() {
   function selectScore(el, value) {
     var group = el.parentElement;
     var cid = activeCourse; var sid = group.dataset.student; var aid = group.dataset.assess; var tagId = group.dataset.tag;
-    var sc = getScores(cid); if (!sc[sid]) sc[sid] = [];
     var assess = getAssessments(cid).find(function(a) { return a.id === aid; });
-    var idx = sc[sid].findIndex(function(s) { return s.assessmentId === aid && s.tagId === tagId; });
     var wasActive = el.classList.contains('active');
     var next = wasActive ? 0 : value;
-    if (idx >= 0) sc[sid][idx].score = next;
-    else sc[sid].push({ id: uid(), assessmentId: aid, tagId: tagId, score: next, date: assess?assess.date:'', type: assess?assess.type:'summative', note:'', created: new Date().toISOString() });
-    saveScores(cid, sc);
+    upsertScore(cid, sid, aid, tagId, next, assess ? assess.date : '', assess ? assess.type : 'summative', '');
     group.querySelectorAll('.score-opt').forEach(function(o) { o.classList.remove('active'); });
     if (!wasActive) el.classList.add('active');
     refreshSidebar();
@@ -1429,11 +1442,23 @@ window.PageAssignments = (function() {
     _editingRubric.name = rubricName;
     if (!_editingRubric.criteria || _editingRubric.criteria.length === 0) { alert('Add at least one criterion.'); return; }
     for (var i = 0; i < _editingRubric.criteria.length; i++) { if (!_editingRubric.criteria[i].tagIds || _editingRubric.criteria[i].tagIds.length === 0) { alert('Criterion "' + _editingRubric.criteria[i].name + '" needs at least one tag.'); return; } }
-    var cid = activeCourse; var rubrics = getRubrics(cid); var isNew = _editingRubric._isNew; delete _editingRubric._isNew;
+    var cid = activeCourse; var rubrics = structuredClone(getRubrics(cid)); var isNew = _editingRubric._isNew; delete _editingRubric._isNew;
     if (isNew) rubrics.push(_editingRubric); else { var idx = rubrics.findIndex(function(r) { return r.id === _editingRubric.id; }); if (idx >= 0) rubrics[idx] = _editingRubric; else rubrics.push(_editingRubric); }
-    var savedId = _editingRubric.id; saveRubrics(cid, rubrics); _editingRubric = null; _rubricDirty = false;
+    var savedId = _editingRubric.id; var criteriaCount = (_editingRubric.criteria || []).length; var savePromise = saveRubrics(cid, rubrics); _editingRubric = null; _rubricDirty = false;
     var modal = document.getElementById('rubric-modal'); if (modal) modal.remove(); render();
-    setTimeout(function() { var dd = document.getElementById('af-rubric'); if (!dd) return; var freshRubrics = getRubrics(cid); dd.innerHTML = '<option value="">None</option>' + freshRubrics.map(function(r) { return '<option value="'+r.id+'">'+esc(r.name)+' ('+r.criteria.length+' criteria)</option>'; }).join(''); if (isNew) { dd.value = savedId; onRubricSelect(savedId); } }, 100);
+    Promise.resolve(savePromise).then(function(result) {
+      setTimeout(function() {
+        var dd = document.getElementById('af-rubric'); if (!dd) return;
+        var freshRubrics = (result && Array.isArray(result.rubrics)) ? result.rubrics : getRubrics(cid);
+        dd.innerHTML = '<option value="">None</option>' + freshRubrics.map(function(r) { return '<option value="'+r.id+'">'+esc(r.name)+' ('+r.criteria.length+' criteria)</option>'; }).join('');
+        var finalId = (result && result.idMap && result.idMap[savedId]) ? result.idMap[savedId] : savedId;
+        if (!freshRubrics.find(function(r) { return r.id === finalId; })) {
+          var fallback = freshRubrics.find(function(r) { return r.name === rubricName && (r.criteria || []).length === criteriaCount; });
+          if (fallback) finalId = fallback.id;
+        }
+        if (isNew && finalId) { dd.value = finalId; onRubricSelect(finalId); }
+      }, 100);
+    });
   }
   function newRubricFromForm() { newRubricUI(); }
 
@@ -1587,7 +1612,7 @@ window.PageAssignments = (function() {
   /* ── Export / Import ────────────────────────────────────── */
   function exportData() {
     var cid = activeCourse;
-    var data = { course: cid, students: getStudents(cid), assessments: getAssessments(cid), scores: getScores(cid), overrides: getOverrides(cid), notes: getNotes(cid), config: getCourseConfig(cid), learningMap: getLearningMap(cid), modules: getModules(cid), rubrics: getRubrics(cid), statuses: getAssignmentStatuses(cid), flags: getFlags(cid), goals: getGoals(cid), reflections: getReflections(cid), observations: getQuickObs(cid), termRatings: getTermRatings(cid), customTags: getCustomTags(cid), reportConfig: getReportConfig(cid) };
+    var data = { course: cid, students: getStudents(cid), categories: getCategories(cid), assessments: getAssessments(cid), scores: getScores(cid), overrides: getOverrides(cid), notes: getNotes(cid), config: getCourseConfig(cid), learningMap: getLearningMap(cid), modules: getModules(cid), rubrics: getRubrics(cid), statuses: getAssignmentStatuses(cid), flags: getFlags(cid), goals: getGoals(cid), reflections: getReflections(cid), observations: getQuickObs(cid), termRatings: getTermRatings(cid), customTags: getCustomTags(cid), reportConfig: getReportConfig(cid) };
     var blob = new Blob([JSON.stringify(data,null,2)], { type:'application/json' });
     var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'gradebook-'+cid+'-'+new Date().toISOString().slice(0,10)+'.json'; a.click();
   }
@@ -1595,7 +1620,7 @@ window.PageAssignments = (function() {
     var file = input.files[0]; if (!file) return;
     var reader = new FileReader();
     reader.onload = function(e) { try { var data = JSON.parse(e.target.result); if (!data || typeof data !== 'object' || Array.isArray(data)) { alert('Invalid file.'); return; } var cid = data.course||activeCourse;
-    if(data.students)saveStudents(cid,data.students);if(data.assessments)saveAssessments(cid,data.assessments);if(data.scores)saveScores(cid,data.scores);if(data.overrides)saveOverrides(cid,data.overrides);if(data.notes)saveNotes(cid,data.notes);if(data.config)saveCourseConfig(cid,data.config);
+    if(data.students)saveStudents(cid,data.students);if(data.categories)saveCategories(cid,data.categories);if(data.assessments)saveAssessments(cid,data.assessments);if(data.scores)saveScores(cid,data.scores);if(data.overrides)saveOverrides(cid,data.overrides);if(data.notes)saveNotes(cid,data.notes);if(data.config)saveCourseConfig(cid,data.config);
     if(data.learningMap&&data.learningMap._customized)saveLearningMap(cid,data.learningMap);if(data.modules)saveModules(cid,data.modules);if(data.units)saveModules(cid,data.units);if(data.rubrics)saveRubrics(cid,data.rubrics);if(data.statuses)saveAssignmentStatuses(cid,data.statuses);
     if(data.flags)saveFlags(cid,data.flags);if(data.goals)saveGoals(cid,data.goals);if(data.reflections)saveReflections(cid,data.reflections);if(data.observations)saveQuickObs(cid,data.observations);if(data.termRatings)saveTermRatings(cid,data.termRatings);if(data.customTags)saveCustomTags(cid,data.customTags);if(data.reportConfig)saveReportConfig(cid,data.reportConfig);
     activeCourse=cid;setActiveCourse(cid);render();} catch(err){alert('Invalid JSON: '+err.message);} }; reader.readAsText(file);
@@ -1603,8 +1628,8 @@ window.PageAssignments = (function() {
   function downloadCSV(csv, filename) { var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' }); var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click(); }
   function exportScoresCSV() {
     var cid = activeCourse; var students = sortStudents(getStudents(cid), 'lastName'); var assessments = getAssessments(cid); var scores = getScores(cid); var statuses = getAssignmentStatuses(cid);
-    var csv = 'Student,Assessment,Date,Type,Tag,Tag Label,Score,Status\n';
-    students.forEach(function(st) { assessments.forEach(function(a) { var stStatus = statuses[st.id + ':' + a.id] || ''; (a.tagIds || []).forEach(function(tid) { var tag = getTagById(cid, tid); var entry = (scores[st.id] || []).find(function(s) { return s.assessmentId === a.id && s.tagId === tid; }); var score = entry ? entry.score : 0; csv += '"'+displayName(st).replace(/"/g,'""')+'","'+a.title.replace(/"/g,'""')+'","'+a.date+'","'+a.type+'","'+tid+'","'+(tag?tag.label.replace(/"/g,'""'):'')+'","'+score+'","'+stStatus+'"\n'; }); }); });
+    var csv = 'Student,Assessment,Date,Category,Tag,Tag Label,Score,Status\n';
+    students.forEach(function(st) { assessments.forEach(function(a) { var stStatus = statuses[st.id + ':' + a.id] || ''; var categoryName = _getCategoryName(cid, _getAssessmentCategoryId(a)); (a.tagIds || []).forEach(function(tid) { var tag = getTagById(cid, tid); var entry = (scores[st.id] || []).find(function(s) { return s.assessmentId === a.id && s.tagId === tid; }); var score = entry ? entry.score : 0; csv += '"'+displayName(st).replace(/"/g,'""')+'","'+a.title.replace(/"/g,'""')+'","'+a.date+'","'+categoryName.replace(/"/g,'""')+'","'+tid+'","'+(tag?tag.label.replace(/"/g,'""'):'')+'","'+score+'","'+stStatus+'"\n'; }); }); });
     downloadCSV(csv, 'scores-'+cid+'-'+new Date().toISOString().slice(0,10)+'.csv');
   }
   function exportSummaryCSV() {
@@ -1697,7 +1722,6 @@ window.PageAssignments = (function() {
       'deleteRubricUI':       function() { deleteRubricUI(el.dataset.rid); },
       'newRubricUI':          function() { newRubricUI(); },
       'newRubricFromForm':    function() { newRubricFromForm(); },
-      'setType':              function() { setType(el.dataset.type); },
       'setCollaboration':     function() { setCollaboration(el.dataset.collab); },
       'setScoreMode':         function() { setScoreMode(el.dataset.mode); },
       'setAssessTypeFilter':  function() { setAssessTypeFilter(el.dataset.type); },
@@ -1929,7 +1953,6 @@ window.PageAssignments = (function() {
     _mergeTargetId = null;
     _mergeHoverTimer = null;
     _mergeAnimating = false;
-    newType = 'summative';
     AC.configure(activeCourse);
     _resetCollabState();
     _editingRubric = null;

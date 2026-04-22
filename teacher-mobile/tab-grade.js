@@ -239,22 +239,8 @@ window.MGrade = (function() {
     var assessment = getAssessments(cid).find(function(a) { return a.id === aid; });
     var type = assessment ? assessment.type : 'summative';
 
-    // Remove old entries for this assessment+tag
-    stScores = stScores.filter(function(s) { return !(s.assessmentId === aid && s.tagId === tid); });
-
-    // Add new score
-    stScores.push({
-      id: 'ms_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
-      assessmentId: aid,
-      tagId: tid,
-      score: score,
-      date: assessment ? assessment.date : getTodayStr(),
-      type: type,
-      created: new Date().toISOString()
-    });
-
-    allScores[sid] = stScores;
-    saveScores(cid, allScores);
+    upsertScore(cid, sid, aid, tid, score,
+      assessment ? assessment.date : getTodayStr(), type, '');
     clearProfCache();
     MC.haptic();
 

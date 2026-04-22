@@ -386,5 +386,6 @@ Claude appends one line per completed task. Format: `YYYY-MM-DD | session-<n> | 
 - \`2026-04-22 | session-14 | backlog-P1.2 | Playwright auth round-trip smoke shipped at e2e/regression-smoke.spec.js using a durable fake-auth harness in e2e/helpers.js (local sign-up -> sign-in -> Welcome Class gradebook -> score write -> sign-out -> sign-in -> same score visible). Targeted Playwright verification: regression smoke + auth + gradebook + score-entry = 27 passing. Unit suite remains 834 passed + 1 skipped.\`
 
 - `2026-04-22 | session-15 | T-WIRE-01 | audit complete — see Discovered gaps below for the full inventory. No code changes in this session; follow-up patches queued.`
+- `2026-04-22 | session-16 | T-WIRE-01a | score-entry paths wired to upsertScore: selectScore + setScore in page-assignments.js, notSubmitted zero-writes, commit() in page-gradebook.js, setPointsScore in data.js (+ unit test), and setScore in tab-grade.js. Mobile test mocks updated to shared-store pattern. 837 passed + 1 skipped.`
 
 _(next session, keep appending.)_

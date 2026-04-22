@@ -286,17 +286,16 @@ describe('Points mode variant', () => {
 
 /* ── setScore (auto-save + undo) ────────────────────────────── */
 describe('MGrade.setScore', () => {
-  it('saves score and calls saveScores', () => {
-    let savedScores = null;
+  it('saves score via upsertScore', () => {
+    let store = {};
     mockDataLayer({
-      getScores: () => ({}),
-      saveScores: (cid, scores) => { savedScores = scores; },
+      getScores: () => store,
+      saveScores: () => {},
       getAssessments: () => [{ id: 'a1', type: 'summative', date: '2025-03-20' }],
     });
     MGrade.setScore(CID, 'stu1', 'a1', 't1', 3);
-    expect(savedScores).not.toBeNull();
-    expect(savedScores.stu1).toBeDefined();
-    expect(savedScores.stu1[0].score).toBe(3);
+    expect(store.stu1).toBeDefined();
+    expect(store.stu1[0].score).toBe(3);
   });
 
   it('calls clearProfCache after scoring', () => {
@@ -314,35 +313,35 @@ describe('MGrade.setScore', () => {
   });
 
   it('replaces previous score for same assessment+tag', () => {
-    let savedScores = null;
+    let store = {
+      stu1: [{ id: 'old1', assessmentId: 'a1', tagId: 't1', score: 2, type: 'summative', date: '2025-03-20' }],
+    };
     mockDataLayer({
-      getScores: () => ({
-        stu1: [{ id: 'old1', assessmentId: 'a1', tagId: 't1', score: 2, type: 'summative', date: '2025-03-20' }],
-      }),
-      saveScores: (cid, scores) => { savedScores = scores; },
+      getScores: () => store,
+      saveScores: () => {},
       getAssessments: () => [{ id: 'a1', type: 'summative', date: '2025-03-20' }],
     });
     MGrade.setScore(CID, 'stu1', 'a1', 't1', 4);
     // Should have exactly 1 score for this tag (replaced, not accumulated)
-    const tagScores = savedScores.stu1.filter(s => s.assessmentId === 'a1' && s.tagId === 't1');
+    const tagScores = store.stu1.filter(s => s.assessmentId === 'a1' && s.tagId === 't1');
     expect(tagScores).toHaveLength(1);
     expect(tagScores[0].score).toBe(4);
   });
 
   it('preserves scores for other tags when scoring one tag', () => {
-    let savedScores = null;
+    let store = {
+      stu1: [
+        { id: 'keep1', assessmentId: 'a1', tagId: 't2', score: 3, type: 'summative', date: '2025-03-20' },
+      ],
+    };
     mockDataLayer({
-      getScores: () => ({
-        stu1: [
-          { id: 'keep1', assessmentId: 'a1', tagId: 't2', score: 3, type: 'summative', date: '2025-03-20' },
-        ],
-      }),
-      saveScores: (cid, scores) => { savedScores = scores; },
+      getScores: () => store,
+      saveScores: () => {},
       getAssessments: () => [{ id: 'a1', type: 'summative', date: '2025-03-20' }],
     });
     MGrade.setScore(CID, 'stu1', 'a1', 't1', 4);
     // t2 score should still be there
-    const t2Scores = savedScores.stu1.filter(s => s.tagId === 't2');
+    const t2Scores = store.stu1.filter(s => s.tagId === 't2');
     expect(t2Scores).toHaveLength(1);
     expect(t2Scores[0].score).toBe(3);
   });
@@ -542,43 +541,43 @@ describe('Swiper card edge cases', () => {
 /* ── Score saving edge cases ────────────────────────────────── */
 describe('Score save edge cases', () => {
   it('creates score with correct metadata fields', () => {
-    let savedScores = null;
+    let store = {};
     mockDataLayer({
-      getScores: () => ({}),
-      saveScores: (cid, scores) => { savedScores = scores; },
+      getScores: () => store,
+      saveScores: () => {},
       getAssessments: () => [{ id: 'a1', type: 'summative', date: '2025-03-20' }],
     });
     MGrade.setScore(CID, 'stu1', 'a1', 't1', 4);
-    const score = savedScores.stu1[0];
+    const score = store.stu1[0];
     expect(score.score).toBe(4);
     expect(score.assessmentId).toBe('a1');
     expect(score.tagId).toBe('t1');
     expect(score.type).toBe('summative');
     expect(score.date).toBe('2025-03-20');
     expect(score.created).toBeTruthy(); // ISO timestamp
-    expect(score.id).toMatch(/^ms_/); // auto-generated ID
+    expect(score.id).toBeDefined(); // auto-generated ID
   });
 
   it('uses assessment type for score entry', () => {
-    let savedScores = null;
+    let store = {};
     mockDataLayer({
-      getScores: () => ({}),
-      saveScores: (cid, scores) => { savedScores = scores; },
+      getScores: () => store,
+      saveScores: () => {},
       getAssessments: () => [{ id: 'a1', type: 'formative', date: '2025-03-20' }],
     });
     MGrade.setScore(CID, 'stu1', 'a1', 't1', 2);
-    expect(savedScores.stu1[0].type).toBe('formative');
+    expect(store.stu1[0].type).toBe('formative');
   });
 
   it('scoring zero is valid (No Evidence)', () => {
-    let savedScores = null;
+    let store = {};
     mockDataLayer({
-      getScores: () => ({}),
-      saveScores: (cid, scores) => { savedScores = scores; },
+      getScores: () => store,
+      saveScores: () => {},
       getAssessments: () => [{ id: 'a1', type: 'summative', date: '2025-03-20' }],
     });
     MGrade.setScore(CID, 'stu1', 'a1', 't1', 0);
-    expect(savedScores.stu1[0].score).toBe(0);
+    expect(store.stu1[0].score).toBe(0);
   });
 });
 
@@ -613,19 +612,19 @@ describe('Multiple undo operations', () => {
   });
 
   it('handles sequential score → undo → score → undo', () => {
-    let savedScores = null;
+    let store = {};
     mockDataLayer({
-      getScores: () => ({}),
-      saveScores: (cid, scores) => { savedScores = scores; },
+      getScores: () => store,
+      saveScores: (cid, scores) => { store = scores; },
       getAssessments: () => [{ id: 'a1', type: 'summative', date: '2025-03-20' }],
     });
     // Score 3, then undo, then score 4, then undo
     MGrade.setScore(CID, 'stu1', 'a1', 't1', 3);
     MGrade.undoLastScore(); // back to empty
     MGrade.setScore(CID, 'stu1', 'a1', 't1', 4);
-    expect(savedScores.stu1[0].score).toBe(4);
+    expect(store.stu1[0].score).toBe(4);
     MGrade.undoLastScore(); // back to empty again
-    const remaining = (savedScores.stu1 || []).filter(s => s.assessmentId === 'a1' && s.tagId === 't1');
+    const remaining = (store.stu1 || []).filter(s => s.assessmentId === 'a1' && s.tagId === 't1');
     expect(remaining).toHaveLength(0);
   });
 });
