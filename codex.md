@@ -1,10 +1,6 @@
 # FullVision Open Work
 
-This is the only active work list for the repo.
-
-It consolidates the still-open items that were previously spread across backlog docs, handoff follow-up notes, deferred implementation sections, and SQL/design TODOs. Completed items stay in history docs; unresolved items belong here.
-
-Do not add validation-only or already-shipped items here. CI/test baselines and implementation history belong in `docs/backend-design/HANDOFF.md`; `codex.md` is only for remaining work.
+This is the only active work list for the repo. Implementation history belongs in `docs/backend-design/HANDOFF.md`; this file is only for remaining work.
 
 ## User-blocked / operational
 
@@ -78,8 +74,6 @@ Do not add validation-only or already-shipped items here. CI/test baselines and 
 - The intended grouped `competency_group -> section -> tag` read shape has not been composed yet.
 
 ## Deferred / external work
-
-These items are intentionally not part of the active stabilization queue, but they were still recorded as open/deferred in the design docs and now live here so there is only one work list.
 
 ### D1 · Term-rating narrative auto-generate
 
