@@ -23,10 +23,6 @@ This is the only active work list for the repo. Implementation history belongs i
 - Normal teacher UI is archive-first now.
 - A product decision is still required before any user-facing destructive delete affordance should exist.
 
-### T-OPS-03 · Park legacy site at `legacy.fullvision.ca`
-
-- DNS / user-facing operational task.
-
 ## Platform / integration
 
 ### P2.1 · Realtime rollout verification for v2 invalidation
