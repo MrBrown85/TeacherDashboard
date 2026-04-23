@@ -4412,6 +4412,7 @@ window.v2.upsertSubject = function (params) {
     p_id: _isUuid(params.id) ? params.id : null,
     p_course_id: params.courseId,
     p_name: params.name || '',
+    p_color: params.color || null,
     p_display_order: params.displayOrder != null ? Number(params.displayOrder) : null,
   });
 };
@@ -4447,6 +4448,7 @@ window.v2.upsertSection = function (params) {
     p_id: _isUuid(params.id) ? params.id : null,
     p_subject_id: params.subjectId,
     p_name: params.name || '',
+    p_color: params.color || null,
     p_competency_group_id: _isUuid(params.competencyGroupId) ? params.competencyGroupId : null,
     p_display_order: params.displayOrder != null ? Number(params.displayOrder) : null,
   });

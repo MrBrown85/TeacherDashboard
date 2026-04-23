@@ -2628,7 +2628,7 @@ window.DashClassManager = (function () {
     saveLearningMap(cid, map);
     renderClassManager();
     window.v2
-      .upsertSubject({ id: id, courseId: cid, name: 'New Subject', displayOrder: displayOrder })
+      .upsertSubject({ id: id, courseId: cid, name: 'New Subject', color: '#6366f1', displayOrder: displayOrder })
       .then(function (res) {
         var canonicalId = res && res.data ? res.data : null;
         if (canonicalId && canonicalId !== id) {
@@ -2654,15 +2654,18 @@ window.DashClassManager = (function () {
 
   function cmUpdateSubjectColor(subId, color) {
     if (!cmSelectedCourse) return;
-    var map = ensureCustomLearningMap(cmSelectedCourse);
+    var cid = cmSelectedCourse;
+    var map = ensureCustomLearningMap(cid);
     var sub = map.subjects.find(function (s) {
       return s.id === subId;
     });
-    // T-WIRE-02: subject color is local-only (no p_color in upsert_subject RPC)
     if (sub) {
       sub.color = color;
-      saveLearningMap(cmSelectedCourse, map);
+      saveLearningMap(cid, map);
       renderClassManager();
+      if (_isCanonicalId(sub.id)) {
+        window.v2.upsertSubject({ id: sub.id, courseId: cid, name: sub.name, color: color });
+      }
     }
   }
 
@@ -2706,17 +2709,31 @@ window.DashClassManager = (function () {
     if (!cmSelectedCourse) return;
     var map = ensureCustomLearningMap(cmSelectedCourse);
     if (target === 'subject') {
-      // T-WIRE-02: subject color is local-only (no p_color in upsert_subject RPC)
       var sub = map.subjects.find(function (s) {
         return s.id === id;
       });
-      if (sub) sub.color = color;
+      if (sub) {
+        sub.color = color;
+        if (_isCanonicalId(sub.id)) {
+          window.v2.upsertSubject({ id: sub.id, courseId: cmSelectedCourse, name: sub.name, color: color });
+        }
+      }
     } else {
-      // T-WIRE-02: section color is local-only (no p_color in upsert_section RPC)
       var sec = map.sections.find(function (s) {
         return s.id === id;
       });
-      if (sec) sec.color = color;
+      if (sec) {
+        sec.color = color;
+        if (_isCanonicalId(sec.id)) {
+          window.v2.upsertSection({
+            id: sec.id,
+            subjectId: sec.subject,
+            name: sec.name,
+            color: color,
+            competencyGroupId: sec.groupId || null,
+          });
+        }
+      }
     }
     saveLearningMap(cmSelectedCourse, map);
     renderClassManager();
@@ -2956,6 +2973,7 @@ window.DashClassManager = (function () {
           id: stdId,
           subjectId: canonicalSubjectId,
           name: 'New Standard',
+          color: colour,
           displayOrder: displayOrder,
         });
       })
@@ -3013,16 +3031,25 @@ window.DashClassManager = (function () {
 
   function cmUpdateStdColor(secId, color) {
     if (!cmSelectedCourse) return;
-    var map = ensureCustomLearningMap(cmSelectedCourse);
+    var cid = cmSelectedCourse;
+    var map = ensureCustomLearningMap(cid);
     var sec = map.sections.find(function (s) {
       return s.id === secId;
     });
     if (!sec) return;
     sec.color = color;
     if (sec.tags[0]) sec.tags[0].color = color;
-    // T-WIRE-02: section color is local-only (no p_color in upsert_section RPC)
-    saveLearningMap(cmSelectedCourse, map);
+    saveLearningMap(cid, map);
     renderClassManager();
+    if (_isCanonicalId(sec.id)) {
+      window.v2.upsertSection({
+        id: sec.id,
+        subjectId: sec.subject,
+        name: sec.name,
+        color: color,
+        competencyGroupId: sec.groupId || null,
+      });
+    }
   }
 
   function cmDeleteStd(secId) {

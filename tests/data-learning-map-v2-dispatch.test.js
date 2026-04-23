@@ -52,18 +52,23 @@ describe('v2 learning-map structural dispatch (window.v2.*)', () => {
   describe('Subject', () => {
     it('upsertSubject maps params to snake_case, nulls non-UUID id (insert)', async () => {
       await window.v2.upsertSubject({ courseId: CID, name: 'English', displayOrder: 2 });
-      var call = client.calls.find(function (c) { return c.name === 'upsert_subject'; });
+      var call = client.calls.find(function (c) {
+        return c.name === 'upsert_subject';
+      });
       expect(call.payload).toEqual({
         p_id: null,
         p_course_id: CID,
         p_name: 'English',
+        p_color: null,
         p_display_order: 2,
       });
     });
 
     it('upsertSubject passes UUID id through (update)', async () => {
       await window.v2.upsertSubject({ id: ID1, courseId: CID, name: 'X' });
-      var call = client.calls.find(function (c) { return c.name === 'upsert_subject'; });
+      var call = client.calls.find(function (c) {
+        return c.name === 'upsert_subject';
+      });
       expect(call.payload.p_id).toBe(ID1);
     });
 
@@ -74,8 +79,28 @@ describe('v2 learning-map structural dispatch (window.v2.*)', () => {
 
     it('reorderSubjects filters to UUIDs', async () => {
       await window.v2.reorderSubjects([ID1, 'junk', ID2]);
-      var call = client.calls.find(function (c) { return c.name === 'reorder_subjects'; });
+      var call = client.calls.find(function (c) {
+        return c.name === 'reorder_subjects';
+      });
       expect(call.payload).toEqual({ p_ids: [ID1, ID2] });
+    });
+  });
+
+  describe('Subject color', () => {
+    it('upsertSubject passes p_color when color provided', async () => {
+      await window.v2.upsertSubject({ id: ID1, courseId: CID, name: 'Science', color: '#6366f1' });
+      var call = client.calls.find(function (c) {
+        return c.name === 'upsert_subject';
+      });
+      expect(call.payload.p_color).toBe('#6366f1');
+    });
+
+    it('upsertSubject sends p_color null when color omitted', async () => {
+      await window.v2.upsertSubject({ id: ID1, courseId: CID, name: 'Science' });
+      var call = client.calls.find(function (c) {
+        return c.name === 'upsert_subject';
+      });
+      expect(call.payload.p_color).toBeNull();
     });
   });
 
@@ -83,15 +108,25 @@ describe('v2 learning-map structural dispatch (window.v2.*)', () => {
   describe('CompetencyGroup', () => {
     it('upsert maps fields + color', async () => {
       await window.v2.upsertCompetencyGroup({ courseId: CID, name: 'CC', color: '#0891b2', displayOrder: 1 });
-      var call = client.calls.find(function (c) { return c.name === 'upsert_competency_group'; });
+      var call = client.calls.find(function (c) {
+        return c.name === 'upsert_competency_group';
+      });
       expect(call.payload).toEqual({
-        p_id: null, p_course_id: CID, p_name: 'CC', p_color: '#0891b2', p_display_order: 1,
+        p_id: null,
+        p_course_id: CID,
+        p_name: 'CC',
+        p_color: '#0891b2',
+        p_display_order: 1,
       });
     });
     it('delete + reorder', async () => {
       await window.v2.deleteCompetencyGroup(ID1);
       await window.v2.reorderCompetencyGroups([ID1, ID2]);
-      expect(client.calls.map(function (c) { return c.name; })).toEqual(['delete_competency_group', 'reorder_competency_groups']);
+      expect(
+        client.calls.map(function (c) {
+          return c.name;
+        }),
+      ).toEqual(['delete_competency_group', 'reorder_competency_groups']);
     });
   });
 
@@ -99,13 +134,19 @@ describe('v2 learning-map structural dispatch (window.v2.*)', () => {
   describe('Section', () => {
     it('upsert passes subject_id + optional competency_group_id', async () => {
       await window.v2.upsertSection({
-        subjectId: SUBJ_ID, name: 'S', competencyGroupId: GRP_ID, displayOrder: 3,
+        subjectId: SUBJ_ID,
+        name: 'S',
+        competencyGroupId: GRP_ID,
+        displayOrder: 3,
       });
-      var call = client.calls.find(function (c) { return c.name === 'upsert_section'; });
+      var call = client.calls.find(function (c) {
+        return c.name === 'upsert_section';
+      });
       expect(call.payload).toEqual({
         p_id: null,
         p_subject_id: SUBJ_ID,
         p_name: 'S',
+        p_color: null,
         p_competency_group_id: GRP_ID,
         p_display_order: 3,
       });
@@ -113,14 +154,38 @@ describe('v2 learning-map structural dispatch (window.v2.*)', () => {
 
     it('nullifies non-UUID competency_group_id', async () => {
       await window.v2.upsertSection({ subjectId: SUBJ_ID, name: 'S', competencyGroupId: 'legacy' });
-      var call = client.calls.find(function (c) { return c.name === 'upsert_section'; });
+      var call = client.calls.find(function (c) {
+        return c.name === 'upsert_section';
+      });
       expect(call.payload.p_competency_group_id).toBeNull();
     });
 
     it('delete + reorder', async () => {
       await window.v2.deleteSection(SEC_ID);
       await window.v2.reorderSections([SEC_ID]);
-      expect(client.calls.map(function (c) { return c.name; })).toEqual(['delete_section', 'reorder_sections']);
+      expect(
+        client.calls.map(function (c) {
+          return c.name;
+        }),
+      ).toEqual(['delete_section', 'reorder_sections']);
+    });
+  });
+
+  describe('Section color', () => {
+    it('upsertSection passes p_color when color provided', async () => {
+      await window.v2.upsertSection({ id: SEC_ID, subjectId: SUBJ_ID, name: 'Reading', color: '#10b981' });
+      var call = client.calls.find(function (c) {
+        return c.name === 'upsert_section';
+      });
+      expect(call.payload.p_color).toBe('#10b981');
+    });
+
+    it('upsertSection sends p_color null when color omitted', async () => {
+      await window.v2.upsertSection({ subjectId: SUBJ_ID, name: 'Reading' });
+      var call = client.calls.find(function (c) {
+        return c.name === 'upsert_section';
+      });
+      expect(call.payload.p_color).toBeNull();
     });
   });
 
@@ -128,10 +193,15 @@ describe('v2 learning-map structural dispatch (window.v2.*)', () => {
   describe('Tag', () => {
     it('upsert passes section_id, label, code, i_can_text', async () => {
       await window.v2.upsertTag({
-        sectionId: SEC_ID, label: 'QAP', code: 'QAP-1',
-        iCanText: 'I can ask questions', displayOrder: 0,
+        sectionId: SEC_ID,
+        label: 'QAP',
+        code: 'QAP-1',
+        iCanText: 'I can ask questions',
+        displayOrder: 0,
       });
-      var call = client.calls.find(function (c) { return c.name === 'upsert_tag'; });
+      var call = client.calls.find(function (c) {
+        return c.name === 'upsert_tag';
+      });
       expect(call.payload).toEqual({
         p_id: null,
         p_section_id: SEC_ID,
@@ -145,7 +215,11 @@ describe('v2 learning-map structural dispatch (window.v2.*)', () => {
     it('delete + reorder', async () => {
       await window.v2.deleteTag(TAG1);
       await window.v2.reorderTags([TAG1, TAG2]);
-      expect(client.calls.map(function (c) { return c.name; })).toEqual(['delete_tag', 'reorder_tags']);
+      expect(
+        client.calls.map(function (c) {
+          return c.name;
+        }),
+      ).toEqual(['delete_tag', 'reorder_tags']);
     });
   });
 
@@ -155,9 +229,11 @@ describe('v2 learning-map structural dispatch (window.v2.*)', () => {
       await window.v2.upsertModule({ courseId: CID, name: 'Unit 1', color: '#ff0000', displayOrder: 1 });
       await window.v2.deleteModule(ID1);
       await window.v2.reorderModules([ID1]);
-      expect(client.calls.map(function (c) { return c.name; })).toEqual([
-        'upsert_module', 'delete_module', 'reorder_modules',
-      ]);
+      expect(
+        client.calls.map(function (c) {
+          return c.name;
+        }),
+      ).toEqual(['upsert_module', 'delete_module', 'reorder_modules']);
       expect(client.calls[0].payload.p_name).toBe('Unit 1');
       expect(client.calls[0].payload.p_color).toBe('#ff0000');
     });
@@ -167,15 +243,23 @@ describe('v2 learning-map structural dispatch (window.v2.*)', () => {
   describe('Category', () => {
     it('upsert defaults weight to 0, passes through Number', async () => {
       await window.v2.upsertCategory({ courseId: CID, name: 'Tests', weight: 40, displayOrder: 1 });
-      var call = client.calls.find(function (c) { return c.name === 'upsert_category'; });
+      var call = client.calls.find(function (c) {
+        return c.name === 'upsert_category';
+      });
       expect(call.payload).toEqual({
-        p_id: null, p_course_id: CID, p_name: 'Tests', p_weight: 40, p_display_order: 1,
+        p_id: null,
+        p_course_id: CID,
+        p_name: 'Tests',
+        p_weight: 40,
+        p_display_order: 1,
       });
     });
 
     it('upsert defaults missing weight to 0', async () => {
       await window.v2.upsertCategory({ courseId: CID, name: 'X' });
-      var call = client.calls.find(function (c) { return c.name === 'upsert_category'; });
+      var call = client.calls.find(function (c) {
+        return c.name === 'upsert_category';
+      });
       expect(call.payload.p_weight).toBe(0);
     });
 
@@ -209,7 +293,10 @@ describe('v2 learning-map structural dispatch (window.v2.*)', () => {
             level3Descriptor: 'Proficient',
             level2Descriptor: 'Developing',
             level1Descriptor: 'Emerging',
-            level4Value: 4, level3Value: 3, level2Value: 2, level1Value: 1,
+            level4Value: 4,
+            level3Value: 3,
+            level2Value: 2,
+            level1Value: 1,
             weight: 2,
             displayOrder: 0,
             linkedTagIds: [TAG1, 'junk', TAG2],
@@ -217,14 +304,18 @@ describe('v2 learning-map structural dispatch (window.v2.*)', () => {
           {
             id: CRIT1,
             name: 'Organization',
-            level4Descriptor: 'E', level3Descriptor: 'P',
-            level2Descriptor: 'D', level1Descriptor: 'Em',
+            level4Descriptor: 'E',
+            level3Descriptor: 'P',
+            level2Descriptor: 'D',
+            level1Descriptor: 'Em',
             weight: 1,
             linkedTagIds: [],
           },
         ],
       });
-      var call = client.calls.find(function (c) { return c.name === 'upsert_rubric'; });
+      var call = client.calls.find(function (c) {
+        return c.name === 'upsert_rubric';
+      });
       expect(call.payload.p_name).toBe('Writing');
       expect(call.payload.p_criteria).toHaveLength(2);
       var c0 = call.payload.p_criteria[0];
@@ -243,10 +334,13 @@ describe('v2 learning-map structural dispatch (window.v2.*)', () => {
 
     it('defaults criterion weight to 1.0 and display_order to 0', async () => {
       await window.v2.upsertRubric({
-        courseId: CID, name: 'R',
+        courseId: CID,
+        name: 'R',
         criteria: [{ name: 'X' }],
       });
-      var call = client.calls.find(function (c) { return c.name === 'upsert_rubric'; });
+      var call = client.calls.find(function (c) {
+        return c.name === 'upsert_rubric';
+      });
       expect(call.payload.p_criteria[0].weight).toBe(1.0);
       expect(call.payload.p_criteria[0].display_order).toBe(0);
     });
