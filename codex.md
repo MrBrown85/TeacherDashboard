@@ -30,11 +30,6 @@ This is the only active work list for the repo. Implementation history belongs i
 - `course_sync_cursor` schema/docs, SQL trigger/publication plan, and client invalidation wiring exist in the repo.
 - Still needs live Supabase rollout verification before this can be treated as fully closed.
 
-### T-BE-02 · Teams import adapter
-
-- `tiParsedFile` still does not match the payload expected by `import_teams_class`.
-- Needs a normalization layer before Teams import can dispatch through `window.v2.importTeamsClass(...)` cleanly.
-
 ### T-UI-05 / T-BE-01 · Data export
 
 - Still blocked on the missing backend export surface: `window.v2.exportMyData` / `export_my_data`.
