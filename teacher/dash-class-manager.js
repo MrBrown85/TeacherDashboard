@@ -249,6 +249,56 @@ window.DashClassManager = (function () {
     saveLearningMap(cid, map);
   }
 
+  async function _dispatchMapToV2(cid, map, forceNewIds) {
+    if (!_isCanonicalId(cid)) return;
+    var subjects = map.subjects || [];
+    for (var si = 0; si < subjects.length; si++) {
+      var sub = subjects[si];
+      var oldSubId = sub.id;
+      var subRes = await window.v2.upsertSubject({
+        id: forceNewIds ? null : oldSubId,
+        courseId: cid,
+        name: sub.name,
+        color: sub.color || null,
+        displayOrder: si,
+      });
+      if (subRes && subRes.data && subRes.data !== oldSubId) {
+        _patchMapId(cid, map, oldSubId, subRes.data);
+      }
+    }
+    var sections = map.sections || [];
+    for (var si = 0; si < sections.length; si++) {
+      var sec = sections[si];
+      var oldSecId = sec.id;
+      var secRes = await window.v2.upsertSection({
+        id: forceNewIds ? null : oldSecId,
+        subjectId: sec.subject,
+        name: sec.name,
+        color: sec.color || null,
+        displayOrder: si,
+      });
+      if (secRes && secRes.data && secRes.data !== oldSecId) {
+        _patchMapId(cid, map, oldSecId, secRes.data);
+      }
+      var tags = sec.tags || [];
+      for (var ti = 0; ti < tags.length; ti++) {
+        var tag = tags[ti];
+        var oldTagId = tag.id;
+        var tagRes = await window.v2.upsertTag({
+          id: forceNewIds ? null : oldTagId,
+          sectionId: sec.id,
+          label: tag.name || tag.label || '',
+          code: tag.shortName || tag.code || '',
+          iCanText: tag.text || tag.i_can_statements || '',
+          displayOrder: ti,
+        });
+        if (tagRes && tagRes.data && tagRes.data !== oldTagId) {
+          _patchMapId(cid, map, oldTagId, tagRes.data);
+        }
+      }
+    }
+  }
+
   function _cmClearMerge() {
     if (_cmMergeHoverTimer) {
       clearTimeout(_cmMergeHoverTimer);
@@ -1860,9 +1910,6 @@ window.DashClassManager = (function () {
   }
 
   function cwFinishCreate() {
-    // T-WIRE-02 DEFERRED: bulk operation — v2 dispatch not wired.
-    // Bulk-creates all subjects/sections/tags from curriculum wizard.
-    // Needs a dedicated session to design the full canonical-id-patch sequence.
     var name = cwStep2Name || cwGetPreName();
     if (!name.trim()) {
       cwStep = 2;
@@ -1900,6 +1947,7 @@ window.DashClassManager = (function () {
       if (map) {
         saveLearningMap(course.id, map);
         updateCourse(course.id, { curriculumTags: cwSelectedTags.slice() });
+        _dispatchMapToV2(course.id, map, false);
       }
     }
 
@@ -2359,9 +2407,6 @@ window.DashClassManager = (function () {
   }
 
   function cmRelinkConfirm(mode) {
-    // T-WIRE-02 DEFERRED: bulk operation — v2 dispatch not wired.
-    // Bulk-relinks sections between courses (replace/merge modes).
-    // Needs a dedicated session to design the full canonical-id-patch sequence.
     if (!cmRelinkCid || cwSelectedTags.length === 0) return;
     var cid = cmRelinkCid;
 
@@ -2370,6 +2415,7 @@ window.DashClassManager = (function () {
       if (map) {
         saveLearningMap(cid, map);
         updateCourse(cid, { curriculumTags: cwSelectedTags.slice() });
+        _dispatchMapToV2(cid, map, false);
       }
     } else if (mode === 'merge') {
       var existing = getLearningMap(cid);
@@ -2407,6 +2453,7 @@ window.DashClassManager = (function () {
         });
         existing._customized = true;
         saveLearningMap(cid, existing);
+        _dispatchMapToV2(cid, existing, false);
         var allTags = new Set((COURSES[cid].curriculumTags || []).concat(cwSelectedTags));
         updateCourse(cid, { curriculumTags: Array.from(allTags) });
       }
@@ -2588,9 +2635,6 @@ window.DashClassManager = (function () {
   }
 
   function cmDuplicateCourse(sourceCid) {
-    // T-WIRE-02 DEFERRED: bulk operation — v2 dispatch not wired.
-    // Bulk-duplicates all learning map entities (subjects/sections/tags/groups).
-    // Needs a dedicated session to design the full canonical-id-patch sequence.
     var src = COURSES[sourceCid];
     if (!src) return;
     var newCourse = createCourse({
@@ -2611,6 +2655,7 @@ window.DashClassManager = (function () {
       clone._customized = true;
       clone._version = 1;
       saveLearningMap(newCourse.id, clone);
+      _dispatchMapToV2(newCourse.id, clone, true);
     }
     cmSelectedCourse = newCourse.id;
     cmMode = 'edit';
