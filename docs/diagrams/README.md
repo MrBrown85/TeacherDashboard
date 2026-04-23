@@ -1,35 +1,43 @@
-# FullVision — System Diagrams
+# FullVision Diagram Reference Assets
 
 Open any `.drawio` file in:
+
 - [app.diagrams.net](https://app.diagrams.net/) (web, free)
 - draw.io Desktop
-- VS Code with the **Draw.io Integration** extension (ships with `.drawio` rendering)
+- VS Code with the **Draw.io Integration** extension
 
-## Reading order
+These files are preserved reference material from the reconciliation, debugging, and user-flow mapping passes. They are useful background, but they are **not** part of the active documentation path.
 
-| # | File | Start here if you want to know… |
-|---|---|---|
-| 01 | [system-architecture.drawio](01-system-architecture.drawio) | What runs where. Containers, trust boundaries, caches, auth token flow. |
-| 02 | [database-schema.drawio](02-database-schema.drawio) | The canonical Postgres tables and how they relate. |
-| 03 | [frontend-module-map.drawio](03-frontend-module-map.drawio) | Which JS file owns which feature. |
-| 04 | [auth-and-routing.drawio](04-auth-and-routing.drawio) | What happens between landing on a URL and seeing a page. |
-| 05 | [hydration-on-login.drawio](05-hydration-on-login.drawio) | The `initAllCourses` + `initData` RPC fan-out. Where the April 3–18 data-invisible bug lived. |
-| 06 | [write-path-map.drawio](06-write-path-map.drawio) | Every entity and whether its writes reach Supabase. Colour-coded. |
-| 07 | [score-entry-paths.drawio](07-score-entry-paths.drawio) | Desktop (canonical) vs mobile (stubbed) scoring — the current open bug. |
-| 08 | [observation-lifecycle.drawio](08-observation-lifecycle.drawio) | Full CRUD canonical path — the template to copy for unwired entities. |
-| 09 | [term-report-flow.drawio](09-term-report-flow.drawio) | Questionnaire → term rating → progress report render → print. |
-| 10 | [service-worker-cache.drawio](10-service-worker-cache.drawio) | SW lifecycle, fetch strategy, cache busting. Why PWA users sometimes need Unregister + hard reload. |
+For current architecture and live execution state, read:
 
-## Conventions
+1. [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md)
+2. [`docs/backend-design/HANDOFF.md`](../backend-design/HANDOFF.md)
+3. [`codex.md`](../../codex.md)
 
-- **Green** shapes = reaches Supabase.
-- **Red** shapes = localStorage only (wiped on sign-out).
-- **Yellow** shapes = partially/conditionally persisted.
-- **Blue** shapes = UI.
-- **Purple** shapes = in-memory or projection views.
-- **Orange** shapes = Netlify edge.
-- **Grey** shapes = legend / notes.
+## System and runtime diagrams
 
-## Source file references
+| #   | File                                                            | Reference use                                                       |
+| --- | --------------------------------------------------------------- | ------------------------------------------------------------------- |
+| 01  | [system-architecture.drawio](01-system-architecture.drawio)     | Historical high-level app and deployment snapshot.                  |
+| 02  | [database-schema.drawio](02-database-schema.drawio)             | Visual companion to the backend design SQL/reference docs.          |
+| 03  | [frontend-module-map.drawio](03-frontend-module-map.drawio)     | Shared, desktop, and mobile module relationships.                   |
+| 04  | [auth-and-routing.drawio](04-auth-and-routing.drawio)           | Sign-in, auth checks, and route/landing behavior.                   |
+| 05  | [hydration-on-login.drawio](05-hydration-on-login.drawio)       | Login/bootstrap hydration flow as diagrammed during reconciliation. |
+| 06  | [write-path-map.drawio](06-write-path-map.drawio)               | Write-surface map captured during the v2 wiring pass.               |
+| 07  | [score-entry-paths.drawio](07-score-entry-paths.drawio)         | Score-entry interaction/reference map.                              |
+| 08  | [observation-lifecycle.drawio](08-observation-lifecycle.drawio) | Observation capture and report-use reference.                       |
+| 09  | [term-report-flow.drawio](09-term-report-flow.drawio)           | Report-generation and term-rating flow reference.                   |
+| 10  | [service-worker-cache.drawio](10-service-worker-cache.drawio)   | Service worker and offline/cache behavior snapshot.                 |
 
-Every diagram names the shared/data.js line numbers it describes where possible. If a line number doesn't match your current checkout, the function name still does (grep will find it).
+## User-journey source assets
+
+These user-flow files are also reference-only and were produced for diagramming/delivery work rather than as live operating docs:
+
+- [`../lucidchart-user-flows.drawio`](../lucidchart-user-flows.drawio)
+- [`../lucidchart-first-time-report-flow.mmd`](../lucidchart-first-time-report-flow.mmd)
+- [`../lucidchart-teacher-assignment-comment-grade-flow.mmd`](../lucidchart-teacher-assignment-comment-grade-flow.mmd)
+
+## Notes
+
+- Some diagrams predate the current RPC naming, category-grading rollout, or other current-state cleanup work.
+- Treat the `.drawio` and `.mmd` files as preserved source assets, not as authoritative status documents.

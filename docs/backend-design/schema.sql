@@ -434,6 +434,12 @@ create table report_config (
   updated_at     timestamptz not null default now()
 );
 
+create table course_sync_cursor (
+  course_id                   uuid        not null primary key references course(id) on delete cascade,
+  gradebook_updated_at        timestamptz not null default now(),
+  student_records_updated_at  timestamptz not null default now()
+);
+
 -- ─── Extensions + cron ──────────────────────────────────────────────────────
 -- pg_cron enabled (migration fullvision_v2_enable_pg_cron).
 -- Job `fv_retention_cleanup_daily` runs at 03:17 UTC calling fv_retention_cleanup().
@@ -529,6 +535,7 @@ create table report_config (
 --   upsert_section_override(p_enrollment_id uuid, p_section_id uuid, p_level int, p_reason text)
 --   clear_section_override(p_enrollment_id uuid, p_section_id uuid)
 --   bulk_attendance(p_enrollment_ids uuid[], p_date date, p_status text)
+--   list_course_student_profiles(p_course_id uuid)
 --
 -- Term rating:
 --   save_term_rating(p_enrollment_id uuid, p_term integer, p_payload jsonb)
@@ -550,6 +557,7 @@ create table report_config (
 --   get_gradebook(p_course_id uuid)                                    -- the single boot-path RPC
 --   get_class_dashboard(p_course_id uuid)
 --   get_student_profile(p_enrollment_id uuid)
+--   list_course_student_profiles(p_course_id uuid)
 --   get_assessment_detail(p_assessment_id uuid)
 --   get_observations(p_course_id uuid, p_filters jsonb, p_page int, p_page_size int)
 --   get_learning_map(p_course_id uuid)
@@ -573,9 +581,11 @@ create table report_config (
 -- `term_rating_audit_trigger`   after  update on term_rating    → _term_rating_audit_field(...)
 
 -- ─── Publications ───────────────────────────────────────────────────────────
--- `supabase_realtime` was emptied by migration `zero_data_publication` (2026-04-17)
--- and NOT re-populated by the v2 rebuild. Cross-device live sync is offline
--- until the canonical entity tables are added back. Tracked as P2 item #13
--- in docs/superpowers/plans/2026-04-20-database-wiring-reconciliation.md.
+-- `course_sync_cursor` is the intended narrow Realtime surface for v2 course invalidation:
+--   gradebook_updated_at       → course / enrollment / category / assessment / score trees
+--   student_records_updated_at → goals / reflections / overrides / observations / attendance / report config
+-- Publish only this table to `supabase_realtime`; client re-fetches by course instead of merging row-level changes.
+-- and NOT re-populated by the v2 rebuild. Cross-device live sync is still an
+-- open rollout/verification item tracked in codex.md as P2.1.
 
 -- ─── End of snapshot ────────────────────────────────────────────────────────

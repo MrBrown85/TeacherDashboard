@@ -886,10 +886,10 @@ window.DashClassManager = (function () {
         '</div>';
     }
     var activeCids = courseIds.filter(function (cid) {
-      return !getCourseConfig(cid).archived;
+      return !isCourseArchived(cid);
     });
     var archivedCids = courseIds.filter(function (cid) {
-      return getCourseConfig(cid).archived;
+      return isCourseArchived(cid);
     });
     activeCids.forEach(function (cid) {
       var c = COURSES[cid];
@@ -1473,7 +1473,7 @@ window.DashClassManager = (function () {
     html += '</div>'; // close right column (cm-col-curriculum)
 
     // Actions row
-    var isArchived = cc.archived || false;
+    var isArchived = isCourseArchived(cid);
     html +=
       '<div class="cm-actions-row">' +
       '<button class="cm-action-btn" data-action="cmDuplicateCourse" data-cid="' +
@@ -1484,17 +1484,6 @@ window.DashClassManager = (function () {
       '">' +
       (isArchived ? '\uD83D\uDCE6 Unarchive Class' : '\uD83D\uDCE6 Archive Class') +
       '</button>' +
-      '</div>';
-
-    // Danger Zone
-    html +=
-      '<div class="cm-danger-zone">' +
-      '<div style="display:flex;align-items:center;gap:12px">' +
-      '<button class="cm-danger-btn" data-action="cmDeleteCourse">Delete "' +
-      esc(course.name) +
-      '"</button>' +
-      '<span class="cm-hint" style="margin:0">Permanently removes all data for this class.</span>' +
-      '</div>' +
       '</div>';
 
     html += '</div>'; // close cm-detail-inner
@@ -2583,38 +2572,18 @@ window.DashClassManager = (function () {
   }
 
   /* ── CM Delete / Archive / Duplicate ────────────────────── */
-  function cmDeleteCourse() {
-    if (!cmSelectedCourse) return;
-    var name = COURSES[cmSelectedCourse].name;
-    showConfirm(
-      'Delete "' + name + '"',
-      'This permanently removes all students, assessments, scores, and settings. This cannot be undone.',
-      'Delete Class',
-      'danger',
-      async function () {
-        var wasActive = cmSelectedCourse === _activeCourse;
-        await deleteCourseData(cmSelectedCourse);
-        var remaining = Object.keys(COURSES);
-        if (remaining.length > 0) {
-          cmSelectedCourse = remaining[0];
-          if (wasActive) {
-            _activeCourse = remaining[0];
-            setActiveCourse(remaining[0]);
-          }
-        } else {
-          cmSelectedCourse = null;
-          _activeCourse = null;
-        }
-        cmMode = 'edit';
-        renderClassManager();
-      },
-    );
-  }
-
   function cmToggleArchive(cid) {
-    var cc = getCourseConfig(cid);
-    cc.archived = !cc.archived;
-    saveCourseConfig(cid, cc);
+    var nextArchived = !isCourseArchived(cid);
+    updateCourse(cid, { archived: nextArchived });
+    if (nextArchived && _activeCourse === cid) {
+      var nextActive = Object.keys(COURSES).find(function (courseId) {
+        return courseId !== cid && !isCourseArchived(courseId);
+      });
+      if (nextActive) {
+        _activeCourse = nextActive;
+        setActiveCourse(nextActive);
+      }
+    }
     renderClassManager();
   }
 
@@ -3373,9 +3342,6 @@ window.DashClassManager = (function () {
       },
       cmToggleArchive: function () {
         cmToggleArchive(el.dataset.cid);
-      },
-      cmDeleteCourse: function () {
-        cmDeleteCourse();
       },
       cwSelectGrade: function () {
         cwSelectGrade(parseInt(el.dataset.grade, 10));

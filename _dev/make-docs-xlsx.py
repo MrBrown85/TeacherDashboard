@@ -33,7 +33,7 @@ ROWS = [
     # 4. BACKEND DESIGN / IMPLEMENTATION DOCS
     ("4. docs/backend-design", "Markdown", "docs/backend-design/HANDOFF.md", "342 lines", "Developer / AI agent", "Authoritative implementation log, current-state summary, discovered gaps, and activity history", "Refreshed Apr 21 2026 to remove stale rebuild-v2 / push-embargo guidance"),
     ("4. docs/backend-design", "Markdown", "docs/backend-design/INSTRUCTIONS.md", "441 lines", "Developer / AI agent", "Design-level implementation instructions: scope, strings, data rules, UI directives", "Operational branch/cutover notes were refreshed Apr 21 2026"),
-    ("4. docs/backend-design", "Markdown", "docs/backend-design/TASKS.md", "801 lines", "Developer / AI agent", "Task queue for UI/ops follow-ups derived from the design doc set", "Historical cutover task retained as completed record; branch target is now main"),
+    ("4. docs/backend-design", "Markdown", "codex.md", "current", "Developer / AI agent", "Only active repo work list; consolidates open operational, platform, validation, deferred, and external items", "Canonical work queue after docs cleanup (Apr 22 2026)"),
     ("4. docs/backend-design", "Markdown", "docs/backend-design/DECISIONS.md", "221 lines", "Developer", "Answer-by-answer decision log backing the rebuild scope", ""),
     ("4. docs/backend-design", "Markdown", "docs/backend-design/erd.md", "745 lines", "Developer", "Canonical ERD including Pass D amendment", ""),
     ("4. docs/backend-design", "Markdown", "docs/backend-design/write-paths.md", "1534 lines", "Developer", "Write-path RPC design and sequencing", ""),
@@ -77,8 +77,8 @@ ROWS = [
     ("7. User-flow diagrams", "Draw.io", "docs/lucidchart-assignment-comment-grade-flow.drawio", "9 KB", "Developer", "Assignment workflow Draw.io", ""),
 
     # 8. SUPERPOWERS (feature plans + design specs)
-    ("8. docs/superpowers/", "Markdown", "docs/superpowers/plans/2026-04-20-post-reconciliation-backlog.md", "current", "AI agent / Dev", "Post-reconciliation backlog: quota, key rotation, e2e, rubric persistence, and follow-up work", ""),
-    ("8. docs/superpowers/", "Markdown", "docs/superpowers/plans/2026-04-21-ui-v1-feature-gap.md", "current", "AI agent / Dev", "UI-v1 backlog and shipped Tier-A work summary", ""),
+    ("8. docs/superpowers/", "Markdown", "docs/superpowers/plans/2026-04-20-post-reconciliation-backlog.md", "(deleted)", "AI agent / Dev", "Former post-reconciliation backlog", "Historical reference only; unresolved items were consolidated into codex.md"),
+    ("8. docs/superpowers/", "Markdown", "docs/superpowers/plans/2026-04-21-ui-v1-feature-gap.md", "(deleted)", "AI agent / Dev", "Former UI-v1 backlog and shipped Tier-A summary", "Historical reference only; unresolved items were consolidated into codex.md"),
     ("8. docs/superpowers/", "Markdown", "docs/superpowers/shipped/2026-04-20-database-wiring-reconciliation.md", "current", "AI agent / Dev", "Shipped reconciliation plan documenting the rebuild merge path", ""),
 
     # 9. INLINE CODE DOCS (file headers only)

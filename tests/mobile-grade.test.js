@@ -490,11 +490,12 @@ describe('Assessment picker edge cases', () => {
     expect(html).toContain('0/3 graded');
   });
 
-  it('shows type badges S and F', () => {
+  it('shows category badges for assessments', () => {
     mockDataLayer({});
     const html = MGrade.renderPicker(CID);
-    expect(html).toContain('>S<');
-    expect(html).toContain('>F<');
+    expect(html).toContain('No Category');
+    expect(html).toContain('m-type-summative');
+    expect(html).toContain('m-type-formative');
   });
 
   it('shows dates in readable format', () => {

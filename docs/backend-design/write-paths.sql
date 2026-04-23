@@ -313,6 +313,170 @@ begin
 end;
 $$;
 
+-- ── Course-scoped sync cursor (P2.1) ───────────────────────────────────────
+-- Narrow Realtime invalidation surface for v2. The client listens to exactly
+-- one row per active course and re-fetches gradebook or student-record data
+-- when the corresponding timestamp changes.
+
+create table if not exists course_sync_cursor (
+    course_id                   uuid primary key references course(id) on delete cascade,
+    gradebook_updated_at        timestamptz not null default now(),
+    student_records_updated_at  timestamptz not null default now()
+);
+
+create or replace function _touch_course_sync_cursor(
+    p_course_id uuid,
+    p_bucket    text
+) returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    if p_course_id is null then
+        return;
+    end if;
+
+    insert into course_sync_cursor (course_id)
+    values (p_course_id)
+    on conflict (course_id) do nothing;
+
+    update course_sync_cursor
+       set gradebook_updated_at =
+               case when p_bucket = 'gradebook' then now() else gradebook_updated_at end,
+           student_records_updated_at =
+               case when p_bucket = 'student-records' then now() else student_records_updated_at end
+     where course_id = p_course_id;
+end;
+$$;
+
+revoke all on function _touch_course_sync_cursor(uuid, text) from public;
+grant execute on function _touch_course_sync_cursor(uuid, text) to authenticated;
+
+create or replace function _touch_course_sync_cursor_from_trigger()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    _bucket    text := coalesce(tg_argv[0], 'gradebook');
+    _source    text := coalesce(tg_argv[1], 'course');
+    _course_id uuid;
+    _student_id uuid;
+    _row       record;
+begin
+    if _source = 'student' then
+        _student_id := coalesce(new.id, old.id);
+        for _row in
+            select distinct e.course_id
+              from enrollment e
+             where e.student_id = _student_id
+        loop
+            perform _touch_course_sync_cursor(_row.course_id, _bucket);
+        end loop;
+        return coalesce(new, old);
+    end if;
+
+    if _source = 'course' then
+        _course_id := coalesce(new.course_id, old.course_id, new.id, old.id);
+    elsif _source = 'assessment' then
+        select a.course_id
+          into _course_id
+          from assessment a
+         where a.id = coalesce(new.assessment_id, old.assessment_id, new.id, old.id);
+    else
+        select e.course_id
+          into _course_id
+          from enrollment e
+         where e.id = coalesce(new.enrollment_id, old.enrollment_id, new.id, old.id);
+    end if;
+
+    perform _touch_course_sync_cursor(_course_id, _bucket);
+    return coalesce(new, old);
+end;
+$$;
+
+revoke all on function _touch_course_sync_cursor_from_trigger() from public;
+grant execute on function _touch_course_sync_cursor_from_trigger() to authenticated;
+
+drop trigger if exists course_sync_cursor_course_gradebook on course;
+create trigger course_sync_cursor_course_gradebook
+after insert or update or delete on course
+for each row execute function _touch_course_sync_cursor_from_trigger('gradebook', 'course');
+
+drop trigger if exists course_sync_cursor_student_gradebook on student;
+create trigger course_sync_cursor_student_gradebook
+after update on student
+for each row execute function _touch_course_sync_cursor_from_trigger('gradebook', 'student');
+
+drop trigger if exists course_sync_cursor_enrollment_gradebook on enrollment;
+create trigger course_sync_cursor_enrollment_gradebook
+after insert or update or delete on enrollment
+for each row execute function _touch_course_sync_cursor_from_trigger('gradebook', 'course');
+
+drop trigger if exists course_sync_cursor_category_gradebook on category;
+create trigger course_sync_cursor_category_gradebook
+after insert or update or delete on category
+for each row execute function _touch_course_sync_cursor_from_trigger('gradebook', 'course');
+
+drop trigger if exists course_sync_cursor_assessment_gradebook on assessment;
+create trigger course_sync_cursor_assessment_gradebook
+after insert or update or delete on assessment
+for each row execute function _touch_course_sync_cursor_from_trigger('gradebook', 'course');
+
+drop trigger if exists course_sync_cursor_score_gradebook on score;
+create trigger course_sync_cursor_score_gradebook
+after insert or update or delete on score
+for each row execute function _touch_course_sync_cursor_from_trigger('gradebook', 'enrollment');
+
+drop trigger if exists course_sync_cursor_tag_score_gradebook on tag_score;
+create trigger course_sync_cursor_tag_score_gradebook
+after insert or update or delete on tag_score
+for each row execute function _touch_course_sync_cursor_from_trigger('gradebook', 'enrollment');
+
+drop trigger if exists course_sync_cursor_rubric_score_gradebook on rubric_score;
+create trigger course_sync_cursor_rubric_score_gradebook
+after insert or update or delete on rubric_score
+for each row execute function _touch_course_sync_cursor_from_trigger('gradebook', 'enrollment');
+
+drop trigger if exists course_sync_cursor_observation_student_records on observation;
+create trigger course_sync_cursor_observation_student_records
+after insert or update or delete on observation
+for each row execute function _touch_course_sync_cursor_from_trigger('student-records', 'course');
+
+drop trigger if exists course_sync_cursor_goal_student_records on goal;
+create trigger course_sync_cursor_goal_student_records
+after insert or update or delete on goal
+for each row execute function _touch_course_sync_cursor_from_trigger('student-records', 'enrollment');
+
+drop trigger if exists course_sync_cursor_reflection_student_records on reflection;
+create trigger course_sync_cursor_reflection_student_records
+after insert or update or delete on reflection
+for each row execute function _touch_course_sync_cursor_from_trigger('student-records', 'enrollment');
+
+drop trigger if exists course_sync_cursor_section_override_student_records on section_override;
+create trigger course_sync_cursor_section_override_student_records
+after insert or update or delete on section_override
+for each row execute function _touch_course_sync_cursor_from_trigger('student-records', 'enrollment');
+
+drop trigger if exists course_sync_cursor_attendance_student_records on attendance;
+create trigger course_sync_cursor_attendance_student_records
+after insert or update or delete on attendance
+for each row execute function _touch_course_sync_cursor_from_trigger('student-records', 'enrollment');
+
+drop trigger if exists course_sync_cursor_report_config_student_records on report_config;
+create trigger course_sync_cursor_report_config_student_records
+after insert or update or delete on report_config
+for each row execute function _touch_course_sync_cursor_from_trigger('student-records', 'course');
+
+drop trigger if exists course_sync_cursor_term_rating_student_records on term_rating;
+create trigger course_sync_cursor_term_rating_student_records
+after insert or update or delete on term_rating
+for each row execute function _touch_course_sync_cursor_from_trigger('student-records', 'enrollment');
+
+alter publication supabase_realtime add table course_sync_cursor;
+
 
 -- duplicate_course(p_src_id) → uuid
 --

@@ -1,8 +1,16 @@
 import { test, expect } from '@playwright/test';
 import {
-  mockAuth, seedCourse, seedStudents, seedAssessments, seedScores,
-  gotoApp, navigateTo, clickAction,
-  TEST_STUDENTS, TEST_ASSESSMENT, TEST_COURSE,
+  mockAuth,
+  seedCourse,
+  seedStudents,
+  seedAssessments,
+  seedScores,
+  gotoApp,
+  navigateTo,
+  clickAction,
+  TEST_STUDENTS,
+  TEST_ASSESSMENT,
+  TEST_COURSE,
 } from './helpers.js';
 
 // ── Viewport presets ─────────────────────────────────────────
@@ -13,8 +21,8 @@ const SMALL_TABLET = { width: 900, height: 700 };
 
 // ── Helper: check no horizontal overflow ─────────────────────
 async function assertNoOverflow(page) {
-  const ok = await page.evaluate(() =>
-    document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
+  const ok = await page.evaluate(
+    () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
   );
   expect(ok).toBeTruthy();
 }
@@ -32,10 +40,9 @@ async function getStyle(page, selector, prop) {
 
 // ── Helper: wait for #main to have content ───────────────────
 async function waitForMainContent(page, timeout = 3000) {
-  await page.waitForFunction(
-    () => document.getElementById('main')?.innerHTML.trim().length > 0,
-    { timeout },
-  ).catch(() => {}); // swallow — caller can check separately
+  await page
+    .waitForFunction(() => document.getElementById('main')?.innerHTML.trim().length > 0, { timeout })
+    .catch(() => {}); // swallow — caller can check separately
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -323,17 +330,13 @@ test.describe('Mobile: Dashboard Content', () => {
     await seedStudents(page);
     await seedAssessments(page);
     await seedScores(page, {
-      'stu-001': { 'assess-001': { 'QAP': 3 } },
-      'stu-002': { 'assess-001': { 'QAP': 2 } },
-      'stu-003': { 'assess-001': { 'QAP': 4 } },
+      'stu-001': { 'assess-001': { QAP: 3 } },
+      'stu-002': { 'assess-001': { QAP: 2 } },
+      'stu-003': { 'assess-001': { QAP: 4 } },
     });
   });
 
-  // BUG: Dashboard #main renders empty at mobile viewport (375px).
-  // The page-dashboard module sets class "page-dashboard" on #main but
-  // produces no innerHTML. Works fine at desktop width.
   test('dashboard should render student content at 375px', async ({ page }) => {
-    test.fail(); // known bug: dashboard renders empty at mobile
     await page.setViewportSize(MOBILE);
     await gotoApp(page, '/dashboard');
     await waitForMainContent(page);
@@ -549,15 +552,13 @@ test.describe('Mobile: Page Rendering', () => {
     await seedStudents(page);
     await seedAssessments(page);
     await seedScores(page, {
-      'stu-001': { 'assess-001': { 'QAP': 3 } },
-      'stu-002': { 'assess-001': { 'QAP': 2 } },
-      'stu-003': { 'assess-001': { 'QAP': 4 } },
+      'stu-001': { 'assess-001': { QAP: 3 } },
+      'stu-002': { 'assess-001': { QAP: 2 } },
+      'stu-003': { 'assess-001': { QAP: 4 } },
     });
   });
 
-  // BUG: Dashboard renders empty #main at mobile viewport
   test('Dashboard should render content at 375px', async ({ page }) => {
-    test.fail(); // known bug: dashboard empty at mobile
     await page.setViewportSize(MOBILE);
     await gotoApp(page, '/dashboard');
     await waitForMainContent(page);
@@ -610,7 +611,7 @@ test.describe('Mobile: Grid Layouts', () => {
     await seedStudents(page);
     await seedAssessments(page);
     await seedScores(page, {
-      'stu-001': { 'assess-001': { 'QAP': 3 } },
+      'stu-001': { 'assess-001': { QAP: 3 } },
     });
   });
 
@@ -649,9 +650,17 @@ test.describe('Mobile: Edge Cases', () => {
     const longNameStudents = [
       ...TEST_STUDENTS,
       {
-        id: 'stu-long', firstName: 'Alexandrina-Bartholomew', lastName: 'Worthington-Carmichael',
-        preferred: 'Alex', pronouns: '', studentNumber: '9999', email: '',
-        dateOfBirth: '', designation: '', enrolledDate: '', attendance: [],
+        id: 'stu-long',
+        firstName: 'Alexandrina-Bartholomew',
+        lastName: 'Worthington-Carmichael',
+        preferred: 'Alex',
+        pronouns: '',
+        studentNumber: '9999',
+        email: '',
+        dateOfBirth: '',
+        designation: '',
+        enrolledDate: '',
+        attendance: [],
         sortName: 'Worthington-Carmichael Alexandrina-Bartholomew',
       },
     ];
@@ -686,9 +695,9 @@ test.describe('Mobile: Edge Cases', () => {
     await seedStudents(page);
     await seedAssessments(page);
     await seedScores(page, {
-      'stu-001': { 'assess-001': { 'QAP': 3 } },
-      'stu-002': { 'assess-001': { 'QAP': 2 } },
-      'stu-003': { 'assess-001': { 'QAP': 4 } },
+      'stu-001': { 'assess-001': { QAP: 3 } },
+      'stu-002': { 'assess-001': { QAP: 2 } },
+      'stu-003': { 'assess-001': { QAP: 4 } },
     });
     await page.setViewportSize(SMALL_MOBILE);
     await gotoApp(page, '/gradebook');
@@ -704,7 +713,7 @@ test.describe('Mobile: Edge Cases', () => {
     await seedStudents(page);
     await seedAssessments(page);
     await seedScores(page, {
-      'stu-001': { 'assess-001': { 'QAP': 3 } },
+      'stu-001': { 'assess-001': { QAP: 3 } },
     });
     // Load at desktop first
     await gotoApp(page, '/gradebook');
