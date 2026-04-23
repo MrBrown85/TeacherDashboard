@@ -8,6 +8,14 @@ window.MGrade = (function () {
   var _undoStack = [];
   var _scrollRAF = null;
 
+  function _assessmentBadgeData(cid, assessment) {
+    var categoryId = getAssessmentCategoryId(assessment);
+    return {
+      label: getAssessmentCategoryName(cid, assessment),
+      className: categoryId || (assessment && assessment.type === 'summative') ? 'm-type-summative' : 'm-type-formative',
+    };
+  }
+
   /* ── Assessment Picker Screen ───────────────────────────────── */
   function renderPicker(cid) {
     var nav = MC.navBar({ id: 'grade-picker', title: 'Grade' });
@@ -37,8 +45,7 @@ window.MGrade = (function () {
       cells = '<div class="m-list" id="m-grade-list">';
       sorted.forEach(function (a) {
         var dateStr = new Date(a.date).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
-        var typeClass = a.type === 'summative' ? 'm-type-summative' : 'm-type-formative';
-        var typeLabel = a.type === 'summative' ? 'S' : 'F';
+        var badge = _assessmentBadgeData(cid, a);
         var tagCount = (a.tagIds || []).length;
 
         // Count graded students
@@ -60,9 +67,9 @@ window.MGrade = (function () {
           '<div class="m-cell-body">' +
           '<div class="m-cell-title">' +
           '<span class="m-type-badge ' +
-          typeClass +
+          badge.className +
           '" style="margin-right:6px">' +
-          typeLabel +
+          MC.esc(badge.label) +
           '</span>' +
           MC.esc(a.title) +
           '</div>' +
@@ -382,7 +389,7 @@ window.MGrade = (function () {
     var assessment = getAssessments(cid).find(function (a) {
       return a.id === aid;
     });
-    var type = assessment ? assessment.type : 'summative';
+    var type = assessment ? (getAssessmentCategoryId(assessment) ? 'summative' : assessment.type || 'formative') : 'summative';
 
     upsertScore(cid, sid, aid, tid, score, assessment ? assessment.date : getTodayStr(), type, '');
     clearProfCache();

@@ -760,7 +760,7 @@ window.ReportBlocks = (function () {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 16px">`;
       missing.forEach(a => {
         html += `<div style="font-size:0.68rem;color:var(--text);line-height:1.6;display:flex;align-items:baseline;gap:4px;min-width:0">
-        <span style="color:var(--text-3);font-size:0.56rem;flex-shrink:0;font-weight:600">${a.type === 'summative' ? 'S' : 'F'}</span>
+        <span style="color:var(--text-3);font-size:0.56rem;flex-shrink:0;font-weight:600">${esc(getAssessmentCategoryName(cid, a))}</span>
         <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.title)}</span>
       </div>`;
       });
@@ -787,10 +787,6 @@ window.ReportBlocks = (function () {
       if (scaleLabels && scaleLabels[level - 1]) return scaleLabels[level - 1];
       return PROF_LABELS[level] || '';
     }
-    // Split into summative and formative
-    const summative = assessments.filter(a => a.type === 'summative');
-    const formative = assessments.filter(a => a.type !== 'summative');
-
     // Get tag objects for inline display
     const sections = getSections(cid);
     const allTags = sections.flatMap(sec => (sec.tags || []).map(t => ({ ...t, color: sec.color })));
@@ -808,6 +804,7 @@ window.ReportBlocks = (function () {
         const dateStr = a.date
           ? new Date(a.date + 'T00:00:00').toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })
           : '—';
+        const categoryLabel = getAssessmentCategoryName(cid, a);
         // Learning areas column — use readable labels, deduplicate by section
         const tagSections = new Set();
         (a.tagIds || []).forEach(tid => {
@@ -824,6 +821,7 @@ window.ReportBlocks = (function () {
           rows += `<tr>
           <td style="font-weight:500">${esc(a.title)}${weightLabel}</td>
           <td style="color:var(--text-3);font-size:0.76rem">${dateStr}</td>
+          <td style="font-size:0.68rem;color:var(--text-2)">${esc(categoryLabel)}</td>
           <td style="font-size:0.68rem">${tagPills}</td>
           <td style="color:var(--text-3);font-style:italic" colspan="2">Not assessed</td></tr>`;
           return;
@@ -846,6 +844,7 @@ window.ReportBlocks = (function () {
         rows += `<tr>
         <td style="font-weight:500">${esc(a.title)}${weightLabel}</td>
         <td style="color:var(--text-3);font-size:0.76rem">${dateStr}</td>
+        <td style="font-size:0.68rem;color:var(--text-2)">${esc(categoryLabel)}</td>
         <td style="font-size:0.68rem">${tagPills}</td>
         ${scoreDisplay}${profDisplay}</tr>`;
       });
@@ -858,18 +857,12 @@ window.ReportBlocks = (function () {
       <thead><tr>
         <th style="width:36%;text-align:left">Assignment</th>
         <th style="width:10%;text-align:left">Date</th>
+        <th style="width:14%;text-align:left">Category</th>
         <th style="width:18%;text-align:left">Learning Area</th>
         <th style="width:12%;text-align:center">Score</th>
-        <th style="width:24%;text-align:center">Proficiency</th>
+        <th style="width:10%;text-align:center">Proficiency</th>
       </tr></thead><tbody>`;
-    if (summative.length > 0) {
-      html += `<tr class="report-grade-section"><td colspan="5" style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-2);padding:10px 0 4px;border-bottom:1.5px solid var(--border)">Summative</td></tr>`;
-      html += renderRows(summative);
-    }
-    if (formative.length > 0) {
-      html += `<tr class="report-grade-section"><td colspan="5" style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-2);padding:10px 0 4px;border-bottom:1.5px solid var(--border)">Formative</td></tr>`;
-      html += renderRows(formative);
-    }
+    html += renderRows(assessments);
     html += `</tbody></table></div>`;
     return html;
   }

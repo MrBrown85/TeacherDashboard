@@ -81,6 +81,7 @@ const _cache = {
   customTags: {}, // keyed by cid
   notes: {}, // keyed by cid
   reportConfig: {}, // keyed by cid
+  studentProfileSummaries: {}, // keyed by cid
   v2Gradebook: {}, // keyed by cid — raw get_gradebook(cid) payload (Phase 3.4+)
 };
 
@@ -104,6 +105,7 @@ const _DATA_KEYS = {
   customTags: 'custom-tags',
   notes: 'notes',
   reportConfig: 'report-config',
+  studentProfileSummaries: 'student-profile-summaries',
 };
 
 let _useSupabase = false;
@@ -228,17 +230,131 @@ function _updateSyncIndicator() {
    ══════════════════════════════════════════════════════════════════ */
 let _crossTabChannel = null;
 let _crossTabAlerted = false;
+let _courseSyncChannel = null;
+let _courseSyncCourseId = null;
+let _courseSyncState = {};
+
+function _isGradebookField(field) {
+  return ['students', 'categories', 'assessments', 'scores'].indexOf(field) >= 0;
+}
+
+function _isStudentRecordField(field) {
+  return (
+    [
+      'flags',
+      'goals',
+      'reflections',
+      'overrides',
+      'observations',
+      'statuses',
+      'termRatings',
+      'reportConfig',
+      'studentProfileSummaries',
+    ].indexOf(field) >= 0
+  );
+}
+
+async function _handleExternalCourseUpdate(cid, kind) {
+  if (!cid) return;
+  if (kind === 'student-records') {
+    if (_isEchoGuarded('student-records', cid)) return;
+    await loadStudentProfileSummaries(cid);
+    _invalidateAndRerender();
+    return;
+  }
+  if (_isEchoGuarded('gradebook', cid)) return;
+  await initData(cid);
+  _invalidateAndRerender();
+}
+
+function _unsubscribeCourseSyncCursor() {
+  var sb = getSupabase();
+  if (sb && _courseSyncChannel) {
+    try {
+      sb.removeChannel(_courseSyncChannel);
+    } catch (e) {
+      /* ignore channel cleanup failures */
+    }
+  }
+  _courseSyncChannel = null;
+  _courseSyncCourseId = null;
+}
+
+function _updateCourseSyncState(cid, row) {
+  if (!cid) return;
+  row = row || {};
+  _courseSyncState[cid] = {
+    gradebookUpdatedAt: row.gradebook_updated_at || row.gradebookUpdatedAt || null,
+    studentRecordsUpdatedAt: row.student_records_updated_at || row.studentRecordsUpdatedAt || null,
+  };
+}
+
+async function _subscribeCourseSyncCursor(cid) {
+  if (!_useSupabase || !_isUuid(cid)) return;
+  if (_courseSyncCourseId === cid && _courseSyncChannel) return;
+  _unsubscribeCourseSyncCursor();
+
+  var sb = getSupabase();
+  if (!sb) return;
+  if (typeof sb.channel !== 'function') return;
+
+  if (typeof sb.from === 'function') {
+    try {
+      var baseline = await sb
+        .from('course_sync_cursor')
+        .select('course_id,gradebook_updated_at,student_records_updated_at')
+        .eq('course_id', cid)
+        .maybeSingle();
+      if (!baseline.error) _updateCourseSyncState(cid, baseline.data);
+    } catch (e) {
+      console.warn('course_sync_cursor baseline read failed:', e);
+    }
+  }
+
+  _courseSyncCourseId = cid;
+  _courseSyncChannel = sb
+    .channel('course-sync-' + cid)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'course_sync_cursor',
+        filter: 'course_id=eq.' + cid,
+      },
+      function (payload) {
+        var next = (payload && payload.new) || {};
+        var prev = _courseSyncState[cid] || {};
+        _updateCourseSyncState(cid, next);
+        if (next.gradebook_updated_at && next.gradebook_updated_at !== prev.gradebookUpdatedAt) {
+          _handleExternalCourseUpdate(cid, 'gradebook');
+          return;
+        }
+        if (next.student_records_updated_at && next.student_records_updated_at !== prev.studentRecordsUpdatedAt) {
+          _handleExternalCourseUpdate(cid, 'student-records');
+        }
+      },
+    )
+    .subscribe(function (status) {
+      if (status === 'CHANNEL_ERROR') {
+        console.warn('course_sync_cursor subscription failed for', cid);
+      }
+    });
+}
 
 function _initCrossTab() {
   if (_crossTabChannel) return;
   _crossTabAlerted = false;
   try {
     _crossTabChannel = new BroadcastChannel('td-data-sync');
-    // v2: cross-tab reactions rely on the 'storage' event fallback (reload toast).
-    // The live remote refetch that used to run here was removed with the legacy
-    // public-schema tables it queried.
-    _crossTabChannel.onmessage = function () {
-      /* no-op */
+    _crossTabChannel.onmessage = function (event) {
+      var msg = event && event.data;
+      if (!msg || !msg.cid || msg.cid !== getActiveCourse()) return;
+      if (_isGradebookField(msg.field)) {
+        _handleExternalCourseUpdate(msg.cid, 'gradebook');
+      } else if (_isStudentRecordField(msg.field)) {
+        _handleExternalCourseUpdate(msg.cid, 'student-records');
+      }
     };
   } catch (e) {
     // BroadcastChannel not supported — fall back to storage event
@@ -246,29 +362,10 @@ function _initCrossTab() {
   // Fallback: storage event fires cross-tab when localStorage changes
   window.addEventListener('storage', function (e) {
     if (e.key && e.key.startsWith('gb-') && !_crossTabAlerted) {
-      // Storage events don't carry field info — reload as fallback
       _crossTabAlerted = true;
-      if (typeof showSyncToast === 'function') {
-        var el = document.getElementById('sync-toast');
-        if (el) el.remove();
-        var toast = document.createElement('div');
-        toast.className = 'sync-toast error';
-        toast.id = 'sync-toast';
-        toast.setAttribute('role', 'alert');
-        toast.setAttribute('aria-live', 'assertive');
-        toast.innerHTML =
-          '<span>Data changed in another tab</span><button class="sync-toast-btn" data-action="reload-cross-tab">Reload</button>';
-        document.body.appendChild(toast);
-      }
-    }
-  });
-
-  // Delegated click handler for cross-tab reload buttons (storage fallback only)
-  document.addEventListener('click', function (e) {
-    var btn = e.target.closest('[data-action="reload-cross-tab"]');
-    if (btn) {
-      _crossTabAlerted = false;
-      window.location.reload();
+      _handleExternalCourseUpdate(getActiveCourse(), 'gradebook').finally(function () {
+        _crossTabAlerted = false;
+      });
     }
   });
 }
@@ -522,6 +619,7 @@ async function initData(cid) {
   _initPromise = p;
   try {
     await p;
+    await _subscribeCourseSyncCursor(cid);
   } finally {
     if (_initPromise === p) _initPromise = null;
   }
@@ -644,6 +742,147 @@ function _persistLoadedField(cid, field, value) {
   _cache[field][cid] = value;
   var key = _DATA_KEYS[field];
   if (key) _safeLSSet('gb-' + key + '-' + cid, JSON.stringify(value));
+}
+
+function _getAssessmentCategoryId(assessment) {
+  return (assessment && (assessment.categoryId || assessment.category_id)) || null;
+}
+
+function getAssessmentCategoryId(assessment) {
+  return _getAssessmentCategoryId(assessment);
+}
+
+function getAssessmentCategoryName(cid, assessment) {
+  var categoryId = _getAssessmentCategoryId(assessment);
+  if (!categoryId) return 'No Category';
+  var category = getCategoryById(cid, categoryId);
+  return category && category.name ? category.name : 'Unknown Category';
+}
+
+function _normalizeProfileObservations(observations) {
+  return (observations || [])
+    .map(function (ob) {
+      return {
+        id: ob.id || ob.observation_id || uid(),
+        text: ob.text || '',
+        dims: ob.dims || [],
+        sentiment: ob.sentiment || null,
+        context: ob.context || null,
+        created: ob.created || ob.created_at || ob.observed_at || new Date().toISOString(),
+        date: _dateOnly(ob.date || ob.observed_at || ob.created || ob.created_at),
+      };
+    })
+    .filter(function (ob) {
+      return !!ob.text;
+    });
+}
+
+function _normalizeStudentProfileSummary(row) {
+  row = row || {};
+  var student = row.student || {};
+  var enrollment = row.enrollment || {};
+  var enrollmentId =
+    enrollment.id ||
+    enrollment.enrollment_id ||
+    row.enrollment_id ||
+    student.id ||
+    student.enrollment_id ||
+    row.id ||
+    null;
+  var personId = student.student_id || student.id || row.student_id || null;
+  return {
+    id: enrollmentId,
+    student: {
+      id: enrollmentId,
+      personId: personId,
+      firstName: student.first_name || student.firstName || '',
+      lastName: student.last_name || student.lastName || '',
+      preferred: student.preferred || student.preferred_first_name || student.preferredFirstName || '',
+      pronouns: student.pronouns || '',
+      studentNumber: student.student_number || student.studentNumber || '',
+      email: student.email || '',
+      dateOfBirth: student.date_of_birth || student.dateOfBirth || '',
+      designations: student.designations || [],
+      sortName:
+        student.sort_name ||
+        ((student.last_name || student.lastName || '') + ' ' + (student.first_name || student.firstName || '')).trim(),
+    },
+    enrollment: {
+      id: enrollmentId,
+      rosterPosition: Number(enrollment.roster_position || enrollment.rosterPosition || 0),
+      isFlagged: !!(row.is_flagged ?? row.isFlagged ?? enrollment.is_flagged ?? enrollment.isFlagged),
+    },
+    overallProficiency:
+      row.overall_proficiency != null
+        ? Number(row.overall_proficiency)
+        : row.overallProficiency != null
+          ? Number(row.overallProficiency)
+          : null,
+    letter: row.letter || null,
+    counts: row.counts || {},
+    goals: row.goals || {},
+    reflections: row.reflections || {},
+    sectionOverrides: row.section_overrides || row.sectionOverrides || {},
+    isFlagged: !!(row.is_flagged ?? row.isFlagged ?? enrollment.is_flagged ?? enrollment.isFlagged),
+    recentObservations: _normalizeProfileObservations(row.recent_observations || row.recentObservations),
+  };
+}
+
+function _applyStudentProfileSummaries(cid, rows) {
+  var summaries = {};
+  var flags = {};
+  var goals = {};
+  var reflections = {};
+  var overrides = {};
+
+  (rows || []).forEach(function (row) {
+    var summary = _normalizeStudentProfileSummary(row);
+    if (!summary.id) return;
+    summaries[summary.id] = summary;
+    if (summary.isFlagged) flags[summary.id] = true;
+    if (summary.goals && Object.keys(summary.goals).length > 0) goals[summary.id] = summary.goals;
+    if (summary.reflections && Object.keys(summary.reflections).length > 0)
+      reflections[summary.id] = summary.reflections;
+    if (summary.sectionOverrides && Object.keys(summary.sectionOverrides).length > 0) {
+      overrides[summary.id] = summary.sectionOverrides;
+    }
+  });
+
+  _persistLoadedField(cid, 'studentProfileSummaries', summaries);
+  _persistLoadedField(cid, 'flags', flags);
+  _persistLoadedField(cid, 'goals', goals);
+  _persistLoadedField(cid, 'reflections', reflections);
+  _persistLoadedField(cid, 'overrides', overrides);
+  return summaries;
+}
+
+function getStudentProfileSummaries(cid) {
+  if (_cache.studentProfileSummaries[cid] !== undefined) return _cache.studentProfileSummaries[cid];
+  try {
+    return JSON.parse(localStorage.getItem('gb-student-profile-summaries-' + cid)) || {};
+  } catch (e) {
+    console.warn('Student profile summaries parse fallback:', e);
+    return {};
+  }
+}
+
+async function loadStudentProfileSummaries(cid) {
+  if (!cid) return {};
+  if (!_useSupabase) {
+    var localSummaries = _safeParseLS('gb-student-profile-summaries-' + cid, {});
+    _cache.studentProfileSummaries[cid] = localSummaries || {};
+    return _cache.studentProfileSummaries[cid];
+  }
+  try {
+    var res = await window.v2.listCourseStudentProfiles(cid);
+    if (res && res.error) throw res.error;
+    var rows = _rpcRows(res && res.data !== undefined ? res.data : res);
+    return _applyStudentProfileSummaries(cid, rows);
+  } catch (e) {
+    console.warn('list_course_student_profiles failed for ' + cid + '; keeping existing summaries:', e);
+    if (_cache.studentProfileSummaries[cid] === undefined) _persistLoadedField(cid, 'studentProfileSummaries', {});
+    return _cache.studentProfileSummaries[cid] || {};
+  }
 }
 
 function _personToEnrollmentId(studentId, enrollmentByStudentId) {
@@ -1062,18 +1301,18 @@ function _v2GradebookToCache(cid, payload) {
   });
 
   var assessments = (payload.assessments || []).map(function (a) {
+    var categoryId = a.category_id || null;
     return {
       id: a.id,
       title: a.title || '',
       date: _dateOnly(a.date_assigned),
-      type: 'summative',
-      categoryId: a.category_id || null,
-      category_id: a.category_id || null,
+      type: a.assessment_kind || (categoryId ? 'summative' : 'formative'),
+      categoryId: categoryId,
+      category_id: categoryId,
       tag_ids: [],
       score_mode: a.score_mode || 'proficiency',
       max_points: a.max_points != null ? Number(a.max_points) : null,
       has_rubric: !!a.has_rubric,
-      category_id: a.category_id || null,
       due_date: _dateOnly(a.due_date),
       assigned_at: _dateOnly(a.date_assigned),
       display_order: Number(a.display_order || 0),
@@ -1109,6 +1348,7 @@ function _v2GradebookToCache(cid, payload) {
   _persistLoadedField(cid, 'goals', {});
   _persistLoadedField(cid, 'reflections', {});
   _persistLoadedField(cid, 'overrides', {});
+  _persistLoadedField(cid, 'studentProfileSummaries', {});
 
   _cache.notes[cid] = _safeParseLS('gb-notes-' + cid, {});
   _cache.modules[cid] = _safeParseLS('gb-modules-' + cid, _safeParseLS('gb-units-' + cid, [])) || [];
@@ -1135,6 +1375,7 @@ async function _doInitData(cid) {
       var gbRes = await sb.rpc('get_gradebook', { p_course_id: cid });
       if (gbRes.error) throw gbRes.error;
       _v2GradebookToCache(cid, gbRes.data || {});
+      await loadStudentProfileSummaries(cid);
       return;
     } catch (e) {
       console.warn('get_gradebook failed for ' + cid + '; falling back to empty cache:', e);
@@ -1194,6 +1435,7 @@ function _loadCourseFromLS(cid) {
   _cache.customTags[cid] = _safeParseLS('gb-custom-tags-' + cid, []);
   _cache.courseConfigs[cid] = _safeParseLS('gb-courseconfig-' + cid, {});
   _cache.reportConfig[cid] = _safeParseLS('gb-report-config-' + cid, null);
+  _cache.studentProfileSummaries[cid] = _safeParseLS('gb-student-profile-summaries-' + cid, {});
   _cache.rubrics[cid] = _safeParseLS('gb-rubrics-' + cid, []);
 
   // Learning map: check localStorage first, then fall back to LEARNING_MAP constant
@@ -1366,6 +1608,8 @@ const _NORMALIZED_TABLES = {
 function _saveCourseField(field, cid, value) {
   _cache[field][cid] = value;
   if (_PROF_FIELDS.includes(field) && typeof clearProfCache === 'function') clearProfCache();
+  if (_isGradebookField(field)) _setEchoGuard('gradebook', cid);
+  if (_isStudentRecordField(field)) _setEchoGuard('student-records', cid);
   // Persist to localStorage (primary store in v2; remote writes happen through
   // the dispatcher functions at each save site, not via this field-save path).
   var dataKey = _DATA_KEYS[field];
@@ -2226,6 +2470,7 @@ function loadCourses() {
 }
 function saveCourses(obj) {
   _cache.courses = obj;
+  COURSES = obj;
   // v2: localStorage is the local mirror; remote course writes go through
   // window.v2 helpers (createCourse / update_course / etc.) at each save site.
   _safeLSSet('gb-courses', JSON.stringify(obj));
@@ -2330,11 +2575,12 @@ async function deleteCourseData(id) {
   // doesn't leave the course gone locally but still alive in the database.
   if (_useSupabase) {
     const sb = getSupabase();
-    if (sb) {
-      const tables = Object.values(_NORMALIZED_TABLES);
-      await Promise.all(
-        tables.map(tbl => sb.from(tbl).delete().eq('teacher_id', _teacherId).eq('course_id', id)),
-      ).catch(err => console.error('Failed to delete course data from Supabase:', err));
+    if (sb && _isUuid(id)) {
+      var deleteRes = await sb.rpc('delete_course', { p_course_id: id });
+      if (deleteRes.error) {
+        console.error('Failed to delete course via delete_course RPC:', deleteRes.error);
+        throw deleteRes.error;
+      }
     }
   }
 
@@ -3715,12 +3961,19 @@ function setPointsScore(cid, sid, aid, rawScore) {
 /* ── Active Course ──────────────────────────────────────────── */
 function getActiveCourse() {
   const cfg = getConfig();
-  if (cfg.activeCourse && COURSES[cfg.activeCourse]) return cfg.activeCourse;
+  if (cfg.activeCourse && COURSES[cfg.activeCourse] && !isCourseArchived(cfg.activeCourse)) return cfg.activeCourse;
   const ids = Object.keys(COURSES);
-  return ids.length > 0 ? ids[0] : null;
+  const firstActive = ids.find(function (cid) {
+    return !isCourseArchived(cid);
+  });
+  return firstActive || (ids.length > 0 ? ids[0] : null);
 }
 function setActiveCourse(cid) {
   saveConfig({ ...getConfig(), activeCourse: cid });
+}
+
+function isCourseArchived(cid) {
+  return !!(cid && COURSES && COURSES[cid] && COURSES[cid].archived);
 }
 
 /* ── Flags ──────────────────────────────────────────────────── */
@@ -3741,9 +3994,24 @@ function isStudentFlagged(cid, sid) {
 }
 function toggleFlag(cid, sid) {
   const flags = getFlags(cid);
-  if (flags[sid]) delete flags[sid];
-  else flags[sid] = true;
+  var nextFlagged = !flags[sid];
+  if (nextFlagged) flags[sid] = true;
+  else delete flags[sid];
   saveFlags(cid, flags);
+  var summaries = getStudentProfileSummaries(cid);
+  if (summaries[sid]) {
+    summaries[sid].isFlagged = nextFlagged;
+    if (summaries[sid].enrollment) summaries[sid].enrollment.isFlagged = nextFlagged;
+    _persistLoadedField(cid, 'studentProfileSummaries', summaries);
+  }
+  if (_useSupabase && localStorage.getItem('gb-demo-mode') !== '1' && _isUuid(sid)) {
+    _setEchoGuard('student-records', cid);
+    return window.setEnrollmentFlag(sid, nextFlagged).then(function (res) {
+      if (res && res.error) console.warn('setEnrollmentFlag failed:', res.error);
+      return nextFlagged;
+    });
+  }
+  return Promise.resolve(nextFlagged);
 }
 
 /* ── Goals & Reflections Storage ───────────────────────────── */
@@ -4284,6 +4552,10 @@ window.v2.deleteRubric = function (id) {
    during Phase 4.5 learning-map composition work. */
 window.v2.getStudentProfile = function (enrollmentId) {
   return _rpcOrNoop('get_student_profile', { p_enrollment_id: enrollmentId });
+};
+
+window.v2.listCourseStudentProfiles = function (courseId) {
+  return _rpcOrNoop('list_course_student_profiles', { p_course_id: courseId });
 };
 
 /* Notes: immutable add + delete (per ERD). Note body cannot be edited;
@@ -4842,6 +5114,8 @@ window.GB = {
   getCategories,
   saveCategories,
   getCategoryById,
+  getAssessmentCategoryId,
+  getAssessmentCategoryName,
   getAssessments,
   saveAssessments,
   getOverrides,
@@ -4885,6 +5159,8 @@ window.GB = {
   upsertTermRating,
   getReportConfig,
   saveReportConfig,
+  getStudentProfileSummaries,
+  loadStudentProfileSummaries,
   getCardWidgetConfig,
   saveCardWidgetConfig,
   clearCardWidgetConfig,

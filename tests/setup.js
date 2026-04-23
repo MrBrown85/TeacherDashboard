@@ -145,6 +145,16 @@ load('shared/constants.js');
 load('shared/data.js');
 load('shared/calc.js');
 load('teacher/ui.js');
+load('teacher/report-blocks.js');
+load('teacher/report-questionnaire.js');
+load('teacher/report-builder-ui.js');
+load('teacher/report-preview.js');
+load('teacher/dash-class-manager.js');
+load('teacher/dash-overview.js');
+load('teacher/dash-student-cards.js');
+load('teacher/assign-collab.js');
+load('teacher/student-notes.js');
+load('teacher/student-overrides.js');
 load('teacher/router.js');
 
 // Restore real setTimeout after loading (tests may need it)

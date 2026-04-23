@@ -240,9 +240,9 @@ describe('Trend display (string comparison fix)', () => {
   });
 });
 
-/* ── Evidence count (summative only) ────────────────────────── */
+/* ── Evidence count ─────────────────────────────────────────── */
 describe('Evidence count filtering', () => {
-  it('only counts summative scores as evidence', () => {
+  it('shows all scored evidence in the timeline', () => {
     const sec = {
       id: 's1', name: 'Test', shortName: 'Test', color: '#888',
       tags: [{ id: 't1', label: 'Tag 1' }],
@@ -260,11 +260,10 @@ describe('Evidence count filtering', () => {
       getTagProficiency: () => 3.0,
     });
     const html = MStudents.renderDetail(CID, 'stu1');
-    // Timeline should only show the summative score (score=3), not formatives
+    // Timeline should show every scored evidence entry.
     expect(html).toContain('m-sec-tl-dot');
-    // Only 1 timeline item (the summative), not 3
     var dotCount = (html.match(/m-sec-tl-dot/g) || []).length;
-    expect(dotCount).toBe(1);
+    expect(dotCount).toBe(3);
   });
 });
 
@@ -499,7 +498,7 @@ describe('Student detail with multiple sections', () => {
     const html = MStudents.renderDetail(CID, 'stu1');
     // Section detail now shows timeline (not per-tag rows) — with no scores, shows empty state
     expect(html).toContain('m-sec-empty');
-    expect(html).toContain('No summative scores yet');
+    expect(html).toContain('No evidence scored yet');
   });
 });
 

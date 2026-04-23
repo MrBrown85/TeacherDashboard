@@ -1,6 +1,6 @@
 # Design Decisions — Final
 
-All 49 answers from `decisions.html`, with implementation notes showing how each lands in the design docs. Generated from the questionnaire export on 2026-04-19.
+All 49 answers from the original questionnaire export, with implementation notes showing how each lands in the design docs. Generated on 2026-04-19.
 
 Answers that diverge from my recommendation are **highlighted**. Answers that matched my rec are recorded as-is.
 

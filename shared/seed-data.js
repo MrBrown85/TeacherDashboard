@@ -39,6 +39,33 @@ function seedIfNeeded() {
 
 
   const STIDS  = SHARED_ROSTER.map(s => s.id);
+  const SCI8_CATEGORIES = [
+    { id: 'sci8-cat-labs', name: 'Labs & Investigations', weight: 40, displayOrder: 0 },
+    { id: 'sci8-cat-projects', name: 'Projects & Communication', weight: 35, displayOrder: 1 },
+    { id: 'sci8-cat-checks', name: 'Quizzes & Checks', weight: 25, displayOrder: 2 }
+  ];
+  const SCI8_CATEGORY_IDS = SCI8_CATEGORIES.reduce((acc, category) => {
+    acc[category.id] = category.id;
+    return acc;
+  }, {});
+
+  function getSci8CategoryId(assessment) {
+    if (!assessment) return null;
+    if (assessment.scoreMode === 'points' || assessment.evidenceType === 'quiz') return SCI8_CATEGORY_IDS['sci8-cat-checks'];
+    if (assessment.evidenceType === 'lab' || assessment.evidenceType === 'observation') return SCI8_CATEGORY_IDS['sci8-cat-labs'];
+    return SCI8_CATEGORY_IDS['sci8-cat-projects'];
+  }
+
+  function normalizeSci8Assessments(assessments) {
+    return (assessments || []).map(assessment => {
+      const out = Object.assign({}, assessment);
+      const categoryId = getSci8CategoryId(out);
+      out.categoryId = categoryId;
+      out.category_id = categoryId;
+      delete out.type;
+      return out;
+    });
+  }
 
   /* helper: build score entries from a compact map */
   function buildScores(studentIds, assessments, scoreMap) {
@@ -51,7 +78,11 @@ function seedIfNeeded() {
         (a.tagIds||[]).forEach(tagId => {
           sc[sid].push({
             id: uid(), assessmentId: a.id, tagId, score: baseScore,
-            date: a.date, type: a.type, note: '', created: a.created
+            date: a.date,
+            categoryId: a.categoryId || a.category_id || null,
+            category_id: a.categoryId || a.category_id || null,
+            note: '',
+            created: a.created
           });
         });
       });
@@ -91,6 +122,7 @@ function seedIfNeeded() {
     if (LEARNING_MAP && LEARNING_MAP.sci8) {
       saveLearningMap('sci8', structuredClone(LEARNING_MAP.sci8));
     }
+    saveCategories('sci8', structuredClone(SCI8_CATEGORIES));
 
     const sci8Assessments = [
       { id:'sci8a1',  title:'Cell Microscope Lab',              date:'2025-10-03', type:'summative',  tagIds:['QAP','PI','IP','EM','CA','SC'],      evidenceType:'lab',         notes:'Prepared and examined onion and cheek cells under 400x magnification.', coreCompetencyIds:['CRT','COM'],     rubricId:'rub_sci8_lab', created: new Date('2025-10-03').toISOString() },
@@ -137,7 +169,8 @@ function seedIfNeeded() {
       { id:'sci8t4', title:'Ecology & Environment Unit Test', date:'2026-02-04', type:'summative', tagIds:['IP','CA'],      evidenceType:'written', notes:'', coreCompetencyIds:['CRT'], scoreMode:'points', maxPoints:60, created: new Date('2026-02-04').toISOString() },
       { id:'sci8t5', title:'Mid-Year Comprehensive Exam',     date:'2026-03-04', type:'summative', tagIds:['QAP','IP','EM'],evidenceType:'written', notes:'', coreCompetencyIds:['CRT'], scoreMode:'points', maxPoints:80, created: new Date('2026-03-04').toISOString() }
     );
-    saveAssessments('sci8', sci8Assessments);
+    const sci8SeedAssessments = normalizeSci8Assessments(sci8Assessments);
+    saveAssessments('sci8', sci8SeedAssessments);
 
     /* ── Science 8 Rubrics ── */
     const sci8Rubrics = [
@@ -499,7 +532,7 @@ function seedIfNeeded() {
       sci8t4:  [49,57,37,50,50,31,43,51,58,49,44,30,56,48,33,31,44,28,49,47, 50,0,56,43,50,0,47],
       sci8t5:  [65,76,53,67,67,42,57,68,77,65,59,0,75,64,44,42,58,0,65,62, 66,53,75,56,67,0,62]
     };
-    saveScores('sci8', buildScores(STIDS, sci8Assessments, sci8ScoreMap));
+    saveScores('sci8', buildScores(STIDS, sci8SeedAssessments, sci8ScoreMap));
 
     // Score-level notes (assignment-level comments)
     const sci8ScoreNotes = getScores('sci8');

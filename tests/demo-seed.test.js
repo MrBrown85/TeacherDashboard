@@ -95,6 +95,15 @@ describe('buildDemoSeedPayload', () => {
     });
   });
 
+  it('emits category-first assessments with real evidence types', () => {
+    var categoryIds = new Set(payload._categories_preview.map(function (c) { return c.id; }));
+    payload.assessments.forEach(function (assessment) {
+      expect(categoryIds.has(assessment.category_id)).toBe(true);
+      expect(assessment.evidence_type).toBeTruthy();
+      expect(Object.prototype.hasOwnProperty.call(assessment, 'type')).toBe(false);
+    });
+  });
+
   it('generates a default courseId when none is supplied', () => {
     var pl = window.buildDemoSeedPayload();
     var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

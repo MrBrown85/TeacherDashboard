@@ -329,11 +329,7 @@ test.describe('Mobile: Dashboard Content', () => {
     });
   });
 
-  // BUG: Dashboard #main renders empty at mobile viewport (375px).
-  // The page-dashboard module sets class "page-dashboard" on #main but
-  // produces no innerHTML. Works fine at desktop width.
   test('dashboard should render student content at 375px', async ({ page }) => {
-    test.fail(); // known bug: dashboard renders empty at mobile
     await page.setViewportSize(MOBILE);
     await gotoApp(page, '/dashboard');
     await waitForMainContent(page);
@@ -555,9 +551,7 @@ test.describe('Mobile: Page Rendering', () => {
     });
   });
 
-  // BUG: Dashboard renders empty #main at mobile viewport
   test('Dashboard should render content at 375px', async ({ page }) => {
-    test.fail(); // known bug: dashboard empty at mobile
     await page.setViewportSize(MOBILE);
     await gotoApp(page, '/dashboard');
     await waitForMainContent(page);

@@ -10,6 +10,8 @@ window.PageReports = (function () {
   }
 
   var _beforeUnloadHandler = null;
+  var Builder = ReportBuilderUI;
+  var Preview = ReportPreview;
 
   /* ══════════════════════════════════════════════════════════════
    REPORTS PAGE — Logic
@@ -21,89 +23,6 @@ window.PageReports = (function () {
   /* ══════════════════════════════════════════════════════════════
    REPORT BUILDER — Config, presets, persistence
    ══════════════════════════════════════════════════════════════ */
-  const DEFAULT_BLOCKS = [
-    // Identity
-    { id: 'header', label: 'Header', enabled: true, locked: true },
-    // Academic
-    { id: 'academic-summary', label: 'Academic Summary', enabled: true, locked: false },
-    { id: 'teacher-narrative', label: 'Teacher Comment', enabled: true, locked: false },
-    { id: 'section-chart', label: 'Section Proficiency Chart', enabled: false, locked: false },
-    { id: 'grade-table', label: 'Assignment Grades', enabled: false, locked: false },
-    { id: 'score-distribution', label: 'Score Distribution', enabled: false, locked: false },
-    { id: 'section-outcomes', label: 'Learning Outcomes', enabled: false, locked: false },
-    { id: 'core-competencies', label: 'Core Competencies', enabled: false, locked: false },
-    // Profile & narrative
-    { id: 'learner-dimensions', label: 'Disposition Dimensions', enabled: false, locked: false },
-    // Student voice
-    { id: 'student-reflection-learning', label: 'Student Reflection: My Learning', enabled: false, locked: false },
-    { id: 'student-reflection-habits', label: 'Student Reflection: My Habits', enabled: false, locked: false },
-    // Evidence
-    { id: 'observations', label: 'Observations & Evidence', enabled: false, locked: false },
-    // Growth
-    { id: 'next-steps', label: 'Growth & Next Steps', enabled: false, locked: false },
-    // Reference
-    { id: 'legend', label: 'Proficiency Legend', enabled: false, locked: false },
-    // Parent
-    { id: 'parent-response', label: 'Parent / Guardian Response', enabled: false, locked: false },
-  ];
-
-  const REPORT_PRESETS = {
-    brief: ['header', 'academic-summary', 'teacher-narrative'],
-    standard: ['header', 'academic-summary', 'teacher-narrative', 'section-chart', 'learner-dimensions', 'next-steps'],
-    detailed: [
-      'header',
-      'academic-summary',
-      'teacher-narrative',
-      'section-chart',
-      'score-distribution',
-      'grade-table',
-      'section-outcomes',
-      'core-competencies',
-      'learner-dimensions',
-      'student-reflection-learning',
-      'student-reflection-habits',
-      'observations',
-      'next-steps',
-      'legend',
-      'parent-response',
-    ],
-  };
-
-  // getReportConfig / saveReportConfig are now in gb-data.js
-  // Wrap getReportConfig to validate/migrate blocks against DEFAULT_BLOCKS
-  function getReportConfigWrapped(cid) {
-    const parsed = typeof getReportConfig === 'function' ? getReportConfig(cid) : {};
-    if (parsed && parsed.blocks) {
-      const validIds = new Set(DEFAULT_BLOCKS.map(b => b.id));
-      parsed.blocks = parsed.blocks.filter(b => validIds.has(b.id));
-      parsed.blocks.forEach(b => {
-        const db = DEFAULT_BLOCKS.find(d => d.id === b.id);
-        if (db) b.label = db.label;
-      });
-      DEFAULT_BLOCKS.forEach(db => {
-        if (!parsed.blocks.find(b => b.id === db.id)) {
-          parsed.blocks.push({ ...db });
-        }
-      });
-      return parsed;
-    }
-    // Default to standard preset
-    const blocks = DEFAULT_BLOCKS.map(b => ({ ...b }));
-    const std = REPORT_PRESETS.standard;
-    blocks.forEach(b => {
-      b.enabled = std.includes(b.id);
-    });
-    const ordered = [];
-    std.forEach(id => {
-      const b = blocks.find(x => x.id === id);
-      if (b) ordered.push(b);
-    });
-    blocks.forEach(b => {
-      if (!std.includes(b.id)) ordered.push(b);
-    });
-    return { preset: 'standard', blocks: ordered };
-  }
-
   var reportConfig = null;
 
   /* ── Block renderers + helpers now in report-blocks.js ────── */
@@ -112,69 +31,10 @@ window.PageReports = (function () {
   var getTermId = ReportBlocks.getTermId;
   var renderReportBlock = ReportBlocks.renderReportBlock;
 
-  /* ── Remaining local references (used by renderStudentReport + class summary) ── */
-  /* ── Render a single student progress report ─────────────────── */
-  function renderStudentReport(cid, student) {
-    let html = `<div class="report-student">`;
-    reportConfig.blocks.forEach(b => {
-      if (b.enabled) html += renderReportBlock(b.id, cid, student);
-    });
-    html += `</div>`;
-    return html;
-  }
-
   /* ── Class Summary ───────────────────────────────────────────── */
   var classSummaryAnon = false;
   var tqIncludeAssignFeedback = true;
   var tqObsFilter = 'all'; // 'all'|'general'|'assignment'
-
-  function renderClassSummary(cid) {
-    const course = COURSES[cid];
-    const sections = getSections(cid);
-    let students = sortStudents(getStudents(cid), 'lastName');
-    if (classSummaryAnon) students = anonymizeStudents(students);
-    const isLetter = courseShowsLetterGrades(course);
-
-    let html = `<h2 style="font-family:var(--font-base);font-size:1.3rem;margin-bottom:12px">${esc(course.name)} &mdash; Class Summary</h2>`;
-    html += `<table class="class-summary-table">
-    <thead><tr>
-      <th scope="col">Student</th>`;
-
-    sections.forEach(sec => {
-      html += `<th scope="col">${esc(sec.shortName || sec.name)}</th>`;
-    });
-
-    html += `<th scope="col">Overall</th>`;
-    if (isLetter) html += `<th scope="col">Letter Grade</th>`;
-    html += `</tr></thead><tbody>`;
-
-    students.forEach(st => {
-      const nameDisplay = classSummaryAnon
-        ? esc(st._anonLabel)
-        : `<a href="#" data-action="summaryStudentClick" data-sid="${st.id}" style="color:inherit;text-decoration:none">${esc(fullName(st))}</a>`;
-      html += `<tr><td class="class-summary-name">${nameDisplay}</td>`;
-      sections.forEach(sec => {
-        const sp = getSectionProficiency(cid, st.id, sec.id);
-        const sr = Math.round(sp);
-        const slabel = sp > 0 ? PROF_LABELS[sr] : '—';
-        const scolor = sp > 0 ? PROF_COLORS[sr] : 'var(--text-3)';
-        html += `<td data-prof="${sr}" style="color:${scolor};font-weight:600">${slabel}</td>`;
-      });
-      const op = getOverallProficiency(cid, st.id);
-      const or2 = Math.round(op);
-      const olabel = op > 0 ? PROF_LABELS[or2] : '—';
-      const ocolor = op > 0 ? PROF_COLORS[or2] : 'var(--text-3)';
-      html += `<td data-prof="${or2}" style="color:${ocolor};font-weight:700">${olabel}</td>`;
-      if (isLetter) {
-        const letterData = getCourseLetterData(cid, st.id);
-        html += `<td style="font-weight:700">${letterData && letterData.S ? letterData.S + ' (' + letterData.R + '%)' : '—'}</td>`;
-      }
-      html += `</tr>`;
-    });
-
-    html += `</tbody></table>`;
-    return html;
-  }
 
   /* ── Tab switching ───────────────────────────────────────────── */
   function switchTab(tab) {
@@ -323,7 +183,7 @@ window.PageReports = (function () {
 
     if (activeTab === 'summary') {
       _syncLongFormAuthContext();
-      output.innerHTML = renderClassSummary(cid);
+      output.innerHTML = Preview.renderClassSummary(cid, classSummaryAnon);
       return;
     }
 
@@ -344,21 +204,7 @@ window.PageReports = (function () {
     _syncLongFormAuthContext();
 
     // Progress reports — render two-panel builder layout
-    const presetBtns = ['brief', 'standard', 'detailed']
-      .map(
-        p =>
-          `<button class="rb-preset-btn${reportConfig.preset === p ? ' active' : ''}" data-preset="${p}" data-action="rbApplyPreset">${p.charAt(0).toUpperCase() + p.slice(1)}</button>`,
-      )
-      .join('');
-
-    output.innerHTML = `<div class="rb-layout">
-    <aside class="rb-panel no-print" id="rb-panel">
-      <div class="rb-panel-header"><div class="rb-panel-title">Report Builder</div></div>
-      <div class="rb-presets">${presetBtns}</div>
-      <div class="rb-blocks" id="rb-blocks"></div>
-    </aside>
-    <div class="rb-preview" id="rb-preview"></div>
-  </div>`;
+    output.innerHTML = Builder.renderLayout(reportConfig);
 
     renderBuilderBlocks();
     renderReportPreview();
@@ -379,201 +225,54 @@ window.PageReports = (function () {
    REPORT BUILDER — Interaction functions
    ══════════════════════════════════════════════════════════════ */
   function renderReportPreview() {
-    const preview = document.getElementById('rb-preview');
-    if (!preview) return;
-    const cid = activeCourse;
-    const allStudents = sortStudents(getStudents(cid), 'lastName');
-    const students =
-      selectedStudentIds === null ? allStudents : allStudents.filter(s => selectedStudentIds.includes(s.id));
-    const allScoresObj = getScores(cid);
-    const hasAnyScores = Object.values(allScoresObj).some(arr => Array.isArray(arr) && arr.some(s => s.score > 0));
-    if (!hasAnyScores) {
-      preview.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📄</div><div class="empty-state-title">No report data yet</div><div class="empty-state-text">Score some assignments to generate progress reports.</div></div>`;
-    } else if (students.length === 0) {
-      preview.innerHTML =
-        '<div style="text-align:center;color:var(--text-3);padding:40px 0;font-size:0.95rem">Select students above to generate reports.</div>';
-    } else {
-      preview.innerHTML = students.map(st => renderStudentReport(cid, st)).join('');
-    }
+    Preview.renderReportPreview({
+      cid: activeCourse,
+      selectedStudentIds: selectedStudentIds,
+      reportConfig: reportConfig,
+    });
   }
 
   function renderBuilderBlocks() {
     const container = document.getElementById('rb-blocks');
     if (!container) return;
-    let html = '';
-    reportConfig.blocks.forEach((block, idx) => {
-      const enabledClass = block.enabled ? ' enabled' : '';
-      const lockedClass = block.locked ? ' locked' : '';
-      html += `<div class="rb-block${enabledClass}${lockedClass}" data-idx="${idx}">
-      <span class="rb-drag-grip"${block.locked ? '' : ' data-drag="grip"'}>${block.locked ? '🔒' : '⠿'}</span>
-      ${
-        block.locked
-          ? `<span class="rb-block-label">${esc(block.label)}</span>`
-          : `<label class="rb-block-toggle" data-action="rbToggleBlock" data-blockid="${block.id}"><div class="rb-block-switch"></div></label>
-           <span class="rb-block-label">${esc(block.label)}</span>`
-      }
-    </div>`;
-    });
-    container.innerHTML = html;
-    _initPointerDrag(container);
-  }
-
-  function rbToggleBlock(blockId) {
-    const block = reportConfig.blocks.find(b => b.id === blockId);
-    if (!block || block.locked) return;
-    block.enabled = !block.enabled;
-    reportConfig.preset = 'custom';
-    saveReportConfig(activeCourse, reportConfig);
-    renderBuilderBlocks();
-    renderReportPreview();
-    rbUpdatePresetBtns();
-  }
-
-  function rbApplyPreset(preset) {
-    const order = REPORT_PRESETS[preset];
-    if (!order) return;
-    const ordered = [];
-    const remaining = [];
-    order.forEach(id => {
-      const b = reportConfig.blocks.find(x => x.id === id);
-      if (b) {
-        b.enabled = true;
-        ordered.push(b);
-      }
-    });
-    reportConfig.blocks.forEach(b => {
-      if (!order.includes(b.id)) {
-        b.enabled = false;
-        remaining.push(b);
-      }
-    });
-    reportConfig.blocks = [...ordered, ...remaining];
-    reportConfig.preset = preset;
-    saveReportConfig(activeCourse, reportConfig);
-    renderBuilderBlocks();
-    renderReportPreview();
-    rbUpdatePresetBtns();
-  }
-
-  function rbUpdatePresetBtns() {
-    document.querySelectorAll('.rb-preset-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.preset === reportConfig.preset);
-    });
-  }
-
-  /* ── Pointer-based drag-and-drop reorder ── */
-  var _rbDragIdx = null;
-  var _dragAbort = null;
-
-  function _initPointerDrag(container) {
-    if (!container) return;
-    // Remove previous listeners to prevent accumulation
-    if (_dragAbort) _dragAbort.abort();
-    _dragAbort = new AbortController();
-    var signal = _dragAbort.signal;
-    var dragEl = null;
-    var placeholder = null;
-    var offsetY = 0;
-    var startIdx = -1;
-    var blockHeight = 0;
-
-    container.addEventListener(
-      'pointerdown',
-      function (e) {
-        var grip = e.target.closest('[data-drag="grip"]');
-        if (!grip) return;
-        var block = grip.closest('.rb-block');
-        if (!block) return;
-        startIdx = parseInt(block.dataset.idx, 10);
-        if (isNaN(startIdx)) return;
-        // Prevent text selection and default drag
-        e.preventDefault();
-        grip.setPointerCapture(e.pointerId);
-        var rect = block.getBoundingClientRect();
-        offsetY = e.clientY - rect.top;
-        dragEl = block;
-        blockHeight = block.offsetHeight + 1; // +1 for margin
-        // Create placeholder
-        placeholder = document.createElement('div');
-        placeholder.className = 'rb-block-placeholder';
-        placeholder.style.height = blockHeight + 'px';
-        // Style the dragged element
-        block.classList.add('dragging');
-        block.style.position = 'fixed';
-        block.style.top = rect.top + 'px';
-        block.style.left = rect.left + 'px';
-        block.style.width = rect.width + 'px';
-        block.style.zIndex = '1000';
-        block.style.pointerEvents = 'none';
-        block.parentNode.insertBefore(placeholder, block);
-      },
-      { signal },
-    );
-
-    container.addEventListener(
-      'pointermove',
-      function (e) {
-        if (!dragEl) return;
-        e.preventDefault();
-        dragEl.style.top = e.clientY - offsetY + 'px';
-        // Determine target position
-        var blocks = Array.from(container.querySelectorAll('.rb-block:not(.dragging)'));
-        for (var i = 0; i < blocks.length; i++) {
-          var br = blocks[i].getBoundingClientRect();
-          var mid = br.top + br.height / 2;
-          if (e.clientY < mid) {
-            // Don't insert before locked header
-            if (blocks[i].classList.contains('locked')) continue;
-            container.insertBefore(placeholder, blocks[i]);
-            return;
-          }
-        }
-        // Past all blocks — append at end
-        container.appendChild(placeholder);
-      },
-      { signal },
-    );
-
-    function finishDrag(e) {
-      if (!dragEl) return;
-      // Find where placeholder ended up (exclude dragging element and placeholder itself)
-      var allItems = Array.from(container.children).filter(function (c) {
-        return c !== dragEl;
-      });
-      var targetIdx = allItems.indexOf(placeholder);
-      // Clean up
-      dragEl.classList.remove('dragging');
-      dragEl.style.position = '';
-      dragEl.style.top = '';
-      dragEl.style.left = '';
-      dragEl.style.width = '';
-      dragEl.style.zIndex = '';
-      dragEl.style.pointerEvents = '';
-      if (placeholder.parentNode) placeholder.parentNode.removeChild(placeholder);
-      dragEl = null;
-      placeholder = null;
-      // Apply the reorder if position changed
-      if (targetIdx >= 0 && targetIdx !== startIdx) {
+    container.innerHTML = Builder.renderBuilderBlocks(reportConfig);
+    Builder.initPointerDrag(container, {
+      onReorder: function(startIdx, finalIdx) {
         var moved = reportConfig.blocks.splice(startIdx, 1)[0];
-        var insertAt = startIdx < targetIdx ? targetIdx - 1 : targetIdx;
-        var finalIdx = Math.max(1, insertAt); // Don't insert before locked header
         reportConfig.blocks.splice(finalIdx, 0, moved);
         reportConfig.preset = 'custom';
         saveReportConfig(activeCourse, reportConfig);
         renderBuilderBlocks();
         renderReportPreview();
-        rbUpdatePresetBtns();
-      } else {
-        // Reset position without re-render
+        Builder.updatePresetBtns(reportConfig);
+      },
+      onCancel: function() {
         renderBuilderBlocks();
       }
-      startIdx = -1;
-    }
-
-    container.addEventListener('pointerup', finishDrag, { signal });
-    container.addEventListener('pointercancel', finishDrag, { signal });
+    });
   }
 
+  function rbToggleBlock(blockId) {
+    Builder.toggleBlock(reportConfig, blockId);
+    saveReportConfig(activeCourse, reportConfig);
+    renderBuilderBlocks();
+    renderReportPreview();
+    Builder.updatePresetBtns(reportConfig);
+  }
+
+  function rbApplyPreset(preset) {
+    Builder.applyPreset(reportConfig, preset);
+    saveReportConfig(activeCourse, reportConfig);
+    renderBuilderBlocks();
+    renderReportPreview();
+    Builder.updatePresetBtns(reportConfig);
+  }
+
+  function rbUpdatePresetBtns() {
+    Builder.updatePresetBtns(reportConfig);
+  }
+
+  /* ── Pointer-based drag-and-drop reorder ── */
   // Legacy stubs (no longer used but kept for safety in case inline attrs remain)
   function rbDragStart() {}
   function rbDragEnd() {}
@@ -587,7 +286,7 @@ window.PageReports = (function () {
     setActiveCourse(cid);
     await initData(cid);
     selectedStudentIds = null; // reset to all
-    reportConfig = getReportConfigWrapped(cid);
+    reportConfig = Builder.getReportConfigWrapped(cid);
     _configureQuestionnaire();
     populateStudentSelect();
     renderReports();
@@ -819,7 +518,7 @@ window.PageReports = (function () {
     tqIncludeAssignFeedback = true;
     tqObsFilter = 'all';
 
-    reportConfig = getReportConfigWrapped(activeCourse);
+    reportConfig = Builder.getReportConfigWrapped(activeCourse);
     _configureQuestionnaire();
     RQ.tqStudentIndex = 0;
     RQ.tqNarrativeDirty = false;

@@ -341,4 +341,4 @@ Keyframes defined: `toast-in`, `fade-in`, `slide-up`, `obsSlideIn`.
 
 The design system is **mature, cohesive, and Apple HIG-aligned.** The rebuild does not touch visual language. New UI (Category management, rubric weights + level values, `grading_system` toggle, offline badge + banner, Welcome Class banner, session-expired draft-preservation modal) **must use existing tokens and component patterns.** Do not introduce new component styles when an existing one fits.
 
-Design questions that remain open are strictly about **how the new elements slot into the existing system**, not about the system itself. See `INSTRUCTIONS.md` §12 for the final content strings and placement, and `TASKS.md` for the Claude Code implementation queue.
+Design questions that remain open are strictly about **how the new elements slot into the existing system**, not about the system itself. See `INSTRUCTIONS.md` §12 for the final content strings and placement, and `codex.md` for the live implementation queue.

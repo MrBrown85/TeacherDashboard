@@ -470,7 +470,7 @@ function renderStudentHeader(cid, sid, opts) {
   // Completion stats
   const coveredTags = allTags.filter(t => {
     const sc = getTagScores(cid, sid, t.id);
-    return sc.some(s => s.type === 'summative' && s.score > 0);
+    return sc.some(s => s.score > 0);
   }).length;
   const scoredAssessments = new Set();
   const allScores = getScores(cid)[sid] || [];

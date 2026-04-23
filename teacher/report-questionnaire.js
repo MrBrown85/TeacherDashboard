@@ -305,7 +305,13 @@ window.ReportQuestionnaire = (function () {
         const aScores = studentScores.filter(sc => sc.assessmentId === aId && sc.score > 0);
         const avg = aScores.length > 0 ? aScores.reduce((sum, sc) => sum + sc.score, 0) / aScores.length : 0;
         const r = Math.round(avg);
-        return { title: a.title, avg, r, level: (PROF_LABELS[r] || '').toLowerCase(), type: a.type || 'summative' };
+        return {
+          title: a.title,
+          avg,
+          r,
+          level: (PROF_LABELS[r] || '').toLowerCase(),
+          categoryLabel: getAssessmentCategoryName(cid, a),
+        };
       })
       .filter(Boolean);
     const strongAssign = mentionedAssignments.filter(m => m.r >= 3);
@@ -1138,7 +1144,14 @@ window.ReportQuestionnaire = (function () {
       .map(a => {
         const aScores = studentScores.filter(s => s.assessmentId === a.id && s.score > 0);
         const avg = aScores.length > 0 ? aScores.reduce((sum, s) => sum + s.score, 0) / aScores.length : 0;
-        return { id: a.id, title: a.title, date: a.date, type: a.type || 'summative', avg, count: aScores.length };
+        return {
+          id: a.id,
+          title: a.title,
+          date: a.date,
+          categoryLabel: getAssessmentCategoryName(cid, a),
+          avg,
+          count: aScores.length,
+        };
       })
       .filter(a => a.count > 0)
       .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
@@ -1347,7 +1360,7 @@ window.ReportQuestionnaire = (function () {
         html += `<div class="tq-assignment-row${selected ? ' selected' : ''}" data-action="tqToggleAssignment" data-sid="${sid}" data-aid="${a.id}">
         <span class="tq-tag-check">${selected ? '✓' : ''}</span>
         <span class="tq-assignment-title">${esc(a.title)}</span>
-        <span class="tq-assignment-type">${a.type === 'formative' ? 'Form' : 'Sum'}</span>
+        <span class="tq-assignment-type">${esc(a.categoryLabel)}</span>
         <span class="tq-assignment-score" style="color:${PROF_COLORS[r] || 'var(--text-3)'}">${PROF_LABELS[r]}</span>
       </div>`;
       });

@@ -157,30 +157,30 @@ window.MCardWidgets = (function() {
 
   /* ── growth (journey pill) ────────────────────────────────────── */
   _renderers.growth = function(st, cid, data) {
-    var allSummScores = [];
+    var allEvidenceScores = [];
     var sections = data.sections || [];
     sections.forEach(function(sec) {
       (sec.tags || []).forEach(function(tag) {
         getTagScores(cid, st.id, tag.id).forEach(function(s) {
-          if (s.type === 'summative' && s.score > 0) allSummScores.push(s);
+          if (s.score > 0) allEvidenceScores.push(s);
         });
       });
     });
 
-    if (!allSummScores.length) return '';
+    if (!allEvidenceScores.length) return '';
 
-    allSummScores.sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); });
+    allEvidenceScores.sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); });
 
-    if (allSummScores.length === 1) {
-      var onlyScore = allSummScores[0].score;
+    if (allEvidenceScores.length === 1) {
+      var onlyScore = allEvidenceScores[0].score;
       return '<div class="m-wdg-growth">' +
         '<span class="m-wdg-growth-label">' + (PROF_LABELS[onlyScore] || 'No Evidence') + '</span>' +
         '<span class="m-wdg-growth-meta"> \u2014 1 assessment</span>' +
       '</div>';
     }
 
-    var firstScore = allSummScores[0].score;
-    var lastScore = allSummScores[allSummScores.length - 1].score;
+    var firstScore = allEvidenceScores[0].score;
+    var lastScore = allEvidenceScores[allEvidenceScores.length - 1].score;
     var arrowColor, arrowChar;
     if (lastScore > firstScore) {
       arrowColor = 'var(--score-3)';
@@ -197,7 +197,7 @@ window.MCardWidgets = (function() {
       '<span class="m-wdg-growth-label">' + (PROF_LABELS[firstScore] || 'No Evidence') + '</span>' +
       '<span class="m-wdg-growth-arrow" style="color:' + arrowColor + '">' + arrowChar + '</span>' +
       '<span class="m-wdg-growth-label">' + (PROF_LABELS[lastScore] || 'No Evidence') + '</span>' +
-      '<span class="m-wdg-growth-meta"> (' + allSummScores.length + ' assessments)</span>' +
+      '<span class="m-wdg-growth-meta"> (' + allEvidenceScores.length + ' assessments)</span>' +
     '</div>';
   };
 

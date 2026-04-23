@@ -131,7 +131,7 @@ describe('getSectionTrend', () => {
 
 /* ── getSectionEvidenceCount ──────────────────────────────── */
 describe('getSectionEvidenceCount', () => {
-  it('counts summative scores across all tags', () => {
+  it('counts scored evidence across all tags', () => {
     mockDataLayer({
       getSections: () => [{ id: 'sec1', tags: [{ id: 't1' }, { id: 't2' }] }],
       getScores: () => ({
@@ -149,8 +149,7 @@ describe('getSectionEvidenceCount', () => {
         { id: 'a4', type: 'formative', weight: 1 },
       ],
     });
-    // 3 summative entries (formative excluded)
-    expect(getSectionEvidenceCount('test', 'stu1', 'sec1')).toBe(3);
+    expect(getSectionEvidenceCount('test', 'stu1', 'sec1')).toBe(4);
   });
 
   it('returns 0 for unknown section', () => {
@@ -246,7 +245,7 @@ describe('getFocusAreas', () => {
 
 /* ── getCompletionPct ─────────────────────────────────────── */
 describe('getCompletionPct', () => {
-  it('returns percentage of tags with summative evidence', () => {
+  it('returns percentage of tags with scored evidence', () => {
     mockDataLayer({
       getSections: () => [
         { id: 'sec1', tags: [{ id: 't1' }, { id: 't2' }, { id: 't3' }, { id: 't4' }] },
@@ -297,7 +296,7 @@ describe('getCompletionPct', () => {
     expect(getCompletionPct('test', 'stu1')).toBe(0);
   });
 
-  it('excludes formative-only evidence', () => {
+  it('counts uncategorized or formative-only evidence when it is scored', () => {
     mockDataLayer({
       getSections: () => [{ id: 'sec1', tags: [{ id: 't1' }] }],
       getAllTags: () => [{ id: 't1' }],
@@ -306,7 +305,7 @@ describe('getCompletionPct', () => {
       }),
       getAssessments: () => [{ id: 'a1', type: 'formative', weight: 1 }],
     });
-    expect(getCompletionPct('test', 'stu1')).toBe(0);
+    expect(getCompletionPct('test', 'stu1')).toBe(100);
   });
 });
 
@@ -351,7 +350,7 @@ describe('getSectionGrowthData', () => {
     expect(getSectionGrowthData('test', 'stu1', 'sec1')).toEqual([]);
   });
 
-  it('excludes formative scores from growth data', () => {
+  it('includes scored evidence even when it comes from uncategorized or formative compatibility data', () => {
     mockDataLayer({
       getSections: () => [{ id: 'sec1', tags: [{ id: 't1' }] }],
       getScores: () => ({
@@ -362,6 +361,6 @@ describe('getSectionGrowthData', () => {
       getAssessments: () => [{ id: 'a1', type: 'formative', weight: 1 }],
       getCourseConfig: () => ({ calcMethod: 'mostRecent', decayWeight: 0.65 }),
     });
-    expect(getSectionGrowthData('test', 'stu1', 'sec1')).toEqual([]);
+    expect(getSectionGrowthData('test', 'stu1', 'sec1')).toEqual([{ date: '2025-01-01', prof: 3 }]);
   });
 });

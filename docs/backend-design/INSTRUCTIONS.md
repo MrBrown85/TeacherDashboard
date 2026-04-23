@@ -1,8 +1,8 @@
 # FullVision Backend Rebuild — Implementation Instructions
 
-Authoritative design-level instruction set for the FullVision v2 rebuild. Derived from 49 finalized decisions (see `DECISIONS.md` for the answer-by-answer log). This document remains the source of truth for scope, content strings, and UX intent, while current operational state lives in `HANDOFF.md` and the backlog plans.
+Authoritative design-level instruction set for the FullVision v2 rebuild. Derived from 49 finalized decisions (see `DECISIONS.md` for the answer-by-answer log). This document remains the source of truth for scope, content strings, and UX intent, while current operational state lives in `HANDOFF.md` and `codex.md`.
 
-If anything in this file contradicts the other design docs (`erd.md`, `write-paths.md`, `auth-lifecycle.md`, `read-paths.md`, `spec-vs-ui-diff.md`, `offline-sync.md`), **this file is the later decision and wins**.
+If anything in this file contradicts the other design docs (`erd.md`, `write-paths.md`, `auth-lifecycle.md`, `read-paths.md`, `offline-sync.md`), **this file is the later decision and wins**.
 
 ---
 
@@ -418,7 +418,6 @@ Keep both. Global semantic `--score-1..4` (red/orange/green/blue) stays on pills
 - **Write paths:** `docs/backend-design/write-paths.md`
 - **Auth/session:** `docs/backend-design/auth-lifecycle.md`
 - **Read paths + math:** `docs/backend-design/read-paths.md`
-- **Spec vs. UI reconciliation:** `docs/backend-design/spec-vs-ui-diff.md`
 - **Offline architecture:** `docs/backend-design/offline-sync.md`
 - **Answer-by-answer log:** `docs/backend-design/DECISIONS.md`
 - **This file:** `docs/backend-design/INSTRUCTIONS.md` (actionable summary)

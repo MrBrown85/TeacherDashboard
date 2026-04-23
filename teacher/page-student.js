@@ -15,6 +15,18 @@ window.PageStudent = (function() {
   var activeSectionFilters = new Set();
   var _expandedGroups = new Set();
   var _overrideSelectedLevel = 0;
+  var Notes = StudentNotes;
+  var Overrides = StudentOverrides;
+
+  function _assessmentCategoryLabel(cid, assessment) {
+    return getAssessmentCategoryName(cid, assessment);
+  }
+
+  function _assessmentCategoryBadge(cid, assessment) {
+    var label = _assessmentCategoryLabel(cid, assessment);
+    var hasCategory = !!(getAssessmentCategoryId(assessment) || (assessment && assessment.type === 'summative'));
+    return '<span class="type-badge ' + (hasCategory ? 'type-badge-s' : 'type-badge-f') + '">' + esc(label) + '</span>';
+  }
 
   /* ── switchCourse ───────────────────────────────────────── */
   async function switchCourse(cid) {
@@ -60,71 +72,34 @@ window.PageStudent = (function() {
 
   /* ── Override UI ─────────────────────────────────────────── */
   function toggleOverridePanel(secId) {
-    var panel = document.getElementById('override-panel-' + secId);
-    if (!panel) return;
-    document.querySelectorAll('.override-panel').forEach(function(p) {
-      if (p.id !== 'override-panel-' + secId) p.style.display = 'none';
+    Overrides.toggleOverridePanel({
+      activeCourse: activeCourse,
+      studentId: studentId,
+      secId: secId,
+      setSelectedLevel: function(level) { _overrideSelectedLevel = level; },
+      getSelectedLevel: function() { return _overrideSelectedLevel; },
     });
-    if (panel.style.display !== 'none') {
-      panel.style.display = 'none';
-      return;
-    }
-    var cid = activeCourse;
-    var sid = studentId;
-    var override = getSectionOverride(cid, sid, secId);
-    var rawProf = getSectionProficiencyRaw(cid, sid, secId);
-    var rawRounded = Math.round(rawProf);
-    _overrideSelectedLevel = override ? override.level : 0;
-
-    var html = '<div class="override-panel-header">' +
-      '<span class="override-panel-title">Override Proficiency</span>' +
-      '<button class="override-panel-close" data-action="closeOverridePanel" data-secid="' + secId + '">&times;</button>' +
-    '</div>' +
-    '<div class="override-calculated">Calculated: <strong>' + (rawProf > 0 ? rawProf.toFixed(1) : '—') + ' ' + (rawProf > 0 ? PROF_LABELS[rawRounded] : '') + '</strong></div>' +
-    '<div class="override-levels">' +
-      '<button class="override-level-btn' + (_overrideSelectedLevel === 4 ? ' selected' : '') + '" data-level="4" data-action="selectOverrideLevel" data-value="4">4 Extending</button>' +
-      '<button class="override-level-btn' + (_overrideSelectedLevel === 3 ? ' selected' : '') + '" data-level="3" data-action="selectOverrideLevel" data-value="3">3 Proficient</button>' +
-      '<button class="override-level-btn' + (_overrideSelectedLevel === 2 ? ' selected' : '') + '" data-level="2" data-action="selectOverrideLevel" data-value="2">2 Developing</button>' +
-      '<button class="override-level-btn' + (_overrideSelectedLevel === 1 ? ' selected' : '') + '" data-level="1" data-action="selectOverrideLevel" data-value="1">1 Emerging</button>' +
-    '</div>' +
-    '<label class="override-reason-label">Reason (required)</label>' +
-    '<textarea class="override-reason" id="override-reason-' + secId + '" placeholder="Professional judgment — what evidence supports this override?">' + (override ? esc(override.reason) : '') + '</textarea>' +
-    '<div class="override-actions">' +
-      (override ? '<button class="btn btn-ghost" style="color:var(--score-1)" data-action="clearOverride" data-secid="' + secId + '">Clear Override</button>' : '') +
-      '<button class="btn btn-ghost" data-action="closeOverridePanel" data-secid="' + secId + '">Cancel</button>' +
-      '<button class="btn btn-primary" data-action="saveOverride" data-secid="' + secId + '">Save Override</button>' +
-    '</div>';
-    panel.innerHTML = html;
-    panel.style.display = '';
   }
 
   function selectOverrideLevel(level) {
-    _overrideSelectedLevel = (_overrideSelectedLevel === level) ? 0 : level;
-    document.querySelectorAll('.override-level-btn').forEach(function(btn) {
-      btn.classList.toggle('selected', parseInt(btn.dataset.level, 10) === _overrideSelectedLevel);
-    });
+    Overrides.selectOverrideLevel(
+      level,
+      _overrideSelectedLevel,
+      function(levelValue) { _overrideSelectedLevel = levelValue; },
+      function() { return _overrideSelectedLevel; }
+    );
   }
 
   function saveOverride(secId) {
-    var reasonEl = document.getElementById('override-reason-' + secId);
-    var reason = (reasonEl ? reasonEl.value : '').trim();
-    if (_overrideSelectedLevel === 0) { alert('Select a proficiency level.'); return; }
-    if (!reason) {
-      if (reasonEl) { reasonEl.style.border = '2px solid var(--score-1)'; reasonEl.focus(); reasonEl.placeholder = 'Reason is required'; }
-      return;
-    }
-    setSectionOverride(activeCourse, studentId, secId, _overrideSelectedLevel, reason);
-    render();
+    Overrides.saveOverride(activeCourse, studentId, secId, _overrideSelectedLevel, render);
   }
 
   function clearOverride(secId) {
-    setSectionOverride(activeCourse, studentId, secId, 0, '');
-    render();
+    Overrides.clearOverride(activeCourse, studentId, secId, render);
   }
 
   function closeOverridePanel(secId) {
-    var panel = document.getElementById('override-panel-' + secId);
-    if (panel) panel.style.display = 'none';
+    Overrides.closeOverridePanel(secId);
   }
 
   /* ── Tag detail toggle ──────────────────────────────────── */
@@ -134,61 +109,15 @@ window.PageStudent = (function() {
 
   /* ── Notes & Observations ───────────────────────────────── */
   function renderNotes() {
-    var cid = activeCourse;
-    var obs = getStudentQuickObs(cid, studentId);
-    var container = document.getElementById('notes-list');
-    if (!container) return;
-
-    if (obs.length === 0) {
-      container.innerHTML = '<div class="notes-empty">' +
-        '<div class="notes-empty-icon">📝</div>' +
-        'No notes or observations yet.<br>Add one below or capture from the <a href="#/observations?course=' + cid + '" style="color:var(--active);text-decoration:none">Observations</a> page.' +
-      '</div>';
-      return;
-    }
-
-    container.innerHTML = obs.map(function(n) {
-      var d = new Date(n.created);
-      var shortDate = d.toLocaleDateString('en-CA', { month:'short', day:'numeric' });
-      var hasDims = n.dims && n.dims.length > 0;
-      var sent = n.sentiment && OBS_SENTIMENTS ? OBS_SENTIMENTS[n.sentiment] : null;
-      var ctx = n.context && OBS_CONTEXTS ? OBS_CONTEXTS[n.context] : null;
-      return '<div class="note-inline" data-text="' + esc(n.text.toLowerCase()) + '"' + (sent ? ' style="border-left:3px solid ' + sent.border + ';background:' + sent.tint + '"' : '') + '>' +
-        '<div class="note-inline-left">' +
-          (sent ? '<span style="font-size:0.72rem;display:block;text-align:center;margin-bottom:2px">' + sent.icon + '</span>' : '') +
-          '<span class="note-inline-date">' + shortDate + '</span>' +
-        '</div>' +
-        '<div class="note-inline-body">' +
-          (n.assignmentContext ? '<span class="note-assign-badge">' + esc(n.assignmentContext.assessmentTitle) + (n.assignmentContext.proficiencyLevel ? ' · ' + n.assignmentContext.proficiencyLevel : '') + '</span>' : '') +
-          '<div class="note-inline-text">' + esc(n.text) + '</div>' +
-          '<div class="note-inline-dims">' +
-            (hasDims ? n.dims.map(function(dim) {
-              return '<span class="note-dim-tag"><span class="note-dim-tag-icon">' + (OBS_ICONS[dim]||'') + '</span>' + (OBS_SHORT[dim]||dim) + '</span>';
-            }).join('') : '') +
-            (ctx ? '<span class="note-dim-tag" style="background:rgba(0,0,0,0.04);color:var(--text-3)">' + ctx.icon + ' ' + ctx.label + '</span>' : '') +
-          '</div>' +
-        '</div>' +
-        '<button class="note-inline-del" data-action="deleteNote" data-noteid="' + n.id + '" title="Delete" aria-label="Delete note">&times;</button>' +
-      '</div>';
-    }).join('');
+    Notes.renderNotes(activeCourse, studentId);
   }
 
   function filterNotes(query) {
-    var q = query.toLowerCase().trim();
-    document.querySelectorAll('.note-inline').forEach(function(note) {
-      var text = note.getAttribute('data-text') || note.textContent.toLowerCase();
-      note.style.display = (!q || text.includes(q)) ? '' : 'none';
-    });
+    Notes.filterNotes(query);
   }
 
   function addNote() {
-    var input = document.getElementById('note-input');
-    var text = (input.value || '').trim();
-    if (!text) return;
-    addQuickOb(activeCourse, studentId, text, []);
-    input.value = '';
-    input.focus();
-    renderNotes();
+    Notes.addNote(activeCourse, studentId);
   }
 
   /* ── Goal editing ───────────────────────────────────────── */
@@ -201,13 +130,17 @@ window.PageStudent = (function() {
     document.getElementById('goal-edit-' + secId).style.display = 'none';
     document.getElementById('goal-text-' + secId).style.display = '';
   }
-  function saveGoalField(secId) {
+  async function saveGoalField(secId) {
     var text = (document.getElementById('goal-input-' + secId).value || '').trim();
     var cid = activeCourse;
     var goals = getGoals(cid);
     if (!goals[studentId]) goals[studentId] = {};
     goals[studentId][secId] = text;
     saveGoals(cid, goals);
+    if (typeof _setEchoGuard === 'function') _setEchoGuard('student-records', cid);
+    if (window.v2 && _isUuid && _isUuid(studentId)) {
+      await window.v2.saveGoal(studentId, secId, text);
+    }
     render();
   }
 
@@ -220,7 +153,7 @@ window.PageStudent = (function() {
     document.getElementById('refl-edit-' + secId).style.display = 'none';
     document.getElementById('refl-text-' + secId).style.display = '';
   }
-  function saveReflField(secId) {
+  async function saveReflField(secId) {
     var text = (document.getElementById('refl-input-' + secId).value || '').trim();
     var conf = parseInt(document.getElementById('refl-conf-' + secId).value, 10) || 0;
     var cid = activeCourse;
@@ -228,12 +161,15 @@ window.PageStudent = (function() {
     if (!reflections[studentId]) reflections[studentId] = {};
     reflections[studentId][secId] = { confidence: conf, text: text, date: new Date().toISOString() };
     saveReflections(cid, reflections);
+    if (typeof _setEchoGuard === 'function') _setEchoGuard('student-records', cid);
+    if (window.v2 && _isUuid && _isUuid(studentId)) {
+      await window.v2.saveReflection(studentId, secId, text, conf || null);
+    }
     render();
   }
 
   function deleteNote(noteId) {
-    deleteQuickOb(activeCourse, studentId, noteId);
-    renderNotes();
+    Notes.deleteNote(activeCourse, studentId, noteId);
   }
 
   /* ── Edit Student Modal ─────────────────────────────────── */
@@ -357,7 +293,7 @@ window.PageStudent = (function() {
     // Completion stats
     var coveredTags = allTags.filter(function(t) {
       var sc = getTagScores(cid, studentId, t.id);
-      return sc.some(function(s) { return s.type === 'summative' && s.score > 0; });
+      return sc.some(function(s) { return s.score > 0; });
     }).length;
     var scoredAssessments = new Set();
     var allScores = getScores(cid)[studentId] || [];
@@ -463,7 +399,7 @@ window.PageStudent = (function() {
           '<th class="gt-col-status"></th>' +
           '<th class="gt-col-title">Assignment</th>' +
           '<th class="gt-col-date">Date</th>' +
-          '<th class="gt-col-type">Type</th>';
+          '<th class="gt-col-type">Category</th>';
 
     var allAssessTagIds = [];
     sortedAssessments.forEach(function(a) { (a.tagIds||[]).forEach(function(tid) { if (!allAssessTagIds.includes(tid)) allAssessTagIds.push(tid); }); });
@@ -506,7 +442,7 @@ window.PageStudent = (function() {
           (assessStatus === 'notSubmitted' ? '<span class="gt-status-tag gt-tag-ns">NS</span>' : assessStatus === 'excused' ? '<span class="gt-status-tag gt-tag-exc">EXC</span>' : assessStatus === 'late' ? '<span class="gt-status-tag gt-tag-late">LATE</span>' : '') +
         '</td>' +
         '<td class="gt-cell-date">' + formatDate(assess.date) + '</td>' +
-        '<td class="gt-cell-type"><span class="type-badge ' + (assess.type==='summative'?'type-badge-s':'type-badge-f') + '">' + (assess.type==='summative'?'S':'F') + '</span></td>';
+        '<td class="gt-cell-type">' + _assessmentCategoryBadge(cid, assess) + '</td>';
 
       tagColGroups.forEach(function(g) {
         var tag = g.tags[0];
@@ -583,7 +519,7 @@ window.PageStudent = (function() {
       var tag = sec.tags[0];
       if (tag) {
         var tp = getTagProficiency(cid, studentId, tag.id);
-        var tagScores = getTagScores(cid, studentId, tag.id).filter(function(s) { return s.type === 'summative'; });
+        var tagScores = getTagScores(cid, studentId, tag.id).filter(function(s) { return s.score > 0; });
         var evidenceCount = tagScores.length;
         html += '<div class="dash-tag-row" data-action="toggleTag">' +
           profLabelBadge(tp) +
@@ -707,7 +643,7 @@ window.PageStudent = (function() {
     html += '<div class="gp-divider"></div>';
     var gpCompPct = getCompletionPct(cid, studentId);
     var gpAllTags = getAllTags(cid);
-    var gpCoveredTags = gpAllTags.filter(function(t) { var sc = getTagScores(cid, studentId, t.id); return sc.some(function(s) { return s.type === 'summative' && s.score > 0; }); }).length;
+    var gpCoveredTags = gpAllTags.filter(function(t) { var sc = getTagScores(cid, studentId, t.id); return sc.some(function(s) { return s.score > 0; }); }).length;
     html += '<div class="gp-coverage-row"><div class="gp-coverage-bar"><div class="gp-coverage-fill" style="width:' + gpCompPct + '%"></div></div><span class="gp-coverage-label">' + gpCoveredTags + '/' + gpAllTags.length + ' tags · ' + gpCompPct + '%</span></div>';
     html += '</div>';
 
@@ -725,7 +661,7 @@ window.PageStudent = (function() {
       var aScores = allScores.filter(function(s) { return s.assessmentId === assess.id && s.score > 0; });
       if (aScores.length === 0) return;
       var avg = aScores.reduce(function(sum,s) { return sum + s.score; }, 0) / aScores.length;
-      if (avg < 2 && assess.type === 'summative') attentionItems.push({ type:'low', assess:assess, detail:'Avg ' + avg.toFixed(1) + ' — needs support' });
+      if (avg < 2) attentionItems.push({ type:'low', assess:assess, detail:'Avg ' + avg.toFixed(1) + ' — needs support' });
     });
     if (attentionItems.length === 0) {
       html += '<div class="attention-empty">✓ All caught up — no issues flagged.</div>';

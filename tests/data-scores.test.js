@@ -24,6 +24,10 @@ beforeEach(() => {
     test: { id: 'test', name: 'Test', calcMethod: 'mostRecent', decayWeight: 0.65 },
     math7: { id: 'math7', name: 'Math 7', calcMethod: 'highest', decayWeight: 0.65 },
   };
+  saveCourses({
+    sci8: { id: 'sci8', name: 'Science 8', calcMethod: 'mostRecent', decayWeight: 0.65 },
+    math7: { id: 'math7', name: 'Math 7', calcMethod: 'highest', decayWeight: 0.65 },
+  });
 });
 
 describe('getPointsScore', () => {
@@ -154,6 +158,15 @@ describe('getActiveCourse', () => {
     expect(getActiveCourse()).toBe('sci8');
   });
 
+  it('skips archived configured course when an active course exists', () => {
+    _cache.config = { activeCourse: 'sci8' };
+    saveCourses({
+      sci8: { id: 'sci8', name: 'Science 8', archived: true },
+      math7: { id: 'math7', name: 'Math 7', archived: false },
+    });
+    expect(getActiveCourse()).toBe('math7');
+  });
+
   it('falls back to first course when activeCourse not in COURSES', () => {
     _cache.config = { activeCourse: 'nonexistent' };
     expect(getActiveCourse()).toBe('sci8');
@@ -161,6 +174,15 @@ describe('getActiveCourse', () => {
 
   it('returns first course when config has no activeCourse', () => {
     _cache.config = {};
+    expect(getActiveCourse()).toBe('sci8');
+  });
+
+  it('falls back to the first archived course when every course is archived', () => {
+    _cache.config = {};
+    saveCourses({
+      sci8: { id: 'sci8', name: 'Science 8', archived: true },
+      math7: { id: 'math7', name: 'Math 7', archived: true },
+    });
     expect(getActiveCourse()).toBe('sci8');
   });
 });

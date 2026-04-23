@@ -89,6 +89,8 @@ load('teacher-mobile/components.js');
 load('teacher-mobile/card-stack.js');
 load('teacher-mobile/card-widgets.js');
 load('teacher-mobile/card-widget-editor.js');
+load('teacher-mobile/students-list.js');
+load('teacher-mobile/student-detail.js');
 load('teacher-mobile/tab-students.js');
 load('teacher-mobile/tab-observe.js');
 load('teacher-mobile/tab-grade.js');
