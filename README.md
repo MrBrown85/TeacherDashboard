@@ -20,7 +20,7 @@ Production may temporarily return `503` if the Netlify site has exhausted its qu
 - **Gradebook** — Spreadsheet view with per-tag and overall scores
 - **Student profiles** — Score timeline, sparklines, and smart insights (Apple Health style)
 - **Observations** — Quick notes with sentiment tagging (strength / growth / concern)
-- **Report builder** — 15 configurable block types, drag-to-reorder, auto narrative generation
+- **Report builder** — 15 configurable block types, drag-to-reorder, teacher-authored narrative comments
 - **Term questionnaire** — Disposition ratings per student per term
 - **CSV import** — Bulk import students; Microsoft Teams roster support
 - **Multi-course** — Independent grading config per course
@@ -44,7 +44,7 @@ Production may temporarily return `503` if the Netlify site has exhausted its qu
 | Frontend        | Vanilla JS (IIFE modules), CSS custom properties                                                                          |
 | Auth & Database | [Supabase](https://supabase.com) — Auth, Postgres, RLS, multi-namespace canonical schema with public-schema RPC interface |
 | Hosting         | [Netlify](https://netlify.com) (static site, publish `dist/`) — edge function injects env vars + per-request CSP nonce    |
-| Testing         | [Vitest](https://vitest.dev) — 655 unit tests · [Playwright](https://playwright.dev) — 137 E2E specs                      |
+| Testing         | [Vitest](https://vitest.dev) unit suite · [Playwright](https://playwright.dev) E2E suite                                  |
 | Formatting      | [Prettier](https://prettier.io)                                                                                           |
 | PWA             | Web app manifest + service worker (network-first, offline-capable)                                                        |
 
@@ -108,7 +108,7 @@ npm run test:e2e:headed   # see the browser
 ## Project Structure
 
 ```
-TeacherDashboard/
+FullVision/
 │
 ├── teacher/                    # Desktop SPA
 │   ├── app.html                # Entry point
@@ -121,7 +121,7 @@ TeacherDashboard/
 │   ├── page-reports.js         # Report builder
 │   ├── dash-class-manager.js   # Class + student management
 │   ├── report-blocks.js        # 15 report block renderers
-│   ├── report-questionnaire.js # Term questionnaire + auto narrative
+│   ├── report-questionnaire.js # Term questionnaire + narrative editor
 │   └── ui.js                   # Toast, modal, and DOM helpers
 │
 ├── teacher-mobile/             # Mobile PWA
@@ -146,8 +146,8 @@ TeacherDashboard/
 ├── netlify.toml                # Netlify config
 ├── _headers                    # Security + cache headers
 ├── curriculum_data.js          # BC curriculum data
-├── tests/                      # Vitest unit suite (657 tests)
-├── e2e/                        # Playwright E2E suite (137 tests)
+├── tests/                      # Vitest unit suite
+├── e2e/                        # Playwright E2E suite
 └── docs/                       # Architecture + privacy docs
 ```
 
@@ -166,14 +166,14 @@ TeacherDashboard/
 
 Designed for [FOIPPA](https://www.bclaws.gov.bc.ca/civix/document/id/complete/statreg/96165_00) compliance:
 
-| Area                | Detail                                                |
-| ------------------- | ----------------------------------------------------- |
-| Data residency      | Canada only — Supabase on AWS ca-central-1 (Montreal) |
-| Row-Level Security  | Teachers can only access their own data               |
-| Idle timeout        | Auto sign-out after 30 minutes of inactivity          |
-| Logout              | Clears all local data on sign-out                     |
-| No student accounts | Only the teacher accesses the system                  |
-| Security headers    | CSP, HSTS, X-Frame-Options, X-Content-Type-Options    |
+| Area                | Detail                                                                                                                |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Data residency      | Canada only — Supabase on AWS ca-central-1 (Montreal)                                                                 |
+| Row-Level Security  | Teachers can only access their own data                                                                               |
+| Idle timeout        | 30-minute inactivity timeout; long-form draft flows mark the session expired and prompt re-auth on the next save path |
+| Logout              | Clears all local data on sign-out                                                                                     |
+| No student accounts | Only the teacher accesses the system                                                                                  |
+| Security headers    | CSP, HSTS, X-Frame-Options, X-Content-Type-Options                                                                    |
 
 See `docs/` for the Privacy Impact Assessment, Data Retention Policy, and Breach Notification Procedure.
 
@@ -186,7 +186,7 @@ npm test               # Run full suite
 npm run test:watch     # Watch mode
 ```
 
-~655 tests covering the calculation engine, data layer, and mobile UI components. See [`tests/`](tests/) and [`e2e/`](e2e/).
+The test suite covers the calculation engine, data layer, and mobile UI components. See [`tests/`](tests/) and [`e2e/`](e2e/).
 
 ---
 

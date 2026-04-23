@@ -57,6 +57,7 @@ describe('v2 learning-map structural dispatch (window.v2.*)', () => {
         p_id: null,
         p_course_id: CID,
         p_name: 'English',
+        p_color: null,
         p_display_order: 2,
       });
     });
@@ -76,6 +77,20 @@ describe('v2 learning-map structural dispatch (window.v2.*)', () => {
       await window.v2.reorderSubjects([ID1, 'junk', ID2]);
       var call = client.calls.find(function (c) { return c.name === 'reorder_subjects'; });
       expect(call.payload).toEqual({ p_ids: [ID1, ID2] });
+    });
+  });
+
+  describe('Subject color', () => {
+    it('upsertSubject passes p_color when color provided', async () => {
+      await window.v2.upsertSubject({ id: ID1, courseId: CID, name: 'Science', color: '#6366f1' });
+      var call = client.calls.find(function (c) { return c.name === 'upsert_subject'; });
+      expect(call.payload.p_color).toBe('#6366f1');
+    });
+
+    it('upsertSubject sends p_color null when color omitted', async () => {
+      await window.v2.upsertSubject({ id: ID1, courseId: CID, name: 'Science' });
+      var call = client.calls.find(function (c) { return c.name === 'upsert_subject'; });
+      expect(call.payload.p_color).toBeNull();
     });
   });
 
@@ -106,6 +121,7 @@ describe('v2 learning-map structural dispatch (window.v2.*)', () => {
         p_id: null,
         p_subject_id: SUBJ_ID,
         p_name: 'S',
+        p_color: null,
         p_competency_group_id: GRP_ID,
         p_display_order: 3,
       });
@@ -121,6 +137,20 @@ describe('v2 learning-map structural dispatch (window.v2.*)', () => {
       await window.v2.deleteSection(SEC_ID);
       await window.v2.reorderSections([SEC_ID]);
       expect(client.calls.map(function (c) { return c.name; })).toEqual(['delete_section', 'reorder_sections']);
+    });
+  });
+
+  describe('Section color', () => {
+    it('upsertSection passes p_color when color provided', async () => {
+      await window.v2.upsertSection({ id: SEC_ID, subjectId: SUBJ_ID, name: 'Reading', color: '#10b981' });
+      var call = client.calls.find(function (c) { return c.name === 'upsert_section'; });
+      expect(call.payload.p_color).toBe('#10b981');
+    });
+
+    it('upsertSection sends p_color null when color omitted', async () => {
+      await window.v2.upsertSection({ subjectId: SUBJ_ID, name: 'Reading' });
+      var call = client.calls.find(function (c) { return c.name === 'upsert_section'; });
+      expect(call.payload.p_color).toBeNull();
     });
   });
 

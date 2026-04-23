@@ -988,11 +988,11 @@ begin
     end loop;
 end; $$;
 
-grant execute on function upsert_subject(uuid, uuid, text, int) to authenticated;
+grant execute on function upsert_subject(uuid, uuid, text, text, int) to authenticated;
 grant execute on function delete_subject(uuid) to authenticated;
 grant execute on function upsert_competency_group(uuid, uuid, text, text, int) to authenticated;
 grant execute on function delete_competency_group(uuid) to authenticated;
-grant execute on function upsert_section(uuid, uuid, text, uuid, int) to authenticated;
+grant execute on function upsert_section(uuid, uuid, text, text, uuid, int) to authenticated;
 grant execute on function delete_section(uuid) to authenticated;
 grant execute on function upsert_tag(uuid, uuid, text, text, text, int) to authenticated;
 grant execute on function delete_tag(uuid) to authenticated;
