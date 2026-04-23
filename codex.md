@@ -4,6 +4,8 @@ This is the only active work list for the repo.
 
 It consolidates the still-open items that were previously spread across backlog docs, handoff follow-up notes, deferred implementation sections, and SQL/design TODOs. Completed items stay in history docs; unresolved items belong here.
 
+Do not add validation-only or already-shipped items here. CI/test baselines and implementation history belong in `docs/backend-design/HANDOFF.md`; `codex.md` is only for remaining work.
+
 ## User-blocked / operational
 
 ### P1.0 · Netlify quota fix
@@ -18,7 +20,7 @@ It consolidates the still-open items that were previously spread across backlog 
 ### P1.3 · Production push / production smoke follow-through
 
 - User-only decision if more local-only commits accumulate.
-- After the quota issue is resolved, run a production smoke on the live deploy.
+- After the quota issue is resolved and the user wants a production update, run a live smoke on the deployed site.
 
 ### P2.3 · Decide `delete_course` semantics before wiring UI
 
@@ -33,7 +35,7 @@ It consolidates the still-open items that were previously spread across backlog 
 
 ### P2.1 · Realtime rollout verification for v2 invalidation
 
-- `course_sync_cursor` schema/docs and client invalidation wiring exist.
+- `course_sync_cursor` schema/docs, SQL trigger/publication plan, and client invalidation wiring exist in the repo.
 - Still needs live Supabase rollout verification before this can be treated as fully closed.
 
 ### T-IMPORT-JSON-01 · Route legacy local JSON restore through v2 import
@@ -58,12 +60,12 @@ It consolidates the still-open items that were previously spread across backlog 
 
 ### P3.5 · Reconcile remaining Playwright failures
 
-- Targeted smoke coverage is in place, but the broader Playwright suite still needs a clean reconciliation pass.
+- Targeted smoke coverage and PR CI are green, but the broader Playwright suite still needs a clean reconciliation pass.
 
 ### P4.1 · Promote categories into `import_json_restore`
 
 - Welcome Class/demo payloads now carry category data, but `import_json_restore` still does not ingest categories as a first-class section.
-- `shared/demo-seed.js` still labels them preview-only.
+- `shared/demo-seed.js` still builds them under a preview-only section and strips that section before dispatching to the RPC.
 
 ### P4.2 · Migrate Demo Mode to `buildDemoSeedPayload`
 
