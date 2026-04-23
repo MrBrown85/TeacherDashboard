@@ -30,11 +30,6 @@ This is the only active work list for the repo. Implementation history belongs i
 - `course_sync_cursor` schema/docs, SQL trigger/publication plan, and client invalidation wiring exist in the repo.
 - Still needs live Supabase rollout verification before this can be treated as fully closed.
 
-### T-IMPORT-JSON-01 · Route legacy local JSON restore through v2 import
-
-- `teacher/page-assignments.js` still has a lower-priority local `importData()` escape hatch.
-- It should dispatch through `window.v2.importJsonRestore(...)` instead of only mutating local state.
-
 ### T-BE-02 · Teams import adapter
 
 - `tiParsedFile` still does not match the payload expected by `import_teams_class`.
