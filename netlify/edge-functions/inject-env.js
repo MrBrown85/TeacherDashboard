@@ -38,7 +38,7 @@ export default async function handler(request, context) {
     "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.nsvcs.net",
     "worker-src 'self'",
     "form-action 'self'",
-    "frame-ancestors 'none'"
+    "frame-ancestors 'none'",
   ].join('; ');
   headers.set('Content-Security-Policy', csp);
 
