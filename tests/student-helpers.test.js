@@ -10,7 +10,14 @@ describe('StudentNotes helpers', () => {
       return {
         innerHTML: '',
         style: {},
-        classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
+        classList: {
+          add() {},
+          remove() {},
+          toggle() {},
+          contains() {
+            return false;
+          },
+        },
       };
     };
     globalThis.document.querySelectorAll = () => [];
@@ -27,7 +34,9 @@ describe('StudentNotes helpers', () => {
   it('adds a note through the shared helper and rerenders', () => {
     let added = null;
     globalThis.getStudentQuickObs = () => [];
-    globalThis.addQuickOb = (cid, sid, text) => { added = { cid, sid, text }; };
+    globalThis.addQuickOb = (cid, sid, text) => {
+      added = { cid, sid, text };
+    };
     globalThis._noteInput.value = 'Check in with student';
 
     const result = StudentNotes.addNote('c1', 's1');
@@ -53,7 +62,9 @@ describe('StudentOverrides helpers', () => {
       activeCourse: 'c1',
       studentId: 's1',
       secId: 'sec-1',
-      setSelectedLevel: level => { selected = level; },
+      setSelectedLevel: level => {
+        selected = level;
+      },
       getSelectedLevel: () => selected,
     });
 

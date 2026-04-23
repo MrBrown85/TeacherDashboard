@@ -14,7 +14,10 @@ describe('ReportBuilderUI.getReportConfigWrapped', () => {
   it('normalizes invalid persisted blocks and restores missing defaults', () => {
     globalThis.getReportConfig = () => ({
       preset: 'custom',
-      blocks: [{ id: 'header', label: 'wrong', enabled: true, locked: true }, { id: 'bogus', enabled: true }],
+      blocks: [
+        { id: 'header', label: 'wrong', enabled: true, locked: true },
+        { id: 'bogus', enabled: true },
+      ],
     });
 
     const config = ReportBuilderUI.getReportConfigWrapped('c1');

@@ -237,7 +237,7 @@ window.PageReports = (function () {
     if (!container) return;
     container.innerHTML = Builder.renderBuilderBlocks(reportConfig);
     Builder.initPointerDrag(container, {
-      onReorder: function(startIdx, finalIdx) {
+      onReorder: function (startIdx, finalIdx) {
         var moved = reportConfig.blocks.splice(startIdx, 1)[0];
         reportConfig.blocks.splice(finalIdx, 0, moved);
         reportConfig.preset = 'custom';
@@ -246,9 +246,9 @@ window.PageReports = (function () {
         renderReportPreview();
         Builder.updatePresetBtns(reportConfig);
       },
-      onCancel: function() {
+      onCancel: function () {
         renderBuilderBlocks();
-      }
+      },
     });
   }
 

@@ -47,33 +47,47 @@ window.ReportBuilderUI = (function () {
   function getReportConfigWrapped(cid) {
     var parsed = typeof getReportConfig === 'function' ? getReportConfig(cid) : {};
     if (parsed && parsed.blocks) {
-      var validIds = new Set(DEFAULT_BLOCKS.map(function(b) { return b.id; }));
-      parsed.blocks = parsed.blocks.filter(function(b) { return validIds.has(b.id); });
-      parsed.blocks.forEach(function(b) {
-        var db = DEFAULT_BLOCKS.find(function(d) { return d.id === b.id; });
+      var validIds = new Set(
+        DEFAULT_BLOCKS.map(function (b) {
+          return b.id;
+        }),
+      );
+      parsed.blocks = parsed.blocks.filter(function (b) {
+        return validIds.has(b.id);
+      });
+      parsed.blocks.forEach(function (b) {
+        var db = DEFAULT_BLOCKS.find(function (d) {
+          return d.id === b.id;
+        });
         if (db) b.label = db.label;
       });
-      DEFAULT_BLOCKS.forEach(function(db) {
-        if (!parsed.blocks.find(function(b) { return b.id === db.id; })) {
+      DEFAULT_BLOCKS.forEach(function (db) {
+        if (
+          !parsed.blocks.find(function (b) {
+            return b.id === db.id;
+          })
+        ) {
           parsed.blocks.push({ id: db.id, label: db.label, enabled: db.enabled, locked: db.locked });
         }
       });
       return parsed;
     }
 
-    var blocks = DEFAULT_BLOCKS.map(function(b) {
+    var blocks = DEFAULT_BLOCKS.map(function (b) {
       return { id: b.id, label: b.label, enabled: b.enabled, locked: b.locked };
     });
     var std = REPORT_PRESETS.standard;
-    blocks.forEach(function(b) {
+    blocks.forEach(function (b) {
       b.enabled = std.includes(b.id);
     });
     var ordered = [];
-    std.forEach(function(id) {
-      var block = blocks.find(function(x) { return x.id === id; });
+    std.forEach(function (id) {
+      var block = blocks.find(function (x) {
+        return x.id === id;
+      });
       if (block) ordered.push(block);
     });
-    blocks.forEach(function(b) {
+    blocks.forEach(function (b) {
       if (!std.includes(b.id)) ordered.push(b);
     });
     return { preset: 'standard', blocks: ordered };
@@ -81,39 +95,68 @@ window.ReportBuilderUI = (function () {
 
   function renderLayout(reportConfig) {
     var presetBtns = ['brief', 'standard', 'detailed']
-      .map(function(p) {
-        return '<button class="rb-preset-btn' + (reportConfig.preset === p ? ' active' : '') + '" data-preset="' + p + '" data-action="rbApplyPreset">' + p.charAt(0).toUpperCase() + p.slice(1) + '</button>';
+      .map(function (p) {
+        return (
+          '<button class="rb-preset-btn' +
+          (reportConfig.preset === p ? ' active' : '') +
+          '" data-preset="' +
+          p +
+          '" data-action="rbApplyPreset">' +
+          p.charAt(0).toUpperCase() +
+          p.slice(1) +
+          '</button>'
+        );
       })
       .join('');
 
-    return '<div class="rb-layout">' +
+    return (
+      '<div class="rb-layout">' +
       '<aside class="rb-panel no-print" id="rb-panel">' +
       '<div class="rb-panel-header"><div class="rb-panel-title">Report Builder</div></div>' +
-      '<div class="rb-presets">' + presetBtns + '</div>' +
+      '<div class="rb-presets">' +
+      presetBtns +
+      '</div>' +
       '<div class="rb-blocks" id="rb-blocks"></div>' +
       '</aside>' +
       '<div class="rb-preview" id="rb-preview"></div>' +
-      '</div>';
+      '</div>'
+    );
   }
 
   function renderBuilderBlocks(reportConfig) {
     var html = '';
-    reportConfig.blocks.forEach(function(block, idx) {
+    reportConfig.blocks.forEach(function (block, idx) {
       var enabledClass = block.enabled ? ' enabled' : '';
       var lockedClass = block.locked ? ' locked' : '';
-      html += '<div class="rb-block' + enabledClass + lockedClass + '" data-idx="' + idx + '">' +
-        '<span class="rb-drag-grip"' + (block.locked ? '' : ' data-drag="grip"') + '>' + (block.locked ? '\uD83D\uDD12' : '\u283F') + '</span>' +
+      html +=
+        '<div class="rb-block' +
+        enabledClass +
+        lockedClass +
+        '" data-idx="' +
+        idx +
+        '">' +
+        '<span class="rb-drag-grip"' +
+        (block.locked ? '' : ' data-drag="grip"') +
+        '>' +
+        (block.locked ? '\uD83D\uDD12' : '\u283F') +
+        '</span>' +
         (block.locked
           ? '<span class="rb-block-label">' + esc(block.label) + '</span>'
-          : '<label class="rb-block-toggle" data-action="rbToggleBlock" data-blockid="' + block.id + '"><div class="rb-block-switch"></div></label>' +
-            '<span class="rb-block-label">' + esc(block.label) + '</span>') +
+          : '<label class="rb-block-toggle" data-action="rbToggleBlock" data-blockid="' +
+            block.id +
+            '"><div class="rb-block-switch"></div></label>' +
+            '<span class="rb-block-label">' +
+            esc(block.label) +
+            '</span>') +
         '</div>';
     });
     return html;
   }
 
   function toggleBlock(reportConfig, blockId) {
-    var block = reportConfig.blocks.find(function(b) { return b.id === blockId; });
+    var block = reportConfig.blocks.find(function (b) {
+      return b.id === blockId;
+    });
     if (!block || block.locked) return reportConfig;
     block.enabled = !block.enabled;
     reportConfig.preset = 'custom';
@@ -125,14 +168,16 @@ window.ReportBuilderUI = (function () {
     if (!order) return reportConfig;
     var ordered = [];
     var remaining = [];
-    order.forEach(function(id) {
-      var block = reportConfig.blocks.find(function(x) { return x.id === id; });
+    order.forEach(function (id) {
+      var block = reportConfig.blocks.find(function (x) {
+        return x.id === id;
+      });
       if (block) {
         block.enabled = true;
         ordered.push(block);
       }
     });
-    reportConfig.blocks.forEach(function(block) {
+    reportConfig.blocks.forEach(function (block) {
       if (!order.includes(block.id)) {
         block.enabled = false;
         remaining.push(block);
@@ -144,7 +189,7 @@ window.ReportBuilderUI = (function () {
   }
 
   function updatePresetBtns(reportConfig) {
-    document.querySelectorAll('.rb-preset-btn').forEach(function(btn) {
+    document.querySelectorAll('.rb-preset-btn').forEach(function (btn) {
       btn.classList.toggle('active', btn.dataset.preset === reportConfig.preset);
     });
   }
@@ -160,52 +205,62 @@ window.ReportBuilderUI = (function () {
     var startIdx = -1;
     var blockHeight = 0;
 
-    container.addEventListener('pointerdown', function (e) {
-      var grip = e.target.closest('[data-drag="grip"]');
-      if (!grip) return;
-      var block = grip.closest('.rb-block');
-      if (!block) return;
-      startIdx = parseInt(block.dataset.idx, 10);
-      if (isNaN(startIdx)) return;
-      e.preventDefault();
-      grip.setPointerCapture(e.pointerId);
-      var rect = block.getBoundingClientRect();
-      offsetY = e.clientY - rect.top;
-      dragEl = block;
-      blockHeight = block.offsetHeight + 1;
-      placeholder = document.createElement('div');
-      placeholder.className = 'rb-block-placeholder';
-      placeholder.style.height = blockHeight + 'px';
-      block.classList.add('dragging');
-      block.style.position = 'fixed';
-      block.style.top = rect.top + 'px';
-      block.style.left = rect.left + 'px';
-      block.style.width = rect.width + 'px';
-      block.style.zIndex = '1000';
-      block.style.pointerEvents = 'none';
-      block.parentNode.insertBefore(placeholder, block);
-    }, { signal: signal });
+    container.addEventListener(
+      'pointerdown',
+      function (e) {
+        var grip = e.target.closest('[data-drag="grip"]');
+        if (!grip) return;
+        var block = grip.closest('.rb-block');
+        if (!block) return;
+        startIdx = parseInt(block.dataset.idx, 10);
+        if (isNaN(startIdx)) return;
+        e.preventDefault();
+        grip.setPointerCapture(e.pointerId);
+        var rect = block.getBoundingClientRect();
+        offsetY = e.clientY - rect.top;
+        dragEl = block;
+        blockHeight = block.offsetHeight + 1;
+        placeholder = document.createElement('div');
+        placeholder.className = 'rb-block-placeholder';
+        placeholder.style.height = blockHeight + 'px';
+        block.classList.add('dragging');
+        block.style.position = 'fixed';
+        block.style.top = rect.top + 'px';
+        block.style.left = rect.left + 'px';
+        block.style.width = rect.width + 'px';
+        block.style.zIndex = '1000';
+        block.style.pointerEvents = 'none';
+        block.parentNode.insertBefore(placeholder, block);
+      },
+      { signal: signal },
+    );
 
-    container.addEventListener('pointermove', function (e) {
-      if (!dragEl) return;
-      e.preventDefault();
-      dragEl.style.top = e.clientY - offsetY + 'px';
-      var blocks = Array.from(container.querySelectorAll('.rb-block:not(.dragging)'));
-      for (var i = 0; i < blocks.length; i++) {
-        var rect = blocks[i].getBoundingClientRect();
-        var mid = rect.top + rect.height / 2;
-        if (e.clientY < mid) {
-          if (blocks[i].classList.contains('locked')) continue;
-          container.insertBefore(placeholder, blocks[i]);
-          return;
+    container.addEventListener(
+      'pointermove',
+      function (e) {
+        if (!dragEl) return;
+        e.preventDefault();
+        dragEl.style.top = e.clientY - offsetY + 'px';
+        var blocks = Array.from(container.querySelectorAll('.rb-block:not(.dragging)'));
+        for (var i = 0; i < blocks.length; i++) {
+          var rect = blocks[i].getBoundingClientRect();
+          var mid = rect.top + rect.height / 2;
+          if (e.clientY < mid) {
+            if (blocks[i].classList.contains('locked')) continue;
+            container.insertBefore(placeholder, blocks[i]);
+            return;
+          }
         }
-      }
-      container.appendChild(placeholder);
-    }, { signal: signal });
+        container.appendChild(placeholder);
+      },
+      { signal: signal },
+    );
 
     function finishDrag() {
       if (!dragEl) return;
-      var allItems = Array.from(container.children).filter(function(c) { return c !== dragEl; });
+      var allItems = Array.from(container.children).filter(function (c) {
+        return c !== dragEl;
+      });
       var targetIdx = allItems.indexOf(placeholder);
       dragEl.classList.remove('dragging');
       dragEl.style.position = '';

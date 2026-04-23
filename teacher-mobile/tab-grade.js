@@ -12,7 +12,8 @@ window.MGrade = (function () {
     var categoryId = getAssessmentCategoryId(assessment);
     return {
       label: getAssessmentCategoryName(cid, assessment),
-      className: categoryId || (assessment && assessment.type === 'summative') ? 'm-type-summative' : 'm-type-formative',
+      className:
+        categoryId || (assessment && assessment.type === 'summative') ? 'm-type-summative' : 'm-type-formative',
     };
   }
 
@@ -389,7 +390,11 @@ window.MGrade = (function () {
     var assessment = getAssessments(cid).find(function (a) {
       return a.id === aid;
     });
-    var type = assessment ? (getAssessmentCategoryId(assessment) ? 'summative' : assessment.type || 'formative') : 'summative';
+    var type = assessment
+      ? getAssessmentCategoryId(assessment)
+        ? 'summative'
+        : assessment.type || 'formative'
+      : 'summative';
 
     upsertScore(cid, sid, aid, tid, score, assessment ? assessment.date : getTodayStr(), type, '');
     clearProfCache();

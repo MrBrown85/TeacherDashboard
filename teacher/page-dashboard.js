@@ -1,5 +1,5 @@
 /* ── page-dashboard.js — Dashboard page module ───────────── */
-window.PageDashboard = (function() {
+window.PageDashboard = (function () {
   'use strict';
 
   /* ── Listener tracking for cleanup ──────────────────────── */
@@ -20,21 +20,32 @@ window.PageDashboard = (function() {
   var CM = DashClassManager;
   var Overview = DashOverview;
   var StudentCards = DashStudentCards;
-  function openClassManager() { CM.classManagerOpen = true; CM.configure({ activeCourse: activeCourse, onRender: render, onCourseChange: switchCourse }); CM.openClassManager(); }
-  function closeClassManager() { CM.closeClassManager(); }
-  function renderClassManager() { CM.renderClassManager(); }
+  function openClassManager() {
+    CM.classManagerOpen = true;
+    CM.configure({ activeCourse: activeCourse, onRender: render, onCourseChange: switchCourse });
+    CM.openClassManager();
+  }
+  function closeClassManager() {
+    CM.closeClassManager();
+  }
+  function renderClassManager() {
+    CM.renderClassManager();
+  }
 
   /* ── Search ─────────────────────────────────────────────── */
   function dashSearchInput(el) {
     var val = el.value.toLowerCase();
     var pos = el.selectionStart;
     clearTimeout(_dashSearchTimer);
-    _dashSearchTimer = setTimeout(function() {
+    _dashSearchTimer = setTimeout(function () {
       searchQuery = val;
       render();
-      requestAnimationFrame(function() {
+      requestAnimationFrame(function () {
         var inp = document.querySelector('.dash-search-input');
-        if (inp) { inp.focus(); inp.setSelectionRange(pos, pos); }
+        if (inp) {
+          inp.focus();
+          inp.setSelectionRange(pos, pos);
+        }
       });
     }, 150);
   }
@@ -52,11 +63,19 @@ window.PageDashboard = (function() {
 
   /* ── Main render ────────────────────────────────────────── */
   function render() {
-    if (CM.classManagerOpen) { renderClassManager(); return; }
+    if (CM.classManagerOpen) {
+      renderClassManager();
+      return;
+    }
     // If active course is archived, switch to first non-archived
     if (activeCourse && isCourseArchived(activeCourse)) {
-      var nonArchived = Object.keys(COURSES).find(function(c) { return !isCourseArchived(c); });
-      if (nonArchived) { activeCourse = nonArchived; setActiveCourse(nonArchived); }
+      var nonArchived = Object.keys(COURSES).find(function (c) {
+        return !isCourseArchived(c);
+      });
+      if (nonArchived) {
+        activeCourse = nonArchived;
+        setActiveCourse(nonArchived);
+      }
     }
     var cid = activeCourse;
     var sections = getSections(cid);
@@ -80,10 +99,12 @@ window.PageDashboard = (function() {
         students = sortStudents(students, 'firstName').reverse();
         break;
       case 'overall-desc':
-        students.sort(function(a, b) { return getOverallProficiency(cid, b.id) - getOverallProficiency(cid, a.id); });
+        students.sort(function (a, b) {
+          return getOverallProficiency(cid, b.id) - getOverallProficiency(cid, a.id);
+        });
         break;
       case 'overall-asc':
-        students.sort(function(a, b) {
+        students.sort(function (a, b) {
           var pa = getOverallProficiency(cid, a.id);
           var pb = getOverallProficiency(cid, b.id);
           if (pa === 0 && pb === 0) return 0;
@@ -93,11 +114,13 @@ window.PageDashboard = (function() {
         });
         break;
       case 'flagged':
-        students.sort(function(a, b) {
+        students.sort(function (a, b) {
           var fa = flags[a.id] ? 0 : 1;
           var fb = flags[b.id] ? 0 : 1;
           if (fa !== fb) return fa - fb;
-          return (a.lastName||'').localeCompare(b.lastName||'') || (a.firstName||'').localeCompare(b.firstName||'');
+          return (
+            (a.lastName || '').localeCompare(b.lastName || '') || (a.firstName || '').localeCompare(b.firstName || '')
+          );
         });
         break;
     }
@@ -105,47 +128,101 @@ window.PageDashboard = (function() {
     // Search filter
     if (searchQuery) {
       var q = searchQuery.toLowerCase();
-      students = students.filter(function(s) {
-        return displayName(s).toLowerCase().includes(q) ||
-          (s.firstName||'').toLowerCase().includes(q) ||
-          (s.lastName||'').toLowerCase().includes(q) ||
-          (s.studentNumber||'').toLowerCase().includes(q);
+      students = students.filter(function (s) {
+        return (
+          displayName(s).toLowerCase().includes(q) ||
+          (s.firstName || '').toLowerCase().includes(q) ||
+          (s.lastName || '').toLowerCase().includes(q) ||
+          (s.studentNumber || '').toLowerCase().includes(q)
+        );
       });
     }
 
     if (showFlaggedOnly) {
-      students = students.filter(function(s) { return flags[s.id]; });
+      students = students.filter(function (s) {
+        return flags[s.id];
+      });
     }
 
     var flagCount = Object.values(flags).filter(Boolean).length;
     var allStudents = getStudents(cid);
 
     /* -- Compute class-level data -- */
-    var overallVals = allStudents.map(function(s) { return getOverallProficiency(cid, s.id); }).filter(function(v) { return v > 0; });
-    var classAvg = overallVals.length > 0 ? overallVals.reduce(function(a, b) { return a + b; }, 0) / overallVals.length : 0;
+    var overallVals = allStudents
+      .map(function (s) {
+        return getOverallProficiency(cid, s.id);
+      })
+      .filter(function (v) {
+        return v > 0;
+      });
+    var classAvg =
+      overallVals.length > 0
+        ? overallVals.reduce(function (a, b) {
+            return a + b;
+          }, 0) / overallVals.length
+        : 0;
     var classR = Math.round(classAvg);
 
     // Section/group-level class averages for overview bars
     var _overviewGrouped = getGroupedSections(cid);
-    var _hasOverviewGroups = _overviewGrouped.groups.some(function(g) { return g.sections.length > 0; });
+    var _hasOverviewGroups = _overviewGrouped.groups.some(function (g) {
+      return g.sections.length > 0;
+    });
     var sectionClassAvgs;
     if (_hasOverviewGroups) {
       sectionClassAvgs = [];
-      _overviewGrouped.groups.forEach(function(gi) {
+      _overviewGrouped.groups.forEach(function (gi) {
         if (gi.sections.length === 0) return;
-        var vals = allStudents.map(function(s) { return getGroupProficiency(cid, s.id, gi.group.id); }).filter(function(v) { return v > 0; });
-        var avg = vals.length > 0 ? vals.reduce(function(a, b) { return a + b; }, 0) / vals.length : 0;
-        sectionClassAvgs.push({ section: { shortName: gi.group.name, name: gi.group.name, color: gi.group.color }, avg: avg, count: vals.length });
+        var vals = allStudents
+          .map(function (s) {
+            return getGroupProficiency(cid, s.id, gi.group.id);
+          })
+          .filter(function (v) {
+            return v > 0;
+          });
+        var avg =
+          vals.length > 0
+            ? vals.reduce(function (a, b) {
+                return a + b;
+              }, 0) / vals.length
+            : 0;
+        sectionClassAvgs.push({
+          section: { shortName: gi.group.name, name: gi.group.name, color: gi.group.color },
+          avg: avg,
+          count: vals.length,
+        });
       });
-      _overviewGrouped.ungrouped.forEach(function(sec) {
-        var vals = allStudents.map(function(s) { return getSectionProficiency(cid, s.id, sec.id); }).filter(function(v) { return v > 0; });
-        var avg = vals.length > 0 ? vals.reduce(function(a, b) { return a + b; }, 0) / vals.length : 0;
+      _overviewGrouped.ungrouped.forEach(function (sec) {
+        var vals = allStudents
+          .map(function (s) {
+            return getSectionProficiency(cid, s.id, sec.id);
+          })
+          .filter(function (v) {
+            return v > 0;
+          });
+        var avg =
+          vals.length > 0
+            ? vals.reduce(function (a, b) {
+                return a + b;
+              }, 0) / vals.length
+            : 0;
         sectionClassAvgs.push({ section: sec, avg: avg, count: vals.length });
       });
     } else {
-      sectionClassAvgs = sections.map(function(sec) {
-        var vals = allStudents.map(function(s) { return getSectionProficiency(cid, s.id, sec.id); }).filter(function(v) { return v > 0; });
-        var avg = vals.length > 0 ? vals.reduce(function(a, b) { return a + b; }, 0) / vals.length : 0;
+      sectionClassAvgs = sections.map(function (sec) {
+        var vals = allStudents
+          .map(function (s) {
+            return getSectionProficiency(cid, s.id, sec.id);
+          })
+          .filter(function (v) {
+            return v > 0;
+          });
+        var avg =
+          vals.length > 0
+            ? vals.reduce(function (a, b) {
+                return a + b;
+              }, 0) / vals.length
+            : 0;
         return { section: sec, avg: avg, count: vals.length };
       });
     }
@@ -154,10 +231,12 @@ window.PageDashboard = (function() {
     var allTags = getAllTags(cid);
     var tagsWithEvidence = 0;
     var tagCoverageMap = {};
-    allTags.forEach(function(tag) {
-      var hasEvidence = allStudents.some(function(s) {
+    allTags.forEach(function (tag) {
+      var hasEvidence = allStudents.some(function (s) {
         var scores = getTagScores(cid, s.id, tag.id);
-        return scores.some(function(sc) { return sc.score > 0; });
+        return scores.some(function (sc) {
+          return sc.score > 0;
+        });
       });
       tagCoverageMap[tag.id] = hasEvidence;
       if (hasEvidence) tagsWithEvidence++;
@@ -166,13 +245,15 @@ window.PageDashboard = (function() {
 
     // Core competency coverage
     var assessedCCs = new Set();
-    assessments.forEach(function(a) {
-      (a.coreCompetencyIds || []).forEach(function(ccId) { assessedCCs.add(ccId); });
+    assessments.forEach(function (a) {
+      (a.coreCompetencyIds || []).forEach(function (ccId) {
+        assessedCCs.add(ccId);
+      });
     });
     var ccCounts = {};
     var ccAssessments = {};
-    assessments.forEach(function(a) {
-      (a.coreCompetencyIds || []).forEach(function(ccId) {
+    assessments.forEach(function (a) {
+      (a.coreCompetencyIds || []).forEach(function (ccId) {
         ccCounts[ccId] = (ccCounts[ccId] || 0) + 1;
         if (!ccAssessments[ccId]) ccAssessments[ccId] = [];
         ccAssessments[ccId].push(a.title || 'Untitled');
@@ -180,46 +261,108 @@ window.PageDashboard = (function() {
     });
 
     // Recent observations
-    var weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
+    var weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
     var weekAgoStr = weekAgo.toISOString().slice(0, 10);
     var recentObsCount = 0;
-    allStudents.forEach(function(s) {
+    allStudents.forEach(function (s) {
       var obs = getStudentQuickObs(cid, s.id);
-      recentObsCount += obs.filter(function(o) { return o.date >= weekAgoStr; }).length;
+      recentObsCount += obs.filter(function (o) {
+        return o.date >= weekAgoStr;
+      }).length;
     });
 
     // Action items
     var actionItems = [];
 
-    var uncoveredTags = allTags.filter(function(t) { return !tagCoverageMap[t.id]; });
+    var uncoveredTags = allTags.filter(function (t) {
+      return !tagCoverageMap[t.id];
+    });
     if (uncoveredTags.length > 0) {
       var secNames = [];
       var secNameSet = new Set();
-      uncoveredTags.forEach(function(t) {
+      uncoveredTags.forEach(function (t) {
         var sec = getSectionForTag(cid, t.id);
-        var name = sec ? (sec.shortName || sec.name) : '';
-        if (name && !secNameSet.has(name)) { secNameSet.add(name); secNames.push(name); }
+        var name = sec ? sec.shortName || sec.name : '';
+        if (name && !secNameSet.has(name)) {
+          secNameSet.add(name);
+          secNames.push(name);
+        }
       });
-      actionItems.push({ icon: '\uD83D\uDCCB', text: uncoveredTags.length + ' learning standard' + (uncoveredTags.length !== 1 ? 's' : '') + ' not yet assessed (' + secNames.join(', ') + ')', link: '#/assignments?course=' + cid, linkText: 'Plan' });
+      actionItems.push({
+        icon: '\uD83D\uDCCB',
+        text:
+          uncoveredTags.length +
+          ' learning standard' +
+          (uncoveredTags.length !== 1 ? 's' : '') +
+          ' not yet assessed (' +
+          secNames.join(', ') +
+          ')',
+        link: '#/assignments?course=' + cid,
+        linkText: 'Plan',
+      });
     }
 
-    var uncoveredCCs = CORE_COMPETENCIES.filter(function(cc) { return !assessedCCs.has(cc.id); });
+    var uncoveredCCs = CORE_COMPETENCIES.filter(function (cc) {
+      return !assessedCCs.has(cc.id);
+    });
     if (uncoveredCCs.length > 0) {
-      actionItems.push({ icon: '\uD83C\uDFAF', text: uncoveredCCs.length + ' core competenc' + (uncoveredCCs.length !== 1 ? 'ies' : 'y') + ' not yet tagged: ' + uncoveredCCs.map(function(cc) { return cc.label; }).join(', '), link: '#/assignments?course=' + cid, linkText: 'Tag' });
+      actionItems.push({
+        icon: '\uD83C\uDFAF',
+        text:
+          uncoveredCCs.length +
+          ' core competenc' +
+          (uncoveredCCs.length !== 1 ? 'ies' : 'y') +
+          ' not yet tagged: ' +
+          uncoveredCCs
+            .map(function (cc) {
+              return cc.label;
+            })
+            .join(', '),
+        link: '#/assignments?course=' + cid,
+        linkText: 'Tag',
+      });
     }
 
-    var lowCoverageStudents = allStudents.filter(function(s) { return getCompletionPct(cid, s.id) < 50; });
+    var lowCoverageStudents = allStudents.filter(function (s) {
+      return getCompletionPct(cid, s.id) < 50;
+    });
     if (lowCoverageStudents.length > 0) {
-      actionItems.push({ icon: '\u26A0\uFE0F', text: lowCoverageStudents.length + ' student' + (lowCoverageStudents.length !== 1 ? 's' : '') + ' below 50% evidence coverage', link: '', linkText: '' });
+      actionItems.push({
+        icon: '\u26A0\uFE0F',
+        text:
+          lowCoverageStudents.length +
+          ' student' +
+          (lowCoverageStudents.length !== 1 ? 's' : '') +
+          ' below 50% evidence coverage',
+        link: '',
+        linkText: '',
+      });
     }
 
     if (recentObsCount === 0) {
-      actionItems.push({ icon: '\uD83D\uDCDD', text: 'No observations recorded this week', link: '#/observations', linkText: 'Observe' });
+      actionItems.push({
+        icon: '\uD83D\uDCDD',
+        text: 'No observations recorded this week',
+        link: '#/observations',
+        linkText: 'Observe',
+      });
     }
 
-    var unobservedStudents = allStudents.filter(function(s) { return getStudentQuickObs(cid, s.id).length === 0; });
+    var unobservedStudents = allStudents.filter(function (s) {
+      return getStudentQuickObs(cid, s.id).length === 0;
+    });
     if (unobservedStudents.length > 0) {
-      actionItems.push({ icon: '\uD83D\uDC64', text: unobservedStudents.length + ' student' + (unobservedStudents.length !== 1 ? 's have' : ' has') + ' no observations yet', link: '#/observations', linkText: 'Observe' });
+      actionItems.push({
+        icon: '\uD83D\uDC64',
+        text:
+          unobservedStudents.length +
+          ' student' +
+          (unobservedStudents.length !== 1 ? 's have' : ' has') +
+          ' no observations yet',
+        link: '#/observations',
+        linkText: 'Observe',
+      });
     }
 
     /* -- Toolbar (rendered to separate mount) -- */
@@ -281,10 +424,21 @@ window.PageDashboard = (function() {
 
     // Dashboard-only actions
     var handlers = {
-      'goToStudent':          function() { Router.navigate('/student?id=' + el.dataset.sid + '&course=' + el.dataset.course); },
-      'toggleFlag':           function() { toggleFlag(el.dataset.cid, el.dataset.sid); render(); },
-      'toggleFlaggedFilter':  function() { showFlaggedOnly = !showFlaggedOnly; render(); },
-      'dashSort':             function() { sortMode = el.value; render(); }
+      goToStudent: function () {
+        Router.navigate('/student?id=' + el.dataset.sid + '&course=' + el.dataset.course);
+      },
+      toggleFlag: function () {
+        toggleFlag(el.dataset.cid, el.dataset.sid);
+        render();
+      },
+      toggleFlaggedFilter: function () {
+        showFlaggedOnly = !showFlaggedOnly;
+        render();
+      },
+      dashSort: function () {
+        sortMode = el.value;
+        render();
+      },
     };
     if (handlers[action]) {
       if (el.tagName !== 'SELECT') e.preventDefault();
@@ -295,15 +449,25 @@ window.PageDashboard = (function() {
   /* ── Input/change/blur handler for non-click events ─────── */
   function _handleInput(e) {
     var el = e.target;
-    if (el.dataset.actionInput === 'dashSearch') { dashSearchInput(el); return; }
+    if (el.dataset.actionInput === 'dashSearch') {
+      dashSearchInput(el);
+      return;
+    }
     CM.handleInput(el);
   }
 
   function _handleChange(e) {
     var el = e.target;
     // Dashboard-specific change handlers
-    if (el.dataset.action === 'dashSwitchCourse') { switchCourse(el.value); return; }
-    if (el.dataset.action === 'dashSort') { sortMode = el.value; render(); return; }
+    if (el.dataset.action === 'dashSwitchCourse') {
+      switchCourse(el.value);
+      return;
+    }
+    if (el.dataset.action === 'dashSort') {
+      sortMode = el.value;
+      render();
+      return;
+    }
     // Delegate cm/cw change handlers
     CM.handleChange(el);
   }
@@ -346,12 +510,14 @@ window.PageDashboard = (function() {
     render();
 
     // Ensure page starts at top
-    requestAnimationFrame(function() { document.getElementById('main').scrollTop = 0; });
+    requestAnimationFrame(function () {
+      document.getElementById('main').scrollTop = 0;
+    });
   }
 
   function destroy() {
     CM.destroy();
-    _listeners.forEach(function(l) {
+    _listeners.forEach(function (l) {
       document.removeEventListener(l.type, l.handler, l.options);
     });
     _listeners = [];
@@ -365,6 +531,6 @@ window.PageDashboard = (function() {
     init: init,
     destroy: destroy,
     render: render,
-    switchCourse: switchCourse
+    switchCourse: switchCourse,
   };
 })();

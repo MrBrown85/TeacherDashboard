@@ -29,11 +29,25 @@ describe('buildDemoSeedPayload', () => {
   it('returns a top-level object with the expected section keys', () => {
     expect(Object.keys(payload).sort()).toEqual(
       expect.arrayContaining([
-        'subjects', 'sections', 'tags', 'modules',
-        '_categories_preview', 'rubrics', 'criteria', 'criterion_tags',
-        'students', 'enrollments', 'assessments', 'assessment_tags',
-        'scores', 'rubric_scores', 'tag_scores',
-        'notes', 'goals', 'reflections', 'report_configs',
+        'subjects',
+        'sections',
+        'tags',
+        'modules',
+        '_categories_preview',
+        'rubrics',
+        'criteria',
+        'criterion_tags',
+        'students',
+        'enrollments',
+        'assessments',
+        'assessment_tags',
+        'scores',
+        'rubric_scores',
+        'tag_scores',
+        'notes',
+        'goals',
+        'reflections',
+        'report_configs',
       ]),
     );
   });
@@ -52,32 +66,70 @@ describe('buildDemoSeedPayload', () => {
   });
 
   it('scopes all course-owned rows to the provided courseId', () => {
-    payload.subjects.forEach(function (s) { expect(s.course_id).toBe(COURSE_ID); });
-    payload.sections.forEach(function (s) { expect(s.course_id).toBe(COURSE_ID); });
-    payload.modules.forEach(function (m) { expect(m.course_id).toBe(COURSE_ID); });
-    payload._categories_preview.forEach(function (c) { expect(c.course_id).toBe(COURSE_ID); });
-    payload.enrollments.forEach(function (e) { expect(e.course_id).toBe(COURSE_ID); });
-    payload.assessments.forEach(function (a) { expect(a.course_id).toBe(COURSE_ID); });
+    payload.subjects.forEach(function (s) {
+      expect(s.course_id).toBe(COURSE_ID);
+    });
+    payload.sections.forEach(function (s) {
+      expect(s.course_id).toBe(COURSE_ID);
+    });
+    payload.modules.forEach(function (m) {
+      expect(m.course_id).toBe(COURSE_ID);
+    });
+    payload._categories_preview.forEach(function (c) {
+      expect(c.course_id).toBe(COURSE_ID);
+    });
+    payload.enrollments.forEach(function (e) {
+      expect(e.course_id).toBe(COURSE_ID);
+    });
+    payload.assessments.forEach(function (a) {
+      expect(a.course_id).toBe(COURSE_ID);
+    });
   });
 
   it('generates UUIDs for every entity id', () => {
     var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-    ['subjects','sections','tags','modules','rubrics','criteria','students','enrollments','assessments'].forEach(function (k) {
-      payload[k].forEach(function (row) { expect(row.id).toMatch(UUID_RE); });
+    [
+      'subjects',
+      'sections',
+      'tags',
+      'modules',
+      'rubrics',
+      'criteria',
+      'students',
+      'enrollments',
+      'assessments',
+    ].forEach(function (k) {
+      payload[k].forEach(function (row) {
+        expect(row.id).toMatch(UUID_RE);
+      });
     });
-    payload._categories_preview.forEach(function (row) { expect(row.id).toMatch(UUID_RE); });
+    payload._categories_preview.forEach(function (row) {
+      expect(row.id).toMatch(UUID_RE);
+    });
   });
 
   it('links enrollments to students via FK', () => {
-    var studentIds = new Set(payload.students.map(function (s) { return s.id; }));
+    var studentIds = new Set(
+      payload.students.map(function (s) {
+        return s.id;
+      }),
+    );
     payload.enrollments.forEach(function (e) {
       expect(studentIds.has(e.student_id)).toBe(true);
     });
   });
 
   it('links criterion_tags to valid criteria + tags', () => {
-    var critIds = new Set(payload.criteria.map(function (c) { return c.id; }));
-    var tagIds = new Set(payload.tags.map(function (t) { return t.id; }));
+    var critIds = new Set(
+      payload.criteria.map(function (c) {
+        return c.id;
+      }),
+    );
+    var tagIds = new Set(
+      payload.tags.map(function (t) {
+        return t.id;
+      }),
+    );
     payload.criterion_tags.forEach(function (ct) {
       expect(critIds.has(ct.criterion_id)).toBe(true);
       expect(tagIds.has(ct.tag_id)).toBe(true);
@@ -87,8 +139,16 @@ describe('buildDemoSeedPayload', () => {
   it('generates a non-empty scores distribution', () => {
     expect(payload.scores.length).toBeGreaterThan(0);
     // Every score must reference a valid enrollment + assessment.
-    var enrIds = new Set(payload.enrollments.map(function (e) { return e.id; }));
-    var assIds = new Set(payload.assessments.map(function (a) { return a.id; }));
+    var enrIds = new Set(
+      payload.enrollments.map(function (e) {
+        return e.id;
+      }),
+    );
+    var assIds = new Set(
+      payload.assessments.map(function (a) {
+        return a.id;
+      }),
+    );
     payload.scores.forEach(function (s) {
       expect(enrIds.has(s.enrollment_id)).toBe(true);
       expect(assIds.has(s.assessment_id)).toBe(true);
@@ -96,7 +156,11 @@ describe('buildDemoSeedPayload', () => {
   });
 
   it('emits category-first assessments with real evidence types', () => {
-    var categoryIds = new Set(payload._categories_preview.map(function (c) { return c.id; }));
+    var categoryIds = new Set(
+      payload._categories_preview.map(function (c) {
+        return c.id;
+      }),
+    );
     payload.assessments.forEach(function (assessment) {
       expect(categoryIds.has(assessment.category_id)).toBe(true);
       expect(assessment.evidence_type).toBeTruthy();
@@ -119,7 +183,10 @@ describe('applyDemoSeed', () => {
     window.v2 = window.v2 || {};
     originalImport = window.v2.importJsonRestore;
     captured = null;
-    window.v2.importJsonRestore = function (p) { captured = p; return Promise.resolve({ data: 'ok', error: null }); };
+    window.v2.importJsonRestore = function (p) {
+      captured = p;
+      return Promise.resolve({ data: 'ok', error: null });
+    };
   });
 
   afterEach(() => {
@@ -136,7 +203,9 @@ describe('applyDemoSeed', () => {
   it('refuses when courseId is missing', async () => {
     var warnings = [];
     var origWarn = console.warn;
-    console.warn = function (m) { warnings.push(m); };
+    console.warn = function (m) {
+      warnings.push(m);
+    };
     await window.applyDemoSeed();
     console.warn = origWarn;
     expect(captured).toBeNull();

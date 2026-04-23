@@ -172,9 +172,18 @@ describe('getFocusAreas', () => {
   it('puts tags with no evidence first', () => {
     mockDataLayer({
       getSections: () => [
-        { id: 'sec1', tags: [{ id: 't1', label: 'Tag1' }, { id: 't2', label: 'Tag2' }] },
+        {
+          id: 'sec1',
+          tags: [
+            { id: 't1', label: 'Tag1' },
+            { id: 't2', label: 'Tag2' },
+          ],
+        },
       ],
-      getAllTags: () => [{ id: 't1', label: 'Tag1' }, { id: 't2', label: 'Tag2' }],
+      getAllTags: () => [
+        { id: 't1', label: 'Tag1' },
+        { id: 't2', label: 'Tag2' },
+      ],
       getSectionForTag: (cid, tagId) => ({ id: 'sec1' }),
       getScores: () => ({
         stu1: [
@@ -193,9 +202,7 @@ describe('getFocusAreas', () => {
 
   it('sorts by lowest proficiency after no-evidence tags', () => {
     mockDataLayer({
-      getSections: () => [
-        { id: 'sec1', tags: [{ id: 't1' }, { id: 't2' }, { id: 't3' }] },
-      ],
+      getSections: () => [{ id: 'sec1', tags: [{ id: 't1' }, { id: 't2' }, { id: 't3' }] }],
       getAllTags: () => [{ id: 't1' }, { id: 't2' }, { id: 't3' }],
       getSectionForTag: () => ({ id: 'sec1' }),
       getScores: () => ({
@@ -247,9 +254,7 @@ describe('getFocusAreas', () => {
 describe('getCompletionPct', () => {
   it('returns percentage of tags with scored evidence', () => {
     mockDataLayer({
-      getSections: () => [
-        { id: 'sec1', tags: [{ id: 't1' }, { id: 't2' }, { id: 't3' }, { id: 't4' }] },
-      ],
+      getSections: () => [{ id: 'sec1', tags: [{ id: 't1' }, { id: 't2' }, { id: 't3' }, { id: 't4' }] }],
       getAllTags: () => [{ id: 't1' }, { id: 't2' }, { id: 't3' }, { id: 't4' }],
       getScores: () => ({
         stu1: [
@@ -354,9 +359,7 @@ describe('getSectionGrowthData', () => {
     mockDataLayer({
       getSections: () => [{ id: 'sec1', tags: [{ id: 't1' }] }],
       getScores: () => ({
-        stu1: [
-          { score: 3, tagId: 't1', assessmentId: 'a1', date: '2025-01-01', type: 'formative' },
-        ],
+        stu1: [{ score: 3, tagId: 't1', assessmentId: 'a1', date: '2025-01-01', type: 'formative' }],
       }),
       getAssessments: () => [{ id: 'a1', type: 'formative', weight: 1 }],
       getCourseConfig: () => ({ calcMethod: 'mostRecent', decayWeight: 0.65 }),

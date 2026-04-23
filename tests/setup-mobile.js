@@ -25,11 +25,13 @@ if (!globalThis.navigator.vibrate) {
 
 // Fix document.createElement to support textContent → innerHTML for _esc()
 const _origCreateElement = globalThis.document.createElement;
-globalThis.document.createElement = (tag) => {
+globalThis.document.createElement = tag => {
   const el = _origCreateElement(tag);
   let _text = '';
   Object.defineProperty(el, 'textContent', {
-    get() { return _text; },
+    get() {
+      return _text;
+    },
     set(v) {
       _text = v;
       el.innerHTML = v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -41,7 +43,7 @@ globalThis.document.createElement = (tag) => {
 // Shim missing DOM functions that mobile modules use
 const _origGetElementById = globalThis.document.getElementById;
 const _elements = {};
-globalThis.document.getElementById = (id) => {
+globalThis.document.getElementById = id => {
   if (_elements[id]) return _elements[id];
   return _origGetElementById(id);
 };
@@ -55,14 +57,33 @@ function _mobileStubElement(id) {
     style: { display: '' },
     classList: {
       _classes: new Set(),
-      add(...c) { c.forEach(x => this._classes.add(x)); },
-      remove(...c) { c.forEach(x => this._classes.delete(x)); },
-      toggle(c, force) { if (force === undefined) { if (this._classes.has(c)) this._classes.delete(c); else this._classes.add(c); } else if (force) this._classes.add(c); else this._classes.delete(c); return this._classes.has(c); },
-      contains(c) { return this._classes.has(c); },
+      add(...c) {
+        c.forEach(x => this._classes.add(x));
+      },
+      remove(...c) {
+        c.forEach(x => this._classes.delete(x));
+      },
+      toggle(c, force) {
+        if (force === undefined) {
+          if (this._classes.has(c)) this._classes.delete(c);
+          else this._classes.add(c);
+        } else if (force) this._classes.add(c);
+        else this._classes.delete(c);
+        return this._classes.has(c);
+      },
+      contains(c) {
+        return this._classes.has(c);
+      },
     },
-    setAttribute(k, v) { this['_attr_' + k] = v; },
-    getAttribute(k) { return this['_attr_' + k] ?? null; },
-    removeAttribute(k) { delete this['_attr_' + k]; },
+    setAttribute(k, v) {
+      this['_attr_' + k] = v;
+    },
+    getAttribute(k) {
+      return this['_attr_' + k] ?? null;
+    },
+    removeAttribute(k) {
+      delete this['_attr_' + k];
+    },
     appendChild(child) {},
     querySelector(sel) {
       // Return a nested stub for common selectors
@@ -70,7 +91,9 @@ function _mobileStubElement(id) {
       if (sel === '[data-action="m-toast-undo"]') return _mobileStubElement();
       return null;
     },
-    querySelectorAll(sel) { return []; },
+    querySelectorAll(sel) {
+      return [];
+    },
     addEventListener() {},
     scrollIntoView() {},
     scrollTo() {},
@@ -80,7 +103,18 @@ function _mobileStubElement(id) {
 }
 
 // Provide stub elements that mobile shell expects
-['m-sheet-backdrop', 'm-sheet-container', 'm-toast', 'm-nav-stack', 'm-tab-bar', 'm-offline-banner', 'm-swiper', 'm-thumb-strip', 'm-student-card-stack', 'm-quick-bar'].forEach(id => {
+[
+  'm-sheet-backdrop',
+  'm-sheet-container',
+  'm-toast',
+  'm-nav-stack',
+  'm-tab-bar',
+  'm-offline-banner',
+  'm-swiper',
+  'm-thumb-strip',
+  'm-student-card-stack',
+  'm-quick-bar',
+].forEach(id => {
   _elements[id] = _mobileStubElement(id);
 });
 
