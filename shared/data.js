@@ -4555,12 +4555,11 @@ window.v2.deleteRubric = function (id) {
   return _rpcOrNoop('delete_rubric', { p_id: id });
 };
 
-/* ── v2 student-profile read + student-record writes (Phase 4.6) ─────────
-   Reader: get_student_profile(p_enrollment_id) returns a composite jsonb
-   payload with the enrollment + student + course rows, overall proficiency,
-   letter grade, status counts, and arrays of notes / goals / reflections.
-   Competency tree is left null by the deployed RPC — it will be filled in
-   during Phase 4.5 learning-map composition work. */
+/* ── v2 student-profile read + student-record writes ─────────────────────
+   Reader: get_student_profile(p_enrollment_id) returns enrollment + student +
+   course rows, overall proficiency, letter grade, status counts, notes /
+   goals / reflections, and a competency_tree (subjects → sections → tags
+   with per-section proficiency and per-tag latest_value + coverage_count). */
 window.v2.getStudentProfile = function (enrollmentId) {
   return _rpcOrNoop('get_student_profile', { p_enrollment_id: enrollmentId });
 };

@@ -58,11 +58,6 @@ This is the only active work list for the repo. Implementation history belongs i
 
 - Targeted smoke coverage and PR CI are green, but the broader Playwright suite still needs a clean reconciliation pass.
 
-### T-READ-01 · Finish `competency_tree` in student-profile SQL shape
-
-- `docs/backend-design/read-paths.sql` still returns `competency_tree: null`.
-- The intended grouped `competency_group -> section -> tag` read shape has not been composed yet.
-
 ## Deferred / external work
 
 ### D1 · Term-rating narrative auto-generate
