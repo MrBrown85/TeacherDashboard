@@ -45,7 +45,9 @@ describe('assessment isolation', () => {
 
 describe('score isolation', () => {
   it('scores saved to course A are not in getScores(courseB)', () => {
-    saveScores(A, { stu1: [{ id: 'e1', assessmentId: 'a1', tagId: 't1', score: 3, date: '2025-01-01', type: 'summative' }] });
+    saveScores(A, {
+      stu1: [{ id: 'e1', assessmentId: 'a1', tagId: 't1', score: 3, date: '2025-01-01', type: 'summative' }],
+    });
     saveScores(B, {});
     expect(Object.keys(getScores(A))).toHaveLength(1);
     expect(Object.keys(getScores(B))).toHaveLength(0);
@@ -53,17 +55,14 @@ describe('score isolation', () => {
 });
 
 describe('setActiveCourse / getActiveCourse', () => {
-  // Note: getActiveCourse validates against the internal COURSES object (let-scoped
-  // in gb-data.js), which is initialized to DEFAULT_COURSES containing 'sci8'.
-  // We test with 'sci8' since it's the only course the internal COURSES knows about.
   it('setActiveCourse changes the active course', () => {
-    setActiveCourse('sci8');
-    expect(getActiveCourse()).toBe('sci8');
+    setActiveCourse('courseB');
+    expect(getActiveCourse()).toBe('courseB');
   });
 
   it('getActiveCourse returns config activeCourse when valid', () => {
-    _cache.config = { activeCourse: 'sci8' };
-    expect(getActiveCourse()).toBe('sci8');
+    _cache.config = { activeCourse: 'courseA' };
+    expect(getActiveCourse()).toBe('courseA');
   });
 });
 
@@ -71,8 +70,12 @@ describe('independent course data', () => {
   it('creating data in A then B — both exist independently', () => {
     saveStudents(A, [{ id: 's1', firstName: 'Alice', lastName: 'A', designations: [], sortName: 'A Alice' }]);
     saveStudents(B, [{ id: 's2', firstName: 'Bob', lastName: 'B', designations: [], sortName: 'B Bob' }]);
-    saveScores(A, { s1: [{ id: 'e1', assessmentId: 'a1', tagId: 't1', score: 3, date: '2025-01-01', type: 'summative' }] });
-    saveScores(B, { s2: [{ id: 'e2', assessmentId: 'a2', tagId: 't2', score: 4, date: '2025-02-01', type: 'formative' }] });
+    saveScores(A, {
+      s1: [{ id: 'e1', assessmentId: 'a1', tagId: 't1', score: 3, date: '2025-01-01', type: 'summative' }],
+    });
+    saveScores(B, {
+      s2: [{ id: 'e2', assessmentId: 'a2', tagId: 't2', score: 4, date: '2025-02-01', type: 'formative' }],
+    });
 
     expect(getStudents(A)[0].firstName).toBe('Alice');
     expect(getStudents(B)[0].firstName).toBe('Bob');

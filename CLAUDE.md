@@ -1,6 +1,6 @@
 # FullVision Backend Design — Charter
 
-**Status:** Design phase complete (Passes A–D). Backend implementation and client port are merged onto `main` and live against `gradebook-prod`. Remaining work is tracked in [HANDOFF.md](docs/backend-design/HANDOFF.md) plus the backlog plans under `docs/superpowers/plans/`.
+**Status:** Design phase complete (Passes A–D). Backend implementation and client port are merged onto `main` and live against `gradebook-prod`. Remaining work is tracked in [HANDOFF.md](docs/backend-design/HANDOFF.md) and [codex.md](codex.md).
 
 This worktree originally designed the backend **from scratch** from the user inputs inventory. That phase is done. Partway through Pass D the charter shifted to **"match the UI the user already has."** UI references in design docs are intentional and welcome.
 
@@ -13,7 +13,7 @@ This worktree originally designed the backend **from scratch** from the user inp
 
 ## Retired rules (design-phase only; no longer in force)
 
-- ~~"Do not read files outside this worktree."~~ The rebuild charter is explicitly "match the existing UI," so referencing UI code is expected. [spec-vs-ui-diff.md](docs/backend-design/spec-vs-ui-diff.md) and Pass C §8.1 cite UI file paths on purpose.
+- ~~"Do not read files outside this worktree."~~ The rebuild charter is explicitly "match the existing UI," so referencing UI code is expected. Pass C §8.1 cites UI file paths on purpose.
 - ~~"No Supabase-specific assumptions."~~ Q1 in [DECISIONS.md](docs/backend-design/DECISIONS.md) committed to Supabase full-stack; Supabase patterns (RLS, Edge Functions, refresh tokens) are now in scope.
 - ~~"Ignore existing RPC names."~~ Post-fold, the implementation layer can align with existing RPC names where the UI already calls them.
 

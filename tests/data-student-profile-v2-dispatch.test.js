@@ -55,6 +55,16 @@ describe('v2 student-profile / student-records dispatch', () => {
     });
   });
 
+  describe('listCourseStudentProfiles', () => {
+    it('calls list_course_student_profiles with course id', async () => {
+      await window.v2.listCourseStudentProfiles(ENR1);
+      expect(client.calls[0]).toEqual({
+        name: 'list_course_student_profiles',
+        payload: { p_course_id: ENR1 },
+      });
+    });
+  });
+
   describe('notes', () => {
     it('addNote calls upsert_note with enrollment_id + body', async () => {
       await window.v2.addNote(ENR1, 'Helpful note');

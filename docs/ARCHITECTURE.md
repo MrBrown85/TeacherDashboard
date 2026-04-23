@@ -1,447 +1,279 @@
 # FullVision Architecture
 
-A learning profile builder and communicator for BC teachers. Two entry points — desktop SPA (`teacher/app.html`) and mobile PWA (`teacher-mobile/index.html`) — share a common data layer backed by local cache/localStorage, v2 RPC persistence, and an offline queue.
-
-## Directory Structure
-
-```
-shared/                   Shared modules (both desktop + mobile)
-  supabase.js             Supabase client init + auth API (signIn, signOut, requireAuth)
-  constants.js            Shared constants (DEFAULT_COURSES, LEARNING_MAP, proficiency labels/colors)
-  data.js                 Data access layer (cache-through pattern, localStorage + v2 RPC dispatch)
-  calc.js                 Proficiency calculation engine (4 methods, section/tag/overall rollups)
-  seed-data.js            Demo data seeder for new accounts (lazy-loaded)
-
-teacher/                  Desktop SPA
-  app.html                Entry point — loads all CSS + JS, defines DOM mount points
-  ui.js                   Shared UI components (dock, sidebar, student header, modals, toasts)
-  router.js               Hash-based SPA router with page lifecycle
-  page-dashboard.js       Dashboard: student roster overview, class manager, curriculum wizard
-  page-assignments.js     Assignment management and scoring
-  page-student.js         Individual student detail view
-  page-gradebook.js       Spreadsheet-style class gradebook
-  page-observations.js    Quick observations / anecdotal notes
-  page-reports.js         Report card generation
-  dash-class-manager.js   Submodule: class/student CRUD, drag reordering, student merge
-  assign-collab.js        Submodule: collaborative pairs/groups
-  report-blocks.js        Submodule: report block renderers
-  report-questionnaire.js Submodule: term questionnaire UI
-  teams-import.js         Submodule: CSV/Excel roster import (uses SheetJS)
-  *.css                   Page-specific stylesheets
-
-teacher-mobile/           Mobile PWA
-  index.html              Entry point — standalone mobile shell
-  shell.js                Boot, auth, routing, pull-to-refresh, navigation stacks
-  components.js           Shared mobile UI components (sheets, toasts, swipe gestures)
-  tab-students.js         Students tab — roster list, student detail, section detail
-  tab-observe.js          Observe tab — observation feed, capture sheet
-  tab-grade.js            Grade tab — assignment list, score entry
-  card-stack.js           Card stack view — swipeable student cards
-  styles.css              Mobile styles (iOS-native patterns)
-
-vendor/                   Third-party libraries
-  supabase.min.js         Supabase SDK (with CDN fallback)
-  xlsx.mini.min.js        SheetJS for CSV/Excel parsing (with CDN fallback)
-
-netlify/                  Netlify configuration
-  edge-functions/
-    inject-env.js         Replaces __SUPABASE_URL__/__SUPABASE_KEY__ in HTML at edge
-
-scripts/
-  build.sh                Copies public files to dist/ for Netlify deploy
-
-login.html                Auth page (email/password, sign up, password reset)
-sw.js                     Service worker — precache + network-first strategy
-```
-
-## Script Load Order (Desktop)
-
-Defined in `teacher/app.html`. Order matters because modules attach to `window` and later scripts depend on earlier ones:
-
-1. `vendor/supabase.min.js` - Supabase client SDK (with CDN fallback)
-2. `shared/supabase.js` - Auth layer (needs Supabase SDK)
-3. `shared/constants.js` - Constants (no dependencies)
-4. `shared/data.js` - Data layer (needs constants + Supabase)
-5. `shared/calc.js` - Calculation engine (needs data layer)
-6. `teacher/ui.js` - Shared UI (needs data + calc)
-7. `vendor/xlsx.mini.min.js` + `teacher/teams-import.js` - Roster import
-8. Submodules: `report-blocks.js`, `report-questionnaire.js`, `dash-class-manager.js`, `assign-collab.js`
-9. Page modules: `page-dashboard.js`, `page-assignments.js`, `page-student.js`, `page-gradebook.js`, `page-observations.js`, `page-reports.js`
-10. `teacher/router.js` - Router (needs all page modules on `window`)
-
-Note: `shared/seed-data.js` is lazy-loaded by `loadSeedIfNeeded()` — only fetched for new accounts. `curriculum_data.js` (994KB) is loaded via `<script>` in `app.html` but should be lazy-loaded.
-
-The router auto-boots at the bottom of `router.js` via `Router.boot()`.
-
-## Page Routing System
-
-`teacher/router.js` implements hash-based routing as an IIFE exposing `window.Router`.
-
-**Route table:**
-
-```
-#/dashboard    -> window.PageDashboard
-#/assignments  -> window.PageAssignments
-#/student      -> window.PageStudent
-#/gradebook    -> window.PageGradebook
-#/observations -> window.PageObservations
-#/reports      -> window.PageReports
-```
-
-**Hash format:** `#/student?id=st1&course=sci8` - path + query params parsed by `_parseHash()`.
-
-**Page lifecycle:**
-
-Each page module is an IIFE that returns `{ init(params), destroy() }`:
-
-- `init(params)` - receives parsed query params, renders into DOM mount points
-- `destroy()` - cleans up event listeners, timers, and DOM state
-
-**Route change flow (`_onRoute`):**
-
-1. Parse hash into path + params
-2. Call `_currentPage.destroy()` if a previous page exists
-3. Clear DOM mounts: `#main`, `#page-toolbar-mount`, `#sidebar-mount`
-4. Re-render the navigation dock via `_renderDock()`
-5. Call `module.init(params)` on the new page
-
-**DOM mount points** (defined in `app.html`):
-
-- `#dock-mount` - top navigation bar
-- `#sidebar-mount` - student roster sidebar
-- `#page-toolbar-mount` - page-specific toolbar
-- `#main` - primary content area
-
-**Navigation:** `Router.navigate(hash, replace)` sets `location.hash` which triggers `hashchange` -> `_onRoute`. Pass `replace=true` to use `replaceState` instead of pushing history.
-
-**Boot sequence** (`Router.boot()`, runs once):
-
-1. `requireAuth()` - redirect to login if no session
-2. `seedIfNeeded()` - create demo data for new accounts
-3. `initAllCourses()` - load global course list from Supabase/localStorage
-4. `initData(cid)` - load active course data into cache
-5. `migrateAllStudents()` - apply schema migrations
-6. Attach `hashchange` listener and intercept dock link clicks
-7. Trigger initial route
-
-## Data Layer
-
-`shared/data.js` implements a **cache-through** pattern: synchronous in-memory reads, async background writes to Supabase via canonical RPCs, with localStorage as the durable cache.
-
-### Architecture
-
-```
-Page Code
-   │
-   │ get*() — synchronous read from _cache (falls back to localStorage)
-   │ save*() — write to _cache + persist to localStorage + fire-and-forget canonical RPC
-   ▼
-_cache (in-memory object)
-   │
-   ├── _saveCourseField() — central local write path
-   │     1. Update _cache[field][cid]
-   │     2. Clear proficiency cache if the field affects calculations
-   │     3. Persist to localStorage (gb-{key}-{cid})
-   │     4. Broadcast change to other tabs (BroadcastChannel)
-   │
-   └── _persist*ToCanonical() — async canonical RPC dispatch
-         1. Diff prev vs new array (added / modified / withdrawn)
-         2. Route each row to its canonical RPC
-         3. Patch _cache row.id with the canonical UUID returned
-         4. Re-persist localStorage so the canonical id sticks across reloads
-```
-
-The two write paths run in parallel: localStorage is updated synchronously so the UI never blocks on the network; canonical RPCs publish in the background and patch the cache when they return.
-
-### Initialization
-
-`initAllCourses()` runs first (called by both `Router.boot()` and `shell.js` on mobile):
-
-1. Check for a valid Supabase session → set `_useSupabase`, `_teacherId`
-2. Demo mode (`localStorage.gb-demo-mode === '1'`) hard-skips Supabase and runs from localStorage only
-3. Otherwise call `get_teacher_preferences()` + `list_teacher_courses()` in parallel
-4. Convert canonical rows to the legacy `COURSES` blob shape (UUID-keyed) and mirror to localStorage as offline cache
-5. On any RPC failure, fall through to localStorage so the app still loads offline
-
-`initData(cid)` now loads per-course data from canonical RPCs, then mirrors the loaded state back into localStorage as an offline cache. The read path currently covers `list_course_roster`, `list_course_assessments`, `list_course_scores`, `list_course_observations`, `get_course_policy`, `get_report_config`, `list_course_outcomes`, `list_assignment_statuses`, `list_term_ratings_for_course`, `projection.list_student_flags`, plus per-student calls for goals, reflections, and overrides.
-
-Some entities are still intentionally client-only: modules, rubrics, custom tags, and notes still load from localStorage because there is no canonical server-backed storage for them yet.
-
-### Canonical schema (Supabase)
-
-Multi-namespace design with **public-schema RPCs as the only client interface** — direct table access is not exposed via PostgREST. Every RPC is `SECURITY DEFINER` with `auth.uid()` checks, so clients can't bypass authorization.
-
-| Schema        | Purpose                                               | Notable tables                                                                                                              |
-| ------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `academics`   | Course offerings, students, enrollments, designations | `course_offering`, `course_outcome`, `course_policy`, `student`, `enrollment`, `designation_type`, `enrollment_designation` |
-| `assessment`  | Assignments and scores                                | `assessment`, `assessment_target`, `assignment_status`, `score_current`, `score_revision`                                   |
-| `observation` | Anecdotal notes                                       | `observation`                                                                                                               |
-| `reporting`   | End-of-term reporting                                 | `term_rating`, `report_config`, `student_goal`, `student_reflection`, `section_override`                                    |
-| `identity`    | Teacher accounts                                      | `teacher_profile`, `teacher_preference`                                                                                     |
-| `projection`  | Read-optimized projections                            | `dashboard_student_summary`, `flag_tag`, `student_flag`                                                                     |
-| `integration` | Import staging                                        | `import_job`, `import_row`                                                                                                  |
-
-Public v2 RPCs the client calls (selection; `window.v2.*` namespace unless noted):
-
-| Area                  | Read                                   | Write                                                                                                                                                                                                      |
-| --------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Auth / teacher        | `bootstrap_teacher` (boot-time)        | `save_teacher_preferences`, `soft_delete_teacher`, `restore_teacher`                                                                                                                                       |
-| Courses               | `list_teacher_courses`                 | `create_course`, `update_course`, `archive_course`, `duplicate_course`, `delete_course`                                                                                                                    |
-| Gradebook (composite) | `get_gradebook(p_course_id)`           | —                                                                                                                                                                                                          |
-| Student profile       | `get_student_profile(p_enrollment_id)` | `upsert_note` / `delete_note`, `upsert_goal`, `upsert_reflection`, `upsert_section_override` / `clear_section_override`, `bulk_attendance`                                                                 |
-| Students + roster     | (rolled into `get_gradebook`)          | `create_student_and_enroll`, `update_student`, `update_enrollment`, `withdraw_enrollment`, `reorder_roster`, `bulk_apply_pronouns`                                                                         |
-| Assessments           | (rolled into `get_gradebook`)          | `create_assessment`, `update_assessment`, `duplicate_assessment`, `delete_assessment`, `save_assessment_tags`, `save_collab`                                                                               |
-| Scoring               | (rolled into `get_gradebook`)          | `upsert_score`, `set_score_status`, `upsert_tag_score`, `upsert_rubric_score`, `fill_rubric`, `save_score_comment`, `clear_score` / `*_row_scores` / `*_column_scores`                                     |
-| Observations          | (rolled into `get_gradebook`)          | `create_observation`, `update_observation`, `delete_observation`, `upsert_observation_template`, `delete_observation_template`, `create_custom_tag`                                                        |
-| Learning map          | (rolled into `get_gradebook`)          | `upsert_subject` / `delete_subject` / `reorder_subjects` and parallel triples for `competency_group`, `section`, `tag`, `module`; `upsert_category` / `delete_category`; `upsert_rubric` / `delete_rubric` |
-| Term ratings          | (rolled into `get_student_profile`)    | `save_term_rating` (composite: narrative + dimensions + 4 join tables in one call)                                                                                                                         |
-| Report config + prefs | (rolled into `bootstrap_teacher`)      | `apply_report_preset`, `save_report_config`, `toggle_report_block`                                                                                                                                         |
-| Imports               | —                                      | `import_roster_csv`, `import_teams_class`, `import_json_restore`                                                                                                                                           |
-
-**Sync patterns by entity:**
-
-- **Boot** (`initAllCourses`): calls `bootstrap_teacher(email, display_name)` — idempotent seed of Teacher + TeacherPreference + Welcome Class on first sign-in — then `list_teacher_courses()`. Policy fields (grading_system, calc_method, decay_weight, timezone, late_work_policy) arrive on each course row; the lazy `get_course_policy()` is retired.
-- **Per-course load** (`_doInitData`): single `get_gradebook(p_course_id)` call returns `{ course, students, assessments, cells, row_summaries }`. `_v2GradebookToCache` normalizes into the existing `_cache.students[cid]` + `_cache.assessments[cid]` shape so page modules continue calling `getStudents`, `getAssessments`, etc. unchanged. Raw payload stashed on `_cache.v2Gradebook[cid]` for `has_rubric` lookups in the scoring dispatch.
-- **Students** (`saveStudents`): diffs prev vs new → `create_student_and_enroll` / `update_enrollment` + `update_student` / `withdraw_enrollment`. Cached `id` is patched to `enrollment_id`, `personId = student_id`. Per-course async queue serializes writes.
-- **Assessments** (`saveAssessments`): same diff pattern → `create_assessment` / `update_assessment` / `delete_assessment`. `tagIds` filtered to UUIDs only so demo-mode text codes don't fail UUID cast.
-- **Scores** (`_persistScoreToCanonical` + `upsertCellScore`): dispatch inspects `_cache.v2Gradebook[cid].assessments[aid].has_rubric` to route tag/criterion entries to `upsert_tag_score` vs `upsert_rubric_score`; overall per-cell writes go to `upsert_score`; status pills to `set_score_status`; comments to `save_score_comment`; clear actions to `clear_score` / `clear_row_scores` / `clear_column_scores`.
-- **Observations** (`addQuickOb` / `updateQuickOb` / `deleteQuickOb`): `create_observation` / `update_observation` / `delete_observation`. Create patches cache `id` to canonical `observation_id`. Multi-student + tag capture is available via `window.createObservationRich` / `updateObservationRich`.
-- **Term ratings** (`upsertTermRating`): dispatches through `window.v2.saveTermRating` which translates camelCase payload (narrativeHtml, workHabitsRating, dimensions, strengthTagIds, etc.) to snake_case `save_term_rating` wire; omitted keys leave fields/sets alone, empty `[]` wipes.
-- **Offline queue** (`window.v2Queue`): FIFO write queue in `fv-sync-queue-v1` localStorage with dead-letter at `fv-sync-dead-letter-v1`. 3-attempt backoff (1s/5s/30s), auto-flush on `online` + 60s periodic retry. Opt-in via `v2Queue.callOrEnqueue(endpoint, payload)`.
-
-All RPC writes are gated on `gb-demo-mode !== '1'` AND `_useSupabase` so demo mode and offline mode stay 100% local. All RPCs are fire-and-forget with `console.warn` on error unless callers `await` the returned promise.
-
-**localStorage keys:** `gb-{dataKey}-{courseId}` (e.g., `gb-students-{uuid}`, `gb-scores-{uuid}`). Course IDs are now UUIDs except in demo mode where the seed uses text IDs (`sci8`, etc.).
-
-### Getter/Setter Pattern
-
-Every data type follows the same pattern:
-
-```js
-function getStudents(cid) {
-  return _cache.students[cid] || [];
-}
-function saveStudents(cid, arr) {
-  _saveCourseField('students', cid, arr);
-}
-```
-
-`_saveCourseField` is the local cache/localStorage write helper. Canonical remote persistence now happens in the save/dispatch functions for each domain area (`saveStudents`, `saveAssessments`, score writers, `window.v2.*`, etc.), not inside `_saveCourseField` itself.
-
-### Sync Behavior
-
-- Writes still aim to be fire-and-forget from the UI's perspective, but the old generic Supabase bridge was removed.
-- Local blob/cache writes go through `_saveCourseField`; remote persistence happens via explicit v2 RPC helpers and dispatchers.
-- Offline/retry behavior now lives in `window.v2Queue` (`shared/offline-queue.js`): FIFO queue, dead-letter support, backoff, flush on reconnect, and queue stats for future UI surfaces.
-- Cross-tab conflict detection still uses `BroadcastChannel` with `storage` fallback.
-
-### Data Types (cache fields -> localStorage/Supabase keys)
-
-| Cache Field   | Data Key      | Type               | Description                            |
-| ------------- | ------------- | ------------------ | -------------------------------------- |
-| students      | students      | Array              | Student roster                         |
-| assessments   | assessments   | Array              | Assignment definitions                 |
-| scores        | scores        | Object {sid: []}   | Score entries keyed by student ID      |
-| learningMaps  | learningmap   | Object             | Sections and tags (curriculum map)     |
-| courseConfigs | courseconfig  | Object             | Per-course settings (calc method, etc) |
-| modules       | modules       | Array              | Teaching modules/units                 |
-| rubrics       | rubrics       | Array              | Rubric definitions                     |
-| flags         | flags         | Object {sid: bool} | Flagged students                       |
-| goals         | goals         | Object {sid: ...}  | Student goals                          |
-| reflections   | reflections   | Object {sid: ...}  | Student reflections                    |
-| overrides     | overrides     | Object             | Teacher proficiency overrides          |
-| statuses      | statuses      | Object             | Assignment statuses (excused, NS)      |
-| observations  | quick-obs     | Object {sid: []}   | Quick observations                     |
-| termRatings   | term-ratings  | Object             | Core competency term ratings           |
-| customTags    | custom-tags   | Array              | Custom learning tags                   |
-| notes         | notes         | Object {sid: ...}  | Student notes                          |
-| reportConfig  | report-config | Object             | Report card configuration              |
-
-## Authentication Flow
-
-`shared/supabase.js` wraps the Supabase Auth SDK as an IIFE.
-
-**Key functions (all on `window`):**
-
-- `requireAuth()` - called at boot. Checks localStorage for a cached Supabase session token. If valid and not expired, allows the page to load immediately. Otherwise, calls `sb.auth.getSession()` and redirects to `login.html` if no session.
-- `signOut()` - signs out via Supabase, clears all `gb-*` localStorage keys (FOIPPA compliance for shared computers), redirects to `login.html`.
-- `getCurrentUser()` / `isLoggedIn()` - async session checks
-- `onAuthChange(callback)` - listens for auth state changes; shows "Session expired" toast on `SIGNED_OUT`
-
-**Idle timeout:** A separate IIFE sets a 30-minute inactivity timer. Resets on mouse/keyboard/touch/scroll events. Calls `signOut()` on expiry. Designed for shared classroom computers.
-
-**Session flow:**
-
-1. User loads `teacher/app.html` -> `Router.boot()` -> `requireAuth()`
-2. Fast path: parse `sb-*-auth-token` from localStorage, check `expires_at`
-3. Slow path: call `sb.auth.getSession()` if no cached token
-4. No session -> redirect to `login.html` (separate page, not part of SPA)
-
-**Mobile auth:** `shell.js` has its own auth check in `boot()`. On network error, the auth screen is shown (no silent bypass). After successful sign-in, `_bootApp()` initializes the data layer and renders tabs.
-
-## Proficiency Calculation Engine
-
-`shared/calc.js` computes proficiency levels (0-4 scale) from score data.
-
-### Proficiency Scale
-
-| Level | Label       |
-| ----- | ----------- |
-| 0     | No Evidence |
-| 1     | Emerging    |
-| 2     | Developing  |
-| 3     | Proficient  |
-| 4     | Extending   |
-
-### Calculation Methods
-
-Configured per-course in `courseConfig.calcMethod`:
-
-- **mostRecent** - uses the last score by date
-- **highest** - uses the maximum score
-- **mode** - most frequent score (ties broken by most recent among tied values); assessment weights affect frequency count
-- **decayingAvg** - exponentially weighted average where newer scores have more influence. Controlled by `decayWeight` (default 0.65). Formula: `avg = avg * (1 - dw) + score * dw`
-
-### Calculation Hierarchy
-
-```
-Score entries (per student, per tag, per assessment)
-  |
-  v
-getTagScores(cid, sid, tagId)
-  - Filters by tag, excludes "excused" statuses
-  - Converts points-mode scores to proficiency via grading scale boundaries
-  |
-  v
-getTagProficiency(cid, sid, tagId)
-  - Splits scores into summative/formative categories
-  - Applies category weights (summative vs formative)
-  - Runs _calcGroup() with the course's chosen method
-  |
-  v
-getSectionProficiency(cid, sid, sectionId)
-  - Averages tag proficiencies within a section
-  - Applies teacher override if one exists
-  |
-  v
-getOverallProficiency(cid, sid)
-  - Averages all section proficiencies
-```
-
-### Supporting Features
-
-- **Teacher overrides:** `setSectionOverride()` stores a manual proficiency level with a reason and the calculated value at time of override
-- **Points-to-proficiency conversion:** `pointsToProf()` converts raw point scores using configurable percentage boundaries
-- **Category weights:** summative/formative weighting via `getCategoryWeights()`
-- **Assessment weights:** individual assessments can be weighted (default 1)
-- **Memoization:** Three caches (`_tagScoresCache`, `_tagProfCache`, `_awCache`) cleared by `clearProfCache()` whenever scores, assessments, overrides, statuses, configs, or learning-map data change. The invalidation is still triggered by `_saveCourseField` for the relevant local cache fields.
-- **Growth sparklines:** `getSectionGrowthData()` builds chronological proficiency snapshots for charting
-- **Focus areas:** `getFocusAreas()` identifies tags with no evidence or lowest proficiency
-- **Letter grades:** `calcLetterGrade()` converts average proficiency to letter grade + percentage
-
-## Key Data Structures
-
-### Course
-
-```js
-{ id: 'sci8', name: 'Science 8', gradingSystem: 'proficiency',
-  calcMethod: 'mostRecent', decayWeight: 0.65, curriculumTags: ['SCI8'] }
-```
-
-### Student
-
-```js
-{ id: 'sXXX', firstName: '', lastName: '', preferred: '',
-  pronouns: '', studentNumber: '', dateOfBirth: '', email: '',
-  designations: ['D','G'],  // BC designation codes
-  attendance: [{ date: '2025-01-15', status: 'present' }] }
-```
-
-### Assessment
-
-```js
-{ id: 'aXXX', title: '', date: '2025-01-15', type: 'summative',
-  tags: ['QAP','PI'],  // linked learning tags
-  weight: 1, scoreMode: 'proficiency',  // or 'points'
-  maxPoints: 10,  // if points mode
-  excludedStudents: [], pairs: [], groups: [] }
-```
-
-### Score Entry
-
-```js
-{ score: 3, date: '2025-01-15', type: 'summative',
-  tagId: 'QAP', assessmentId: 'aXXX', rawPoints: 8 }
-```
-
-Scores are stored as `{ [studentId]: Score[] }`.
-
-### Learning Map
-
-```js
-{ subjects: [{ id: 'SCI8', name: 'Science 8', color: '#0891b2' }],
-  sections: [{
-    id: 'SCI8_questioning', subject: 'SCI8', name: 'Questioning and Predicting',
-    shortName: 'Questioning', color: '#0891b2',
-    tags: [{ id: 'QAP', label: 'Question and Predict', text: '',
-             i_can_statements: ['I can...'] }]
-  }],
-  _customized: true, _version: 1 }
-```
-
-### Assignment Status
-
-Keyed as `"studentId:assessmentId"` -> `'excused'` | `'notSubmitted'` | `null`
-
-### Module
-
-```js
-{ id: 'mXXX', title: '', startDate: '', endDate: '',
-  assessmentIds: [] }
-```
-
-## Shared UI Components
-
-`teacher/ui.js` provides reusable UI rendered into the DOM mount points:
-
-- **renderDock()** - top navigation bar with page tabs, sync indicator, and user menu
-- **renderSidebar()** - student roster with search, course switcher, proficiency badges, and "Add Student" button
-- **renderStudentHeader()** - student detail header with avatar, overall proficiency, stats (assessed/tags/observations/attendance), metadata chips, and designation badges
-- **Toasts** - `showSyncToast()` for sync status, `showUndoToast()` for reversible actions
-- **showConfirm()** - modal confirmation dialog with focus trap and keyboard support
-- **Delegated click handler** - global `[data-action]` delegation for sidebar clicks, user menu, sign out, undo, etc.
-- **Error monitoring** - global `error` and `unhandledrejection` handlers that log to Supabase `error_logs` table
-
-## Module Pattern
-
-All page modules and the router use the IIFE (Immediately Invoked Function Expression) pattern:
-
-```js
-window.PageExample = (function () {
-  'use strict';
-  // Private state
-  var activeCourse;
-  var _listeners = [];
-
-  function init(params) {
-    // Mount UI, attach listeners
-  }
-
-  function destroy() {
-    // Remove listeners, clear timers
-    _listeners.forEach(l => document.removeEventListener(l.type, l.handler));
-    _listeners = [];
-  }
-
-  return { init, destroy };
-})();
-```
-
-Functions are exposed on `window` for cross-module access (e.g., `window.Calc`, `window.UI`, `window.Router`). Submodules (like `dash-class-manager.js`) add their functions directly to `window` or are called by their parent page module.
-
-## Hosting & Deployment
-
-- **Netlify** hosts the app with a build step (`scripts/build.sh`) that copies only public files to `dist/`
-- **Edge function** (`netlify/edge-functions/inject-env.js`) replaces `__SUPABASE_URL__` / `__SUPABASE_KEY__` placeholders in HTML responses with environment variables, generates a per-request nonce, and emits the `Content-Security-Policy` header (with `script-src 'self' 'nonce-...'` — no `unsafe-inline` for scripts)
-- **Service worker** (`sw.js`) precaches all app files and uses a network-first strategy with cache fallback. Bump `CACHE_NAME` on every deploy so installed PWAs reload fresh.
-- **Demo mode** is the recommended way to try the app without Supabase — it short-circuits auth and seeds the Science 8 sample class from `shared/seed-data.js` (113 KB, lazy-loaded only on demand)
+This document describes the current application architecture at a stable, high level. It is intentionally not the place for task tracking, migration history, or temporary production issues.
+
+Use this file for system shape and runtime boundaries.
+Use the backend-design docs for implementation detail and the live handoff/backlog docs for current work.
+
+## System overview
+
+FullVision is a teacher-facing web application with two shipped runtime surfaces:
+
+- Desktop SPA at `teacher/app.html`
+- Mobile PWA at `teacher-mobile/index.html`
+
+Both surfaces share the same core client runtime:
+
+- authentication in `shared/supabase.js`
+- local cache and data orchestration in `shared/data.js`
+- offline retry infrastructure in `shared/offline-queue.js`
+- grading and reporting calculations in `shared/calc.js`
+
+The app persists teacher data through Supabase Auth plus a public RPC surface. It is deployed as a static site on Netlify, with environment values injected into HTML at request time by an edge function.
+
+## Runtime surfaces
+
+### Login and account entry
+
+- `login.html` and `login-auth.js` handle sign-in, sign-up, password reset, and Demo Mode entry.
+- Authenticated users are routed into the teacher experience.
+- The current production architecture is teacher-only; future student/parent portals are not part of the active runtime.
+
+### Desktop SPA
+
+- Entry point: `teacher/app.html`
+- Router: `teacher/router.js`
+- Main page modules:
+  - `page-dashboard.js`
+  - `page-assignments.js`
+  - `page-student.js`
+  - `page-gradebook.js`
+  - `page-observations.js`
+  - `page-reports.js`
+- Shared desktop UI shell: `teacher/ui.js`
+
+The desktop app is a hash-routed single-page app. Page modules render into shared mount points for the dock, sidebar, page toolbar, and main content area.
+
+### Mobile PWA
+
+- Entry point: `teacher-mobile/index.html`
+- Shell: `teacher-mobile/shell.js`
+- Main tab modules:
+  - `tab-students.js`
+  - `tab-observe.js`
+  - `tab-grade.js`
+
+The mobile experience reuses the same shared auth, data, queue, and calculation layers as desktop, but presents them through a separate shell and touch-first UI.
+
+## Shared client architecture
+
+### Script and module model
+
+The app uses vanilla JavaScript with browser-global IIFE modules rather than a bundler-driven framework runtime.
+
+Shared runtime modules load before desktop or mobile page modules:
+
+1. Supabase SDK
+2. `shared/supabase.js`
+3. `shared/constants.js`
+4. `shared/data.js`
+5. `shared/offline-queue.js`
+6. `shared/demo-seed.js`
+7. `shared/calc.js`
+
+Desktop or mobile modules then layer on top of that shared runtime.
+
+### Static and lazy-loaded assets
+
+- `curriculum_data.js` is a large static curriculum index and should be treated as reference data, not core boot state.
+- `shared/demo-seed.js` defines the current Welcome Class seed payload builder.
+- `shared/seed-data.js` remains part of the Demo Mode path.
+
+## Boot and session flow
+
+### Desktop boot
+
+Desktop boot is orchestrated by `Router.boot()` in `teacher/router.js`:
+
+1. `requireAuth()`
+2. `initAllCourses()`
+3. `initData(activeCourseId)`
+4. `loadSeedIfNeeded()`
+5. `migrateAllStudents()`
+6. route initial render
+
+### Mobile boot
+
+Mobile boot in `teacher-mobile/shell.js` follows the same core pattern:
+
+1. check session
+2. `initAllCourses()`
+3. `initData(activeCourseId)`
+4. `loadSeedIfNeeded()`
+5. `migrateAllStudents()`
+6. render the active mobile tab shell
+
+### Authentication behavior
+
+`shared/supabase.js` owns:
+
+- Supabase client initialization
+- sign-in and sign-up
+- password re-authentication for sensitive actions
+- session refresh
+- sign-out and local data clearing
+- unauthenticated redirects back to `login.html`
+
+The current account lifecycle also includes:
+
+- restore-on-sign-in handling for soft-deleted teacher accounts
+- long-form session-expiry recovery for narrative/reporting surfaces
+- full local data wipe on sign-out for shared-device safety
+
+## Data and persistence model
+
+### Core model
+
+The current app is local-first in the UI, but not local-only in source of truth.
+
+At runtime, the client uses:
+
+- in-memory `_cache` for synchronous reads
+- localStorage as durable browser cache and offline fallback
+- explicit Supabase RPC dispatch for server persistence
+- `window.v2Queue` for queued retry behavior when applicable
+
+This is no longer the older generic “local blob plus background bridge” design. The active model is domain-specific dispatch over the v2 RPC surface.
+
+### Boot reads
+
+Global boot state is loaded by `initAllCourses()` and `initData()` in `shared/data.js`.
+
+Current signed-in flow:
+
+- `bootstrap_teacher(...)` ensures teacher bootstrap state exists
+- `list_teacher_courses()` provides course-level boot metadata
+- `get_gradebook(courseId)` hydrates the active course cache
+- `get_student_profile(enrollmentId)` supports deeper student detail reads
+
+Legacy per-course fan-out reads are no longer the active architecture.
+
+### Writes
+
+Local writes update `_cache` and localStorage first so the UI stays responsive.
+Remote persistence then happens through explicit v2 helpers and dispatchers, including `window.v2.*` methods for:
+
+- course and policy updates
+- roster and student writes
+- assessment CRUD
+- score and rubric writes
+- observations
+- term ratings
+- report configuration and preferences
+- imports and restore flows
+
+### Offline and retry
+
+`shared/offline-queue.js` exposes `window.v2Queue`, which provides:
+
+- queued writes
+- retry with backoff
+- dead-letter handling
+- queue stats
+- subscription hooks for UI surfaces
+
+Desktop UI currently exposes queue and offline state through:
+
+- offline banner
+- unsynced badge
+- sync status popover
+
+The queue is the active retry mechanism for flows that opt into queued dispatch.
+
+### Cross-tab behavior
+
+The browser cache remains shared across tabs. Cross-tab state coordination still uses browser messaging and storage events where needed, but the old generic realtime bridge is not the primary architecture anymore.
+
+## Domain architecture
+
+### Teacher-facing scope
+
+FullVision is organized around a teacher-owned data model:
+
+- teachers
+- courses
+- students and enrollments
+- assessments and scores
+- observations
+- term/report artifacts
+- preferences and report configuration
+
+The app is designed around teacher-owned classroom workflows rather than student or parent self-service access.
+
+### Grading model
+
+The current grading architecture supports two parallel grading pipelines:
+
+- proficiency reporting
+- letter/percentage reporting
+
+Courses select a `grading_system` of:
+
+- `proficiency`
+- `letter`
+- `both`
+
+Current desktop grading behavior is category-driven:
+
+- categories drive the letter/percentage pipeline
+- proficiency remains based on sections, tags, and score evidence
+- desktop assignments, gradebook, and report/header flows now use category-aware logic
+
+This means the older “summative/formative is the primary grading architecture” framing is no longer accurate as a system-level description.
+
+## Welcome Class and demo data
+
+There are two distinct sample-data paths:
+
+- Welcome Class seeding for signed-in first-time teacher bootstrap
+- Demo Mode for local-only exploration without Supabase
+
+`shared/demo-seed.js` defines the canonical Welcome Class payload builder.
+`shared/seed-data.js` still powers the existing Demo Mode seed flow.
+
+These paths are related, but they are not yet the same runtime implementation.
+
+## Deployment architecture
+
+### Build and publish
+
+- `scripts/build.sh` copies the public app into `dist/`
+- Netlify publishes `dist/`
+- `netlify/edge-functions/inject-env.js` injects `SUPABASE_URL` and `SUPABASE_KEY` into HTML responses
+- the same edge function sets a per-request CSP nonce
+
+### Local signed-in development
+
+`scripts/dev-local.mjs` mirrors the Netlify HTML injection behavior locally:
+
+- serves files directly from the repo
+- injects Supabase env vars into HTML
+- sets a CSP matching production behavior closely enough for local auth testing
+
+### Service worker and PWA behavior
+
+- `sw.js` is registered by both desktop and mobile entry points
+- the manifest and service worker provide installability and cached asset behavior
+
+## Source-of-truth documents
+
+This file is intentionally high-level. For authoritative detail, use:
+
+- [`README.md`](../README.md) for repo entry and run instructions
+- [`docs/backend-design/HANDOFF.md`](backend-design/HANDOFF.md) for current live state and discovered gaps
+- [`codex.md`](../codex.md) for the live open-work list
+- [`docs/backend-design/INSTRUCTIONS.md`](backend-design/INSTRUCTIONS.md) for normalized product and UX intent
+- [`docs/backend-design/schema.sql`](backend-design/schema.sql) and [`docs/backend-design/rls-policies.sql`](backend-design/rls-policies.sql) for deployed reference artifacts
+- [`docs/backend-design/read-paths.md`](backend-design/read-paths.md) and [`docs/backend-design/write-paths.md`](backend-design/write-paths.md) for backend design detail
+
+## What this document should not carry
+
+To reduce future drift, this file should not become:
+
+- a task tracker
+- a migration diary
+- a production incident log
+- a list of temporary test counts
+- a duplicate of `HANDOFF.md`
+
+If a fact is expected to change frequently, it belongs in the handoff or backlog docs, not here.

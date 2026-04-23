@@ -1,9 +1,0 @@
-User-agent: *
-Disallow: /teacher/
-Disallow: /teacher-mobile/
-Disallow: /shared/
-Disallow: /vendor/
-Disallow: /student/
-Disallow: /parent/
-
-Allow: /login.html

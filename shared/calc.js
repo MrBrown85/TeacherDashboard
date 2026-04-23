@@ -114,6 +114,16 @@ function getAssessmentWeight(assessment) {
   return assessment.weight || 1;
 }
 
+function _scoreBucket(score, opts) {
+  if (opts && typeof opts.getScoreBucket === 'function') return opts.getScoreBucket(score);
+  if (score && (score.categoryId || score.category_id)) return 'categorized';
+  return score && score.type === 'formative' ? 'uncategorized' : 'categorized';
+}
+
+function _isScoredEvidence(score) {
+  return !!(score && Number(score.score) > 0);
+}
+
 function courseShowsLetterGrades(course) {
   return !!course && (course.gradingSystem === 'letter' || course.gradingSystem === 'both');
 }
@@ -346,15 +356,16 @@ function _calcGroup(scores, method, decayWeight, assessmentWeights) {
 function calcProficiency(scores, method, decayWeight, opts) {
   const aw = opts && opts.assessmentWeights;
   const cw = opts && opts.categoryWeights;
-  const summative = scores.filter(s => s.type === 'summative');
-  const formative = scores.filter(s => s.type === 'formative');
+  const categorized = scores.filter(s => _scoreBucket(s, opts) === 'categorized');
+  const uncategorized = scores.filter(s => _scoreBucket(s, opts) !== 'categorized');
 
-  const summProf = _calcGroup(summative, method, decayWeight, aw);
+  const summProf = _calcGroup(categorized, method, decayWeight, aw);
+  const uncategorizedProf = _calcGroup(uncategorized, method, decayWeight, aw);
 
   // If no category weights or formative weight is 0, behave as before
-  if (!cw || !cw.formative || cw.formative <= 0) return summProf;
+  if (!cw || !cw.formative || cw.formative <= 0) return summProf || uncategorizedProf;
 
-  const formProf = _calcGroup(formative, method, decayWeight, aw);
+  const formProf = uncategorizedProf;
   if (formProf === 0) return summProf; // no formative evidence, use summative only
   if (summProf === 0) return formProf; // no summative evidence, use formative only
 
@@ -414,7 +425,17 @@ function getTagProficiency(cid, studentId, tagId) {
   const scores = getTagScores(cid, studentId, tagId);
   const cw = getCategoryWeights(cid);
   const aw = _getAW(cid);
-  var result = calcProficiency(scores, method, dw, { categoryWeights: cw, assessmentWeights: aw });
+  var assessMap = _getAssessMap(cid);
+  var result = calcProficiency(scores, method, dw, {
+    categoryWeights: cw,
+    assessmentWeights: aw,
+    getScoreBucket: function (score) {
+      var assessment = assessMap.get(score.assessmentId);
+      if (!assessment) return score && score.type === 'formative' ? 'uncategorized' : 'categorized';
+      if (assessment.categoryId || assessment.category_id) return 'categorized';
+      return assessment.type === 'formative' ? 'uncategorized' : 'categorized';
+    },
+  });
   _tagProfCache[cacheKey] = result;
   return result;
 }
@@ -487,6 +508,11 @@ function setSectionOverride(cid, studentId, sectionId, level, reason) {
     if (Object.keys(overrides[studentId]).length === 0) delete overrides[studentId];
   }
   saveOverrides(cid, overrides);
+  if (typeof _setEchoGuard === 'function') _setEchoGuard('student-records', cid);
+  if (window.v2 && _isUuid && _isUuid(studentId)) {
+    if (level > 0 && reason) window.v2.saveSectionOverride(studentId, sectionId, level, reason);
+    else window.v2.clearSectionOverride(studentId, sectionId);
+  }
 }
 
 /** Calculate the averaged proficiency for a competency group.
@@ -553,11 +579,11 @@ function calcLetterGrade(avgProf) {
 function getSectionTrend(cid, studentId, sectionId) {
   const section = _getSectionById(cid, sectionId);
   if (!section) return 'flat';
-  // Collect all summative scores across all tags in this section, sorted by date
+  // Compare the two most recent scored evidence entries for the section.
   const allScores = [];
   section.tags.forEach(tag => {
     getTagScores(cid, studentId, tag.id)
-      .filter(s => s.type === 'summative' && s.score > 0)
+      .filter(_isScoredEvidence)
       .forEach(s => allScores.push(s));
   });
   if (allScores.length < 2) return 'flat';
@@ -569,18 +595,18 @@ function getSectionTrend(cid, studentId, sectionId) {
   return 'flat';
 }
 
-/** Count the number of summative score entries across all tags in a section.
+/** Count the number of scored evidence entries across all tags in a section.
  * @param {string} cid - Course ID
  * @param {string} studentId - Student ID
  * @param {string} sectionId - Section ID
- * @returns {number} Total summative evidence count
+ * @returns {number} Total evidence count
  */
 function getSectionEvidenceCount(cid, studentId, sectionId) {
   const section = _getSectionById(cid, sectionId);
   if (!section) return 0;
   let count = 0;
   section.tags.forEach(tag => {
-    count += getTagScores(cid, studentId, tag.id).filter(s => s.type === 'summative').length;
+    count += getTagScores(cid, studentId, tag.id).filter(_isScoredEvidence).length;
   });
   return count;
 }
@@ -608,7 +634,7 @@ function getFocusAreas(cid, studentId, maxItems) {
   return scored.slice(0, maxItems || 3);
 }
 
-/** Calculate the percentage of tags that have at least one summative score.
+/** Calculate the percentage of tags that have at least one scored evidence entry.
  * @param {string} cid - Course ID
  * @param {string} studentId - Student ID
  * @returns {number} Completion percentage (0-100)
@@ -618,7 +644,7 @@ function getCompletionPct(cid, studentId) {
   if (tags.length === 0) return 0;
   const covered = tags.filter(t => {
     const scores = getTagScores(cid, studentId, t.id);
-    return scores.some(s => s.type === 'summative' && s.score > 0);
+    return scores.some(_isScoredEvidence);
   }).length;
   return Math.round((covered / tags.length) * 100);
 }
@@ -656,11 +682,11 @@ function getSectionGrowthData(cid, studentId, sectionId) {
   const method = cc.calcMethod || course.calcMethod || 'mostRecent';
   const dw = cc.decayWeight != null ? cc.decayWeight : course.decayWeight || 0.65;
 
-  // Collect all summative scores across all tags in this section
+  // Collect all scored evidence across all tags in this section.
   const allScores = [];
   section.tags.forEach(tag => {
     getTagScores(cid, studentId, tag.id)
-      .filter(s => s.type === 'summative' && s.score > 0)
+      .filter(_isScoredEvidence)
       .forEach(s => allScores.push({ ...s, _tagId: tag.id }));
   });
   if (allScores.length === 0) return [];

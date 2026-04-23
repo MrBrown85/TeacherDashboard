@@ -17,8 +17,8 @@ function mockDataLayer(overrides) {
       { id: 'stu2', firstName: 'Noor', lastName: 'Khan', preferred: 'Noor', pronouns: 'she/her', designations: ['G'] },
       { id: 'stu3', firstName: 'Liam', lastName: 'Chen', preferred: '', pronouns: 'he/him', designations: ['K'] },
     ],
-    sortStudents: (arr) => arr,
-    displayName: (st) => (st.preferred || st.firstName) + ' ' + st.lastName,
+    sortStudents: arr => arr,
+    displayName: st => (st.preferred || st.firstName) + ' ' + st.lastName,
     getOverallProficiency: () => 3.0,
     getAssignmentStatuses: () => ({}),
     getAssessments: () => [],
@@ -102,7 +102,7 @@ describe('MStudents.renderList', () => {
   });
 
   it('shows proficiency badge with correct value', () => {
-    mockDataLayer({ getOverallProficiency: (cid, sid) => sid === 'stu1' ? 3.5 : 2.0 });
+    mockDataLayer({ getOverallProficiency: (cid, sid) => (sid === 'stu1' ? 3.5 : 2.0) });
     const html = MStudents.renderList(CID);
     expect(html).toContain('3.5');
     expect(html).toContain('2.0');
@@ -129,8 +129,14 @@ describe('MStudents.renderList', () => {
     let assessCalls = 0;
     let statusCalls = 0;
     mockDataLayer({
-      getAssessments: () => { assessCalls++; return []; },
-      getAssignmentStatuses: () => { statusCalls++; return {}; },
+      getAssessments: () => {
+        assessCalls++;
+        return [];
+      },
+      getAssignmentStatuses: () => {
+        statusCalls++;
+        return {};
+      },
     });
     MStudents.renderList(CID);
     // Should be called exactly once (hoisted), not once per student (3 students)
@@ -207,7 +213,10 @@ describe('Trend display (string comparison fix)', () => {
   it('shows ↑ for upward trend', () => {
     mockDataLayer({
       getSections: () => [{ id: 's1', name: 'Test Section', shortName: 'Test', tags: [], color: '#888' }],
-      getGroupedSections: () => ({ groups: [], ungrouped: [{ id: 's1', name: 'Test Section', shortName: 'Test', tags: [], color: '#888' }] }),
+      getGroupedSections: () => ({
+        groups: [],
+        ungrouped: [{ id: 's1', name: 'Test Section', shortName: 'Test', tags: [], color: '#888' }],
+      }),
       getSectionProficiency: () => 3.0,
       getSectionTrend: () => 'up',
     });
@@ -219,7 +228,10 @@ describe('Trend display (string comparison fix)', () => {
   it('shows ↓ for downward trend', () => {
     mockDataLayer({
       getSections: () => [{ id: 's1', name: 'Test Section', shortName: 'Test', tags: [], color: '#888' }],
-      getGroupedSections: () => ({ groups: [], ungrouped: [{ id: 's1', name: 'Test Section', shortName: 'Test', tags: [], color: '#888' }] }),
+      getGroupedSections: () => ({
+        groups: [],
+        ungrouped: [{ id: 's1', name: 'Test Section', shortName: 'Test', tags: [], color: '#888' }],
+      }),
       getSectionProficiency: () => 2.0,
       getSectionTrend: () => 'down',
     });
@@ -231,7 +243,10 @@ describe('Trend display (string comparison fix)', () => {
   it('shows — for flat trend', () => {
     mockDataLayer({
       getSections: () => [{ id: 's1', name: 'Test Section', shortName: 'Test', tags: [], color: '#888' }],
-      getGroupedSections: () => ({ groups: [], ungrouped: [{ id: 's1', name: 'Test Section', shortName: 'Test', tags: [], color: '#888' }] }),
+      getGroupedSections: () => ({
+        groups: [],
+        ungrouped: [{ id: 's1', name: 'Test Section', shortName: 'Test', tags: [], color: '#888' }],
+      }),
       getSectionProficiency: () => 3.0,
       getSectionTrend: () => 'flat',
     });
@@ -240,11 +255,14 @@ describe('Trend display (string comparison fix)', () => {
   });
 });
 
-/* ── Evidence count (summative only) ────────────────────────── */
+/* ── Evidence count ─────────────────────────────────────────── */
 describe('Evidence count filtering', () => {
-  it('only counts summative scores as evidence', () => {
+  it('shows all scored evidence in the timeline', () => {
     const sec = {
-      id: 's1', name: 'Test', shortName: 'Test', color: '#888',
+      id: 's1',
+      name: 'Test',
+      shortName: 'Test',
+      color: '#888',
       tags: [{ id: 't1', label: 'Tag 1' }],
     };
     mockDataLayer({
@@ -260,11 +278,10 @@ describe('Evidence count filtering', () => {
       getTagProficiency: () => 3.0,
     });
     const html = MStudents.renderDetail(CID, 'stu1');
-    // Timeline should only show the summative score (score=3), not formatives
+    // Timeline should show every scored evidence entry.
     expect(html).toContain('m-sec-tl-dot');
-    // Only 1 timeline item (the summative), not 3
     var dotCount = (html.match(/m-sec-tl-dot/g) || []).length;
-    expect(dotCount).toBe(1);
+    expect(dotCount).toBe(3);
   });
 });
 
@@ -304,10 +321,12 @@ describe('Competency group display', () => {
         { id: 's1', name: 'Questioning', shortName: 'Quest', tags: [], color: '#888', groupId: 'g1' },
       ],
       getGroupedSections: () => ({
-        groups: [{
-          group: { id: 'g1', label: 'Thinking', name: 'Thinking' },
-          sections: [{ id: 's1', name: 'Questioning', shortName: 'Quest', tags: [], color: '#888' }],
-        }],
+        groups: [
+          {
+            group: { id: 'g1', label: 'Thinking', name: 'Thinking' },
+            sections: [{ id: 's1', name: 'Questioning', shortName: 'Quest', tags: [], color: '#888' }],
+          },
+        ],
         ungrouped: [],
       }),
       getSectionProficiency: () => 3.0,
@@ -343,7 +362,10 @@ describe('Growth sparklines', () => {
       getGroupedSections: () => ({ groups: [], ungrouped: [sec] }),
       getSectionProficiency: () => 3.0,
       getSectionTrend: () => 'up',
-      getSectionGrowthData: () => [{ date: '2025-01-01', prof: 2 }, { date: '2025-02-01', prof: 3 }],
+      getSectionGrowthData: () => [
+        { date: '2025-01-01', prof: 2 },
+        { date: '2025-02-01', prof: 3 },
+      ],
       renderGrowthSparkline: () => '<div class="growth-sparkline">mock-sparkline</div>',
     });
     const html = MStudents.renderDetail(CID, 'stu1');
@@ -375,14 +397,18 @@ describe('Observation cards in student detail', () => {
     mockDataLayer({
       getStudentQuickObs: () => [
         {
-          id: 'ob1', text: 'Great participation', sentiment: 'strength',
-          context: 'whole-class', dims: ['engagement'], created: '2025-03-14T10:00:00Z',
+          id: 'ob1',
+          text: 'Great participation',
+          sentiment: 'strength',
+          context: 'whole-class',
+          dims: ['engagement'],
+          created: '2025-03-14T10:00:00Z',
         },
       ],
     });
     const html = MStudents.renderDetail(CID, 'stu1');
     expect(html).toContain('m-obs-context'); // context label present
-    expect(html).toContain('m-obs-tags');     // tag chips present
+    expect(html).toContain('m-obs-tags'); // tag chips present
   });
 });
 
@@ -397,7 +423,9 @@ describe('MStudents.filterList', () => {
 describe('Student edge cases', () => {
   it('handles student with no pronouns', () => {
     mockDataLayer({
-      getStudents: () => [{ id: 'stu1', firstName: 'Test', lastName: 'User', preferred: '', pronouns: '', designations: [] }],
+      getStudents: () => [
+        { id: 'stu1', firstName: 'Test', lastName: 'User', preferred: '', pronouns: '', designations: [] },
+      ],
     });
     const html = MStudents.renderList(CID);
     expect(html).toContain('Test User');
@@ -406,7 +434,9 @@ describe('Student edge cases', () => {
 
   it('handles student with no designations array', () => {
     mockDataLayer({
-      getStudents: () => [{ id: 'stu1', firstName: 'Test', lastName: 'User', preferred: '', pronouns: '', designations: null }],
+      getStudents: () => [
+        { id: 'stu1', firstName: 'Test', lastName: 'User', preferred: '', pronouns: '', designations: null },
+      ],
     });
     const html = MStudents.renderList(CID);
     expect(html).toContain('Test User');
@@ -415,7 +445,9 @@ describe('Student edge cases', () => {
 
   it('handles student with empty designations array', () => {
     mockDataLayer({
-      getStudents: () => [{ id: 'stu1', firstName: 'Test', lastName: 'User', preferred: '', pronouns: '', designations: [] }],
+      getStudents: () => [
+        { id: 'stu1', firstName: 'Test', lastName: 'User', preferred: '', pronouns: '', designations: [] },
+      ],
     });
     const html = MStudents.renderList(CID);
     expect(html).not.toContain('m-badge-iep');
@@ -423,8 +455,10 @@ describe('Student edge cases', () => {
 
   it('uses preferred name over first name', () => {
     mockDataLayer({
-      getStudents: () => [{ id: 'stu1', firstName: 'Alexander', lastName: 'Smith', preferred: 'Alex', pronouns: '', designations: [] }],
-      displayName: (st) => (st.preferred || st.firstName) + ' ' + st.lastName,
+      getStudents: () => [
+        { id: 'stu1', firstName: 'Alexander', lastName: 'Smith', preferred: 'Alex', pronouns: '', designations: [] },
+      ],
+      displayName: st => (st.preferred || st.firstName) + ' ' + st.lastName,
     });
     const html = MStudents.renderList(CID);
     expect(html).toContain('Alex Smith');
@@ -432,7 +466,9 @@ describe('Student edge cases', () => {
 
   it('handles student with multiple designations', () => {
     mockDataLayer({
-      getStudents: () => [{ id: 'stu1', firstName: 'Test', lastName: 'User', preferred: '', pronouns: '', designations: ['G', 'K'] }],
+      getStudents: () => [
+        { id: 'stu1', firstName: 'Test', lastName: 'User', preferred: '', pronouns: '', designations: ['G', 'K'] },
+      ],
     });
     const html = MStudents.renderList(CID);
     // G has iep:true, K has iep:true AND modified:true
@@ -472,7 +508,7 @@ describe('Student detail with multiple sections', () => {
     mockDataLayer({
       getSections: () => sections,
       getGroupedSections: () => ({ groups: [], ungrouped: sections }),
-      getSectionProficiency: (cid, sid, secId) => secId === 's1' ? 4.0 : 1.5,
+      getSectionProficiency: (cid, sid, secId) => (secId === 's1' ? 4.0 : 1.5),
       getSectionTrend: () => 'flat',
     });
     const html = MStudents.renderDetail(CID, 'stu1');
@@ -482,7 +518,10 @@ describe('Student detail with multiple sections', () => {
 
   it('shows tags within expanded section', () => {
     const sec = {
-      id: 's1', name: 'Test', shortName: 'Test', color: '#888',
+      id: 's1',
+      name: 'Test',
+      shortName: 'Test',
+      color: '#888',
       tags: [
         { id: 't1', label: 'Tag Alpha' },
         { id: 't2', label: 'Tag Beta' },
@@ -499,7 +538,7 @@ describe('Student detail with multiple sections', () => {
     const html = MStudents.renderDetail(CID, 'stu1');
     // Section detail now shows timeline (not per-tag rows) — with no scores, shows empty state
     expect(html).toContain('m-sec-empty');
-    expect(html).toContain('No summative scores yet');
+    expect(html).toContain('No evidence scored yet');
   });
 });
 
