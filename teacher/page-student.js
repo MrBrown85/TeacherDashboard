@@ -15,6 +15,7 @@ window.PageStudent = (function () {
   var activeSectionFilters = new Set();
   var _expandedGroups = new Set();
   var _overrideSelectedLevel = 0;
+  var _profileData = null;
   var Notes = StudentNotes;
   var Overrides = StudentOverrides;
 
@@ -37,6 +38,7 @@ window.PageStudent = (function () {
 
   function switchStudent(sid) {
     studentId = sid;
+    _profileData = null;
     activeSectionFilters.clear();
     Router.navigate('#/student?id=' + sid + '&course=' + activeCourse);
   }
@@ -316,6 +318,65 @@ window.PageStudent = (function () {
       'PageStudent.switchStudent',
     );
     render();
+  }
+
+  /* ── Competency tree renderer ───────────────────────────── */
+  function _renderCompetencyTree(tree) {
+    if (!tree) return '';
+    var subjects = tree.subjects || [];
+    if (subjects.length === 0) return '';
+    var out = '<div class="ct-wrap"><div class="ct-title">Competency Profile</div>';
+    subjects.forEach(function (subj) {
+      var sections = subj.sections || [];
+      if (sections.length === 0) return;
+      out += '<div class="ct-subject"><div class="ct-subject-name">' + esc(subj.name) + '</div>';
+      sections.forEach(function (sec) {
+        var prof = sec.proficiency;
+        var profRounded = prof != null ? Math.round(prof) : 0;
+        var tags = sec.tags || [];
+        out +=
+          '<div class="ct-section">' +
+          '<div class="ct-section-header">' +
+          profLabelBadge(prof != null ? prof : 0) +
+          '<span class="ct-section-name">' +
+          esc(sec.name) +
+          '</span>' +
+          (sec.override ? '<span class="override-label">Overridden</span>' : '') +
+          '</div>';
+        if (tags.length > 0) {
+          out += '<div class="ct-tags">';
+          tags.forEach(function (tag) {
+            var lv = tag.latest_value;
+            var lvRounded = lv != null ? Math.round(lv) : 0;
+            var lvColor = lv != null ? PROF_COLORS[lvRounded] || PROF_COLORS[0] : 'var(--text-3)';
+            out +=
+              '<div class="ct-tag-row">' +
+              '<span class="ct-tag-code">' +
+              esc(tag.code || '') +
+              '</span>' +
+              '<span class="ct-tag-label">' +
+              esc(tag.label || '') +
+              '</span>' +
+              '<span class="ct-tag-val" style="color:' +
+              lvColor +
+              '">' +
+              (lv != null ? lv.toFixed(1) : '\u2014') +
+              '</span>' +
+              '<span class="ct-tag-cov" title="' +
+              (tag.coverage_count || 0) +
+              ' assessment(s)">' +
+              (tag.coverage_count || 0) +
+              '</span>' +
+              '</div>';
+          });
+          out += '</div>';
+        }
+        out += '</div>';
+      });
+      out += '</div>';
+    });
+    out += '</div>';
+    return out;
   }
 
   /* ── Main render ────────────────────────────────────────── */
@@ -1094,7 +1155,9 @@ window.PageStudent = (function () {
 
     html += '</div>'; // end insights-grid
 
-    // Focus Areas section removed — "I can" statements not populated in learning map
+    if (_profileData && _profileData.competency_tree) {
+      html += _renderCompetencyTree(_profileData.competency_tree);
+    }
 
     // ── Core Competencies ──
     var ccTally = {};
@@ -1282,7 +1345,17 @@ window.PageStudent = (function () {
     // Add delegated listeners
     _addDocListener('click', _handleClick);
 
+    _profileData = null;
     render();
+
+    if (window.v2 && window.v2.getStudentProfile) {
+      window.v2.getStudentProfile(studentId).then(function (res) {
+        if (res && res.data) {
+          _profileData = res.data;
+          render();
+        }
+      });
+    }
 
     requestAnimationFrame(function () {
       document.getElementById('main').scrollTop = 0;

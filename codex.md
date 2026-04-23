@@ -58,16 +58,6 @@ This is the only active work list for the repo. Implementation history belongs i
 
 - Targeted smoke coverage and PR CI are green, but the broader Playwright suite still needs a clean reconciliation pass.
 
-### P4.2 · Migrate Demo Mode to `buildDemoSeedPayload`
-
-- Local Demo Mode still depends on `shared/seed-data.js`.
-- Welcome Class bootstrap uses `buildDemoSeedPayload`, so the repo still maintains two seed paths.
-
-### T-READ-01 · Finish `competency_tree` in student-profile SQL shape
-
-- `docs/backend-design/read-paths.sql` still returns `competency_tree: null`.
-- The intended grouped `competency_group -> section -> tag` read shape has not been composed yet.
-
 ## Deferred / external work
 
 ### D1 · Term-rating narrative auto-generate
@@ -84,6 +74,11 @@ This is the only active work list for the repo. Implementation history belongs i
 
 - The write queue is implemented.
 - Read-side cached API snapshots / IndexedDB delta-refresh remain future work in `offline-sync.md`.
+
+### D5 · Migrate Demo Mode to `buildDemoSeedPayload`
+
+- Local Demo Mode still depends on `shared/seed-data.js` (legacy camelCase, string IDs).
+- `buildDemoSeedPayload` uses v2 snake_case schema; a full client-side hydration layer would be needed to swap. Deferred until the schema gap is smaller or the maintenance cost becomes acute.
 
 ### D4 · UI surfaces deferred beyond the current repo scope
 

@@ -710,17 +710,19 @@ end;
 $$;
 
 -- ── §2.2 Student profile ───────────────────────────────────────────────────
--- Stub — returns the overall numbers + status counts + notes/goals/reflections.
--- Full competency-tree composition left to the implementation pass.
+-- Deployed in migration fullvision_v2_get_student_profile_competency_tree (2026-04-20).
+-- Composes subjects → sections → tags with per-section proficiency + latest tag_score.
 create or replace function get_student_profile(p_enrollment_id uuid)
 returns jsonb
 language plpgsql
 stable
+set search_path = public
 as $$
 declare
     enr         enrollment%rowtype;
     stu         student%rowtype;
     course_row  course%rowtype;
+    _tree       jsonb;
 begin
     select * into enr from enrollment where id = p_enrollment_id;
     if not found then
@@ -728,6 +730,78 @@ begin
     end if;
     select * into stu from student where id = enr.student_id;
     select * into course_row from course where id = enr.course_id;
+
+    with
+    groups as (
+      select jsonb_agg(jsonb_build_object(
+               'id', cg.id, 'name', cg.name, 'color', cg.color,
+               'display_order', cg.display_order
+             ) order by cg.display_order, cg.name) as groups_jsonb
+        from competency_group cg where cg.course_id = enr.course_id
+    ),
+    latest_ts as (
+      select distinct on (ts.tag_id)
+             ts.tag_id, ts.value
+        from tag_score ts
+       where ts.enrollment_id = p_enrollment_id
+       order by ts.tag_id, ts.updated_at desc
+    ),
+    tag_rows as (
+      select t.id, t.section_id, t.code, t.label, t.i_can_text, t.display_order,
+             lts.value as latest_value,
+             (select count(distinct at.assessment_id)
+                from assessment_tag at
+                join assessment a on a.id = at.assessment_id
+               where at.tag_id = t.id and a.course_id = enr.course_id) as coverage_count
+        from tag t
+        join section s on s.id = t.section_id
+        left join latest_ts lts on lts.tag_id = t.id
+       where s.course_id = enr.course_id
+    ),
+    sections_with_tags as (
+      select s.id as section_id, s.subject_id, s.name, s.display_order,
+             s.competency_group_id,
+             fv_section_proficiency(p_enrollment_id, s.id) as proficiency,
+             (select to_jsonb(o.*) from section_override o
+               where o.enrollment_id = p_enrollment_id and o.section_id = s.id) as override,
+             coalesce(jsonb_agg(jsonb_build_object(
+               'id', t.id, 'code', t.code, 'label', t.label,
+               'i_can_text', t.i_can_text,
+               'display_order', t.display_order,
+               'latest_value', t.latest_value,
+               'coverage_count', t.coverage_count
+             ) order by t.display_order, t.label) filter (where t.id is not null), '[]'::jsonb) as tags
+        from section s
+        left join tag_rows t on t.section_id = s.id
+       where s.course_id = enr.course_id
+       group by s.id, s.subject_id, s.name, s.display_order, s.competency_group_id
+    ),
+    subjects_with_sections as (
+      select subj.id, subj.name, subj.display_order,
+             coalesce(jsonb_agg(jsonb_build_object(
+               'id', swt.section_id,
+               'name', swt.name,
+               'display_order', swt.display_order,
+               'competency_group_id', swt.competency_group_id,
+               'proficiency', swt.proficiency,
+               'override',    swt.override,
+               'tags',        swt.tags
+             ) order by swt.display_order, swt.name) filter (where swt.section_id is not null), '[]'::jsonb) as sections
+        from subject subj
+        left join sections_with_tags swt on swt.subject_id = subj.id
+       where subj.course_id = enr.course_id
+       group by subj.id, subj.name, subj.display_order
+    )
+    select jsonb_build_object(
+      'competency_groups', coalesce((select groups_jsonb from groups), '[]'::jsonb),
+      'subjects', coalesce(jsonb_agg(jsonb_build_object(
+         'id', sws.id, 'name', sws.name,
+         'display_order', sws.display_order,
+         'sections', sws.sections
+      ) order by sws.display_order, sws.name), '[]'::jsonb)
+    )
+    into _tree
+    from subjects_with_sections sws;
 
     return jsonb_build_object(
         'student', to_jsonb(stu),
@@ -754,7 +828,7 @@ begin
             select coalesce(jsonb_agg(to_jsonb(r)), '[]'::jsonb)
               from reflection r where r.enrollment_id = p_enrollment_id
         ),
-        'competency_tree', null  -- TODO: compose groups→sections→tags with per-node proficiency
+        'competency_tree', _tree
     );
 end;
 $$;
