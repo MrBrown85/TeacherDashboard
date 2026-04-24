@@ -25,6 +25,13 @@ window.PageGradebook = (function () {
   var _colHoverTip = null; // tooltip DOM element
   var _scrollShadowCleanup = null;
   var _tipSource = null;
+  /* Name-cell tooltip HTML, keyed on student.id. Populated in renderNameCell,
+   * read by _handleMouseover. Replaces the previous round-trip through
+   * data-tip="…" (which relied on every contributor to `tip` using esc()
+   * correctly so the browser's attribute-decode-plus-innerHTML cycle
+   * reconstructed the intended HTML without injection). Keeping the HTML
+   * in a JS-side map removes the attribute round-trip entirely. */
+  var _nameTipHtml = {};
   var _WELCOME_CLASS_NAME = 'Welcome Class';
   var _WELCOME_CLASS_SEEDED_PREFIX = 'gb-welcome-class-seeded-';
   var _WELCOME_BANNER_DISMISSED_PREFIX = 'gb-welcome-banner-dismissed-';
@@ -1471,13 +1478,14 @@ window.PageGradebook = (function () {
       '<div class="gb-tip-row"><span class="gb-tip-label">Coverage</span><span class="gb-tip-val">' +
       pctV +
       '%</span></div>';
+    _nameTipHtml[student.id] = tip;
     return (
-      '<div class="gb-name-wrap" data-tip="' +
-      esc(tip) +
+      '<div class="gb-name-wrap" data-sid="' +
+      esc(student.id) +
       '"><a href="#/student?id=' +
-      student.id +
+      encodeURIComponent(student.id) +
       '&course=' +
-      cid +
+      encodeURIComponent(cid) +
       '">' +
       esc(displayName(student)) +
       '</a></div>'
@@ -1654,15 +1662,7 @@ window.PageGradebook = (function () {
     // Use single-row upsert instead of full DELETE+INSERT bulk sync —
     // the bulk pattern is non-transactional and can lose data if INSERT
     // fails after DELETE succeeds.
-    upsertScore(
-      cid,
-      sid,
-      aid,
-      tid,
-      next,
-      assess ? assess.date : new Date().toISOString().slice(0, 10),
-      assess ? assess.type : 'summative',
-    );
+    upsertScore(cid, sid, aid, tid, next, assess ? assess.date : courseToday(cid), assess ? assess.type : 'summative');
     var span = td.querySelector('.gb-score-val');
     span.className = 'gb-score-val s' + next;
     if (next > 0) {
@@ -1732,15 +1732,7 @@ window.PageGradebook = (function () {
         setPointsScore(cid, sid, aid, raw);
       } else {
         var tidVal = td.dataset.tid;
-        upsertScore(
-          cid,
-          sid,
-          aid,
-          tidVal,
-          raw,
-          assess.date || new Date().toISOString().slice(0, 10),
-          assess.type || 'summative',
-        );
+        upsertScore(cid, sid, aid, tidVal, raw, assess.date || courseToday(cid), assess.type || 'summative');
       }
       wrap.remove();
       if (existing) existing.remove();
@@ -2226,16 +2218,7 @@ window.PageGradebook = (function () {
       while (_undoStack.length > 50) _undoStack.shift();
       // Apply score to all tags in this assessment
       tagIds.forEach(function (tid) {
-        upsertScore(
-          cid,
-          sid,
-          aid,
-          tid,
-          val,
-          assess.date || new Date().toISOString().slice(0, 10),
-          assess.type || 'summative',
-          '',
-        );
+        upsertScore(cid, sid, aid, tid, val, assess.date || courseToday(cid), assess.type || 'summative', '');
       });
       clearProfCache();
       inp.remove();
@@ -2479,7 +2462,7 @@ window.PageGradebook = (function () {
             assessmentId: aid,
             tagId: tid,
             score: val,
-            date: assess ? assess.date : new Date().toISOString().slice(0, 10),
+            date: assess ? assess.date : courseToday(cid),
             type: assess ? assess.type : 'summative',
             note: '',
             created: new Date().toISOString(),
@@ -2545,9 +2528,10 @@ window.PageGradebook = (function () {
     var gbTip = document.getElementById('gb-tooltip');
     if (!gbTip) return;
     var wrap = e.target.closest('.gb-name-wrap');
-    if (wrap && wrap.dataset.tip) {
+    var tipHtml = wrap && wrap.dataset.sid ? _nameTipHtml[wrap.dataset.sid] : null;
+    if (wrap && tipHtml) {
       gbTip.className = '';
-      gbTip.innerHTML = wrap.dataset.tip;
+      gbTip.innerHTML = tipHtml;
       gbTip.style.display = 'block';
       _tipSource = wrap;
       var rect = wrap.getBoundingClientRect();

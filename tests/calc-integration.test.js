@@ -68,11 +68,9 @@ describe('getTagScores', () => {
   it('excludes excused assessments', () => {
     mockDataLayer({
       getScores: () => ({
-        stu1: [
-          { score: 3, tagId: 't1', assessmentId: 'a1', date: '2025-01-01', type: 'summative' },
-        ],
+        stu1: [{ score: 3, tagId: 't1', assessmentId: 'a1', date: '2025-01-01', type: 'summative' }],
       }),
-      getAssignmentStatuses: () => ({ 'stu1:a1': 'excused' }),
+      getAssignmentStatuses: () => ({ 'stu1:a1': 'EXC' }),
       getAssessments: () => [{ id: 'a1', type: 'summative' }],
     });
 
@@ -80,21 +78,36 @@ describe('getTagScores', () => {
     expect(result).toHaveLength(0);
   });
 
-  it('converts points-mode scores to proficiency', () => {
+  it('legacy long-form "excused" is NOT recognized (regression guard)', () => {
+    // Post-migration, only the short form 'EXC' is honoured. If any code
+    // path ever writes 'excused' again, calc.js treats it as unknown and
+    // the score counts normally. This guards against the pre-2026-04-23
+    // state where desktop silently persisted long-form strings that calc
+    // could see but the server rejected.
     mockDataLayer({
       getScores: () => ({
-        stu1: [
-          { score: 90, tagId: 't1', assessmentId: 'a1', date: '2025-01-01', type: 'summative' },
-        ],
+        stu1: [{ score: 3, tagId: 't1', assessmentId: 'a1', date: '2025-01-01', type: 'summative' }],
       }),
-      getAssessments: () => [
-        { id: 'a1', type: 'summative', scoreMode: 'points', maxPoints: 100 },
-      ],
+      getAssignmentStatuses: () => ({ 'stu1:a1': 'excused' }),
+      getAssessments: () => [{ id: 'a1', type: 'summative' }],
     });
 
     const result = getTagScores('test', 'stu1', 't1');
-    expect(result[0].score).toBe(4);       // 90% → proficiency 4
-    expect(result[0].rawPoints).toBe(90);   // original preserved
+    expect(result).toHaveLength(1); // NOT filtered
+    expect(result[0].score).toBe(3);
+  });
+
+  it('converts points-mode scores to proficiency', () => {
+    mockDataLayer({
+      getScores: () => ({
+        stu1: [{ score: 90, tagId: 't1', assessmentId: 'a1', date: '2025-01-01', type: 'summative' }],
+      }),
+      getAssessments: () => [{ id: 'a1', type: 'summative', scoreMode: 'points', maxPoints: 100 }],
+    });
+
+    const result = getTagScores('test', 'stu1', 't1');
+    expect(result[0].score).toBe(4); // 90% → proficiency 4
+    expect(result[0].rawPoints).toBe(90); // original preserved
   });
 
   it('returns empty array for nonexistent student', () => {
@@ -152,9 +165,7 @@ describe('getTagProficiency', () => {
 describe('getSectionProficiency', () => {
   it('averages tag proficiencies', () => {
     mockDataLayer({
-      getSections: () => [
-        { id: 'sec1', tags: [{ id: 't1' }, { id: 't2' }] },
-      ],
+      getSections: () => [{ id: 'sec1', tags: [{ id: 't1' }, { id: 't2' }] }],
       getScores: () => ({
         stu1: [
           { score: 4, tagId: 't1', assessmentId: 'a1', date: '2025-01-01', type: 'summative' },
@@ -173,13 +184,9 @@ describe('getSectionProficiency', () => {
 
   it('uses teacher override when present', () => {
     mockDataLayer({
-      getSections: () => [
-        { id: 'sec1', tags: [{ id: 't1' }] },
-      ],
+      getSections: () => [{ id: 'sec1', tags: [{ id: 't1' }] }],
       getScores: () => ({
-        stu1: [
-          { score: 2, tagId: 't1', assessmentId: 'a1', date: '2025-01-01', type: 'summative' },
-        ],
+        stu1: [{ score: 2, tagId: 't1', assessmentId: 'a1', date: '2025-01-01', type: 'summative' }],
       }),
       getAssessments: () => [{ id: 'a1', type: 'summative', weight: 1 }],
       getCourseConfig: () => ({ calcMethod: 'mostRecent', decayWeight: 0.65 }),
@@ -256,10 +263,15 @@ describe('getGroupProficiency', () => {
       ],
       getCourseConfig: () => ({ calcMethod: 'mostRecent', decayWeight: 0.65 }),
       getGroupedSections: () => ({
-        groups: [{ group: { id: 'g1', name: 'Group 1', color: '#6366f1', sortOrder: 0 }, sections: [
-          { id: 'sec1', tags: [{ id: 't1' }], groupId: 'g1' },
-          { id: 'sec2', tags: [{ id: 't2' }], groupId: 'g1' },
-        ]}],
+        groups: [
+          {
+            group: { id: 'g1', name: 'Group 1', color: '#6366f1', sortOrder: 0 },
+            sections: [
+              { id: 'sec1', tags: [{ id: 't1' }], groupId: 'g1' },
+              { id: 'sec2', tags: [{ id: 't2' }], groupId: 'g1' },
+            ],
+          },
+        ],
         ungrouped: [],
       }),
     });
@@ -270,16 +282,17 @@ describe('getGroupProficiency', () => {
 
   it('returns 0 when group sections have no evidence', () => {
     mockDataLayer({
-      getSections: () => [
-        { id: 'sec1', tags: [{ id: 't1' }], groupId: 'g1' },
-      ],
+      getSections: () => [{ id: 'sec1', tags: [{ id: 't1' }], groupId: 'g1' }],
       getScores: () => ({}),
       getAssessments: () => [],
       getCourseConfig: () => ({ calcMethod: 'mostRecent', decayWeight: 0.65 }),
       getGroupedSections: () => ({
-        groups: [{ group: { id: 'g1', name: 'Group 1', color: '#6366f1', sortOrder: 0 }, sections: [
-          { id: 'sec1', tags: [{ id: 't1' }], groupId: 'g1' },
-        ]}],
+        groups: [
+          {
+            group: { id: 'g1', name: 'Group 1', color: '#6366f1', sortOrder: 0 },
+            sections: [{ id: 'sec1', tags: [{ id: 't1' }], groupId: 'g1' }],
+          },
+        ],
         ungrouped: [],
       }),
     });
@@ -330,14 +343,20 @@ describe('getOverallProficiency (with groups)', () => {
       getCourseConfig: () => ({ calcMethod: 'mostRecent', decayWeight: 0.65 }),
       getGroupedSections: () => ({
         groups: [
-          { group: { id: 'g1', name: 'Group 1', color: '#6366f1', sortOrder: 0 }, sections: [
-            { id: 'sec1', tags: [{ id: 't1' }], groupId: 'g1' },
-            { id: 'sec2', tags: [{ id: 't2' }], groupId: 'g1' },
-          ]},
-          { group: { id: 'g2', name: 'Group 2', color: '#06b6d4', sortOrder: 1 }, sections: [
-            { id: 'sec3', tags: [{ id: 't3' }], groupId: 'g2' },
-            { id: 'sec4', tags: [{ id: 't4' }], groupId: 'g2' },
-          ]},
+          {
+            group: { id: 'g1', name: 'Group 1', color: '#6366f1', sortOrder: 0 },
+            sections: [
+              { id: 'sec1', tags: [{ id: 't1' }], groupId: 'g1' },
+              { id: 'sec2', tags: [{ id: 't2' }], groupId: 'g1' },
+            ],
+          },
+          {
+            group: { id: 'g2', name: 'Group 2', color: '#06b6d4', sortOrder: 1 },
+            sections: [
+              { id: 'sec3', tags: [{ id: 't3' }], groupId: 'g2' },
+              { id: 'sec4', tags: [{ id: 't4' }], groupId: 'g2' },
+            ],
+          },
         ],
         ungrouped: [{ id: 'sec5', tags: [{ id: 't5' }] }],
       }),
@@ -365,10 +384,13 @@ describe('getOverallProficiency (with groups)', () => {
         { id: 'a2', type: 'summative', weight: 1 },
       ],
       getCourseConfig: () => ({ calcMethod: 'mostRecent', decayWeight: 0.65 }),
-      getGroupedSections: () => ({ groups: [], ungrouped: [
-        { id: 'sec1', tags: [{ id: 't1' }] },
-        { id: 'sec2', tags: [{ id: 't2' }] },
-      ]}),
+      getGroupedSections: () => ({
+        groups: [],
+        ungrouped: [
+          { id: 'sec1', tags: [{ id: 't1' }] },
+          { id: 'sec2', tags: [{ id: 't2' }] },
+        ],
+      }),
     });
 
     // (4 + 2) / 2 = 3 — same as original behavior
@@ -377,23 +399,18 @@ describe('getOverallProficiency (with groups)', () => {
 
   it('skips empty groups in overall calculation', () => {
     mockDataLayer({
-      getSections: () => [
-        { id: 'sec1', tags: [{ id: 't1' }], groupId: 'g1' },
-      ],
+      getSections: () => [{ id: 'sec1', tags: [{ id: 't1' }], groupId: 'g1' }],
       getScores: () => ({
-        stu1: [
-          { score: 4, tagId: 't1', assessmentId: 'a1', date: '2025-01-01', type: 'summative' },
-        ],
+        stu1: [{ score: 4, tagId: 't1', assessmentId: 'a1', date: '2025-01-01', type: 'summative' }],
       }),
-      getAssessments: () => [
-        { id: 'a1', type: 'summative', weight: 1 },
-      ],
+      getAssessments: () => [{ id: 'a1', type: 'summative', weight: 1 }],
       getCourseConfig: () => ({ calcMethod: 'mostRecent', decayWeight: 0.65 }),
       getGroupedSections: () => ({
         groups: [
-          { group: { id: 'g1', name: 'Group 1', color: '#6366f1', sortOrder: 0 }, sections: [
-            { id: 'sec1', tags: [{ id: 't1' }], groupId: 'g1' },
-          ]},
+          {
+            group: { id: 'g1', name: 'Group 1', color: '#6366f1', sortOrder: 0 },
+            sections: [{ id: 'sec1', tags: [{ id: 't1' }], groupId: 'g1' }],
+          },
           { group: { id: 'g2', name: 'Empty Group', color: '#06b6d4', sortOrder: 1 }, sections: [] },
         ],
         ungrouped: [],
@@ -482,10 +499,15 @@ describe('getGroupProficiency (edge cases)', () => {
       getAssessments: () => [{ id: 'a1', type: 'summative', weight: 1 }],
       getCourseConfig: () => ({ calcMethod: 'mostRecent', decayWeight: 0.65 }),
       getGroupedSections: () => ({
-        groups: [{ group: { id: 'g1', name: 'G1', color: '#000', sortOrder: 0 }, sections: [
-          { id: 'sec1', tags: [{ id: 't1' }], groupId: 'g1' },
-          { id: 'sec2', tags: [{ id: 't2' }], groupId: 'g1' },
-        ]}],
+        groups: [
+          {
+            group: { id: 'g1', name: 'G1', color: '#000', sortOrder: 0 },
+            sections: [
+              { id: 'sec1', tags: [{ id: 't1' }], groupId: 'g1' },
+              { id: 'sec2', tags: [{ id: 't2' }], groupId: 'g1' },
+            ],
+          },
+        ],
         ungrouped: [],
       }),
     });
@@ -513,10 +535,15 @@ describe('getGroupProficiency (edge cases)', () => {
       getCourseConfig: () => ({ calcMethod: 'mostRecent', decayWeight: 0.65 }),
       getOverrides: () => ({ stu1: { sec1: { level: 4, reason: 'Conference' } } }),
       getGroupedSections: () => ({
-        groups: [{ group: { id: 'g1', name: 'G1', color: '#000', sortOrder: 0 }, sections: [
-          { id: 'sec1', tags: [{ id: 't1' }], groupId: 'g1' },
-          { id: 'sec2', tags: [{ id: 't2' }], groupId: 'g1' },
-        ]}],
+        groups: [
+          {
+            group: { id: 'g1', name: 'G1', color: '#000', sortOrder: 0 },
+            sections: [
+              { id: 'sec1', tags: [{ id: 't1' }], groupId: 'g1' },
+              { id: 'sec2', tags: [{ id: 't2' }], groupId: 'g1' },
+            ],
+          },
+        ],
         ungrouped: [],
       }),
     });
@@ -527,20 +554,19 @@ describe('getGroupProficiency (edge cases)', () => {
 
   it('handles single-section groups', () => {
     mockDataLayer({
-      getSections: () => [
-        { id: 'sec1', tags: [{ id: 't1' }], groupId: 'g1' },
-      ],
+      getSections: () => [{ id: 'sec1', tags: [{ id: 't1' }], groupId: 'g1' }],
       getScores: () => ({
-        stu1: [
-          { score: 3, tagId: 't1', assessmentId: 'a1', date: '2025-01-01', type: 'summative' },
-        ],
+        stu1: [{ score: 3, tagId: 't1', assessmentId: 'a1', date: '2025-01-01', type: 'summative' }],
       }),
       getAssessments: () => [{ id: 'a1', type: 'summative', weight: 1 }],
       getCourseConfig: () => ({ calcMethod: 'mostRecent', decayWeight: 0.65 }),
       getGroupedSections: () => ({
-        groups: [{ group: { id: 'g1', name: 'G1', color: '#000', sortOrder: 0 }, sections: [
-          { id: 'sec1', tags: [{ id: 't1' }], groupId: 'g1' },
-        ]}],
+        groups: [
+          {
+            group: { id: 'g1', name: 'G1', color: '#000', sortOrder: 0 },
+            sections: [{ id: 'sec1', tags: [{ id: 't1' }], groupId: 'g1' }],
+          },
+        ],
         ungrouped: [],
       }),
     });
@@ -551,9 +577,7 @@ describe('getGroupProficiency (edge cases)', () => {
 
   it('handles multi-tag sections in groups', () => {
     mockDataLayer({
-      getSections: () => [
-        { id: 'sec1', tags: [{ id: 't1' }, { id: 't2' }], groupId: 'g1' },
-      ],
+      getSections: () => [{ id: 'sec1', tags: [{ id: 't1' }, { id: 't2' }], groupId: 'g1' }],
       getScores: () => ({
         stu1: [
           { score: 4, tagId: 't1', assessmentId: 'a1', date: '2025-01-01', type: 'summative' },
@@ -566,14 +590,74 @@ describe('getGroupProficiency (edge cases)', () => {
       ],
       getCourseConfig: () => ({ calcMethod: 'mostRecent', decayWeight: 0.65 }),
       getGroupedSections: () => ({
-        groups: [{ group: { id: 'g1', name: 'G1', color: '#000', sortOrder: 0 }, sections: [
-          { id: 'sec1', tags: [{ id: 't1' }, { id: 't2' }], groupId: 'g1' },
-        ]}],
+        groups: [
+          {
+            group: { id: 'g1', name: 'G1', color: '#000', sortOrder: 0 },
+            sections: [{ id: 'sec1', tags: [{ id: 't1' }, { id: 't2' }], groupId: 'g1' }],
+          },
+        ],
         ungrouped: [],
       }),
     });
 
     // sec1 has 2 tags: t1=4, t2=2 → section avg=3 → group avg=3
     expect(getGroupProficiency('test', 'stu1', 'g1')).toBe(3);
+  });
+});
+
+/* ── getAssessmentOverallScore — status enum contract ───────── */
+describe('getAssessmentOverallScore — assignment status', () => {
+  function baseMocks() {
+    return {
+      getScores: () => ({
+        stu1: [{ score: 3, tagId: 't1', assessmentId: 'a1', date: '2025-01-01', type: 'summative' }],
+      }),
+      getAssessments: () => [{ id: 'a1', type: 'summative', tagIds: ['t1'] }],
+      getSectionForTag: () => ({ id: 'sec1', tags: [{ id: 't1' }] }),
+    };
+  }
+
+  it('status="EXC" excludes the assessment (returns null)', () => {
+    mockDataLayer({
+      ...baseMocks(),
+      getAssignmentStatuses: () => ({ 'stu1:a1': 'EXC' }),
+    });
+    expect(getAssessmentOverallScore('test', 'stu1', 'a1')).toBeNull();
+  });
+
+  it('status="NS" zeros the assessment (returns 0)', () => {
+    mockDataLayer({
+      ...baseMocks(),
+      getAssignmentStatuses: () => ({ 'stu1:a1': 'NS' }),
+    });
+    expect(getAssessmentOverallScore('test', 'stu1', 'a1')).toBe(0);
+  });
+
+  it('status="LATE" has no calc effect — score passes through', () => {
+    mockDataLayer({
+      ...baseMocks(),
+      getAssignmentStatuses: () => ({ 'stu1:a1': 'LATE' }),
+    });
+    // Exact value depends on calcMethod, but must NOT be null and NOT be 0
+    // (the score of 3 should be reflected).
+    const result = getAssessmentOverallScore('test', 'stu1', 'a1');
+    expect(result).not.toBeNull();
+    expect(result).not.toBe(0);
+  });
+
+  it('legacy "excused" / "notSubmitted" values are ignored (regression guard)', () => {
+    // Pre-migration desktop wrote long-form strings; post-migration these
+    // should never appear in LocalStorage, but guard against re-introduction.
+    mockDataLayer({
+      ...baseMocks(),
+      getAssignmentStatuses: () => ({ 'stu1:a1': 'excused' }),
+    });
+    expect(getAssessmentOverallScore('test', 'stu1', 'a1')).not.toBeNull();
+
+    mockDataLayer({
+      ...baseMocks(),
+      getAssignmentStatuses: () => ({ 'stu1:a1': 'notSubmitted' }),
+    });
+    expect(getAssessmentOverallScore('test', 'stu1', 'a1')).not.toBe(0);
   });
 });

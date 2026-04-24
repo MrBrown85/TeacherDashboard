@@ -688,13 +688,17 @@ window.PageStudent = (function () {
         esc(assess.title) +
         '</a>' +
         (mod
-          ? '<span class="gt-module-dot" style="background:' + mod.color + '" title="' + esc(mod.name) + '"></span>'
+          ? '<span class="gt-module-dot" style="background:' +
+            cssColor(mod.color) +
+            '" title="' +
+            esc(mod.name) +
+            '"></span>'
           : '') +
-        (assessStatus === 'notSubmitted'
+        (assessStatus === 'NS'
           ? '<span class="gt-status-tag gt-tag-ns">NS</span>'
-          : assessStatus === 'excused'
+          : assessStatus === 'EXC'
             ? '<span class="gt-status-tag gt-tag-exc">EXC</span>'
-            : assessStatus === 'late'
+            : assessStatus === 'LATE'
               ? '<span class="gt-status-tag gt-tag-late">LATE</span>'
               : '') +
         '</td>' +

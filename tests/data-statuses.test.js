@@ -37,7 +37,7 @@ describe('setAssignmentStatus v2 dispatch', () => {
       },
     });
 
-    setAssignmentStatus(CID, ENR, AID, 'late');
+    setAssignmentStatus(CID, ENR, AID, 'LATE');
     await Promise.resolve();
 
     const scoreStatusCall = rpcCalls.find(c => c.name === 'set_score_status');
@@ -45,7 +45,7 @@ describe('setAssignmentStatus v2 dispatch', () => {
     expect(scoreStatusCall.payload).toEqual({
       p_enrollment_id: ENR,
       p_assessment_id: AID,
-      p_status: 'late',
+      p_status: 'LATE',
     });
   });
 
@@ -59,7 +59,7 @@ describe('setAssignmentStatus v2 dispatch', () => {
       },
     });
 
-    setAssignmentStatus(CID, 'stu1', 'assess1', 'late');
+    setAssignmentStatus(CID, 'stu1', 'assess1', 'LATE');
     await Promise.resolve();
 
     expect(rpcCalls.find(c => c.name === 'set_score_status')).toBeUndefined();

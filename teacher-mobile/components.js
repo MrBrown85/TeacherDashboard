@@ -77,7 +77,7 @@ window.MComponents = (function () {
       '<div class="m-sheet' +
       halfClass +
       '">' +
-      '<div class="m-sheet-handle"></div>' +
+      '<div class="m-sheet-handle" role="button" tabindex="0" aria-label="Dismiss sheet"></div>' +
       '<div class="m-sheet-content">' +
       html +
       '</div></div>';
@@ -88,6 +88,16 @@ window.MComponents = (function () {
       container.querySelector('.m-sheet').classList.add('m-sheet-visible');
     });
     backdrop.onclick = dismissSheet;
+    var handle = container.querySelector('.m-sheet-handle');
+    if (handle) {
+      handle.onclick = dismissSheet;
+      handle.onkeydown = function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          dismissSheet();
+        }
+      };
+    }
     _bindSheetSwipe(container.querySelector('.m-sheet'));
   }
 
