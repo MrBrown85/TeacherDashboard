@@ -1602,11 +1602,11 @@ window.PageAssignments = (function () {
       var raw = getPointsScore(cid, st.id, a.id);
       var pct = raw > 0 ? Math.round((raw / max) * 100) : '';
       var stStatus = statuses[st.id + ':' + a.id] || null;
-      var disableRow = stStatus && stStatus !== 'late';
+      var disableRow = stStatus && stStatus !== 'LATE';
       html +=
         '<div class="score-row' +
         (disableRow ? ' has-status' : '') +
-        (stStatus === 'late' ? ' has-late' : '') +
+        (stStatus === 'LATE' ? ' has-late' : '') +
         '" data-status-student="' +
         st.id +
         '" data-status-assess="' +
@@ -1712,19 +1712,19 @@ window.PageAssignments = (function () {
     return (
       '<div class="student-status-toggles">' +
       '<button class="student-status-btn' +
-      (currentStatus === 'excused' ? ' active-excused' : '') +
+      (currentStatus === 'EXC' ? ' active-excused' : '') +
       '" tabindex="-1" data-action="toggleStudentStatus" data-aid="' +
       aid +
       '" data-sid="' +
       sid +
-      '" data-status="excused" data-stop-prop="true" title="Excused">EXC</button>' +
+      '" data-status="EXC" data-stop-prop="true" title="Excused">EXC</button>' +
       '<button class="student-status-btn' +
-      (currentStatus === 'notSubmitted' ? ' active-ns' : '') +
+      (currentStatus === 'NS' ? ' active-ns' : '') +
       '" tabindex="-1" data-action="toggleStudentStatus" data-aid="' +
       aid +
       '" data-sid="' +
       sid +
-      '" data-status="notSubmitted" data-stop-prop="true" title="Not Submitted">NS</button>' +
+      '" data-status="NS" data-stop-prop="true" title="Not Submitted">NS</button>' +
       '<button class="comment-btn" data-action="openCommentPopover" data-cid="' +
       cid +
       '" data-sid="' +
@@ -1737,12 +1737,12 @@ window.PageAssignments = (function () {
       '</div>' +
       '<div class="student-status-toggles student-status-row2">' +
       '<button class="student-status-btn student-status-late' +
-      (currentStatus === 'late' ? ' active-late' : '') +
+      (currentStatus === 'LATE' ? ' active-late' : '') +
       '" tabindex="-1" data-action="toggleStudentStatus" data-aid="' +
       aid +
       '" data-sid="' +
       sid +
-      '" data-status="late" data-stop-prop="true" title="Late">LATE</button>' +
+      '" data-status="LATE" data-stop-prop="true" title="Late">LATE</button>' +
       '</div>'
     );
   }
@@ -1758,7 +1758,7 @@ window.PageAssignments = (function () {
     var current = getAssignmentStatus(cid, sid, aid);
     var newStatus = current === status ? null : status;
     setAssignmentStatus(cid, sid, aid, newStatus);
-    if (newStatus === 'notSubmitted') {
+    if (newStatus === 'NS') {
       var assess = getAssessments(cid).find(function (a) {
         return a.id === aid;
       });
@@ -1775,19 +1775,19 @@ window.PageAssignments = (function () {
       row.querySelectorAll('.student-status-btn').forEach(function (btn) {
         btn.classList.remove('active-excused', 'active-ns', 'active-late');
       });
-      if (newStatus === 'excused') row.querySelector('[data-status="excused"]').classList.add('active-excused');
-      else if (newStatus === 'notSubmitted')
-        row.querySelector('[data-status="notSubmitted"]').classList.add('active-ns');
-      else if (newStatus === 'late') row.querySelector('[data-status="late"]').classList.add('active-late');
+      if (newStatus === 'EXC') row.querySelector('[data-status="EXC"]').classList.add('active-excused');
+      else if (newStatus === 'NS')
+        row.querySelector('[data-status="NS"]').classList.add('active-ns');
+      else if (newStatus === 'LATE') row.querySelector('[data-status="LATE"]').classList.add('active-late');
       // Late doesn't disable scoring — student submitted, just late
-      var disableScoring = newStatus && newStatus !== 'late';
+      var disableScoring = newStatus && newStatus !== 'LATE';
       if (disableScoring) row.classList.add('has-status');
       else row.classList.remove('has-status');
-      if (newStatus === 'late') row.classList.add('has-late');
+      if (newStatus === 'LATE') row.classList.add('has-late');
       else row.classList.remove('has-late');
       var ptsInput = row.querySelector('.gb-pts-input');
       if (ptsInput) ptsInput.disabled = disableScoring;
-      if (newStatus === 'notSubmitted') {
+      if (newStatus === 'NS') {
         row.querySelectorAll('.score-opt, .rsg-level').forEach(function (el) {
           el.classList.remove('active', 'mixed');
         });
@@ -2058,11 +2058,11 @@ window.PageAssignments = (function () {
     students.forEach(function (st) {
       var studentScores = scores[st.id] || [];
       var stStatus = statuses[st.id + ':' + a.id] || null;
-      var disableRow = stStatus && stStatus !== 'late';
+      var disableRow = stStatus && stStatus !== 'LATE';
       html +=
         '<div class="rsg-student' +
         (disableRow ? ' has-status' : '') +
-        (stStatus === 'late' ? ' has-late' : '') +
+        (stStatus === 'LATE' ? ' has-late' : '') +
         '" data-status-student="' +
         st.id +
         '" data-status-assess="' +
@@ -2202,11 +2202,11 @@ window.PageAssignments = (function () {
     students.forEach(function (st) {
       var studentScores = scores[st.id] || [];
       var stStatus = statuses[st.id + ':' + a.id] || null;
-      var disableRow = stStatus && stStatus !== 'late';
+      var disableRow = stStatus && stStatus !== 'LATE';
       html +=
         '<div class="rsg-student' +
         (disableRow ? ' has-status' : '') +
-        (stStatus === 'late' ? ' has-late' : '') +
+        (stStatus === 'LATE' ? ' has-late' : '') +
         '" data-status-student="' +
         st.id +
         '" data-status-assess="' +
@@ -2374,7 +2374,7 @@ window.PageAssignments = (function () {
       .map(function (tid) {
         var tag = getTagById(activeCourse, tid);
         var sec = getSectionForTag(activeCourse, tid);
-        var color = sec ? sec.color : 'var(--text-3)';
+        var color = cssColor(sec ? sec.color : 'var(--text-3)');
         return (
           '<span class="rsg-descriptor-tag" style="border-color:' +
           color +
@@ -2854,7 +2854,15 @@ window.PageAssignments = (function () {
           '<option value="">None</option>' +
           freshRubrics
             .map(function (r) {
-              return '<option value="' + r.id + '">' + esc(r.name) + ' (' + r.criteria.length + ' criteria)</option>';
+              return (
+                '<option value="' +
+                esc(r.id) +
+                '">' +
+                esc(r.name) +
+                ' (' +
+                r.criteria.length +
+                ' criteria)</option>'
+              );
             })
             .join('');
         var finalId = result && result.idMap && result.idMap[savedId] ? result.idMap[savedId] : savedId;

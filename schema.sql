@@ -58,7 +58,7 @@ create table course (
   name             text        not null,
   grade_level      text,
   description      text,
-  color            text,
+  color            text        check (color is null or color ~ '^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$'),
   is_archived      boolean     not null default false,
   display_order    integer     not null default 0,
   grading_system   text        not null,
@@ -75,7 +75,7 @@ create table subject (
   id            uuid        not null primary key,
   course_id     uuid        not null references course(id) on delete cascade,
   name          text        not null,
-  color         text,
+  color         text        check (color is null or color ~ '^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$'),
   display_order integer     not null default 0,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now(),
@@ -86,7 +86,7 @@ create table competency_group (
   id            uuid        not null primary key,
   course_id     uuid        not null references course(id) on delete cascade,
   name          text        not null,
-  color         text,
+  color         text        check (color is null or color ~ '^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$'),
   display_order integer     not null default 0,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now(),
@@ -99,7 +99,7 @@ create table section (
   subject_id          uuid        not null,
   competency_group_id uuid,
   name                text        not null,
-  color               text,
+  color               text        check (color is null or color ~ '^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$'),
   display_order       integer     not null default 0,
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now(),
@@ -126,7 +126,7 @@ create table module (
   id            uuid        not null primary key,
   course_id     uuid        not null references course(id) on delete cascade,
   name          text        not null,
-  color         text,
+  color         text        check (color is null or color ~ '^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$'),
   display_order integer     not null default 0,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
@@ -443,9 +443,25 @@ create table course_sync_cursor (
   student_records_updated_at  timestamptz not null default now()
 );
 
+-- Idempotency guard for offline-queue retries (migration 20260423_write_path_idempotency).
+-- Stores the return value of a write RPC keyed by (key, teacher_id). When a
+-- retrofitted write RPC is called with `p_idempotency_key` and a row exists,
+-- the RPC returns the cached result instead of re-executing. Rows older than
+-- 24h are pruned every 15 min by the fv_idempotency_cleanup cron job.
+create table fv_idempotency (
+  key         uuid        not null,
+  teacher_id  uuid        not null references teacher(id) on delete cascade,
+  endpoint    text        not null,
+  result      jsonb,
+  created_at  timestamptz not null default now(),
+  primary key (key, teacher_id)
+);
+
 -- ─── Extensions + cron ──────────────────────────────────────────────────────
 -- pg_cron enabled (migration fullvision_v2_enable_pg_cron).
 -- Job `fv_retention_cleanup_daily` runs at 03:17 UTC calling fv_retention_cleanup().
+-- Job `fv_idempotency_cleanup` runs every 15 min; prunes fv_idempotency rows
+-- older than 24h (migration 20260423_write_path_idempotency).
 
 -- ─── Functions ──────────────────────────────────────────────────────────────
 -- 95 `authenticated`-EXECUTE functions in public schema. All set
@@ -461,6 +477,10 @@ create table course_sync_cursor (
 --     / fv_owns_term_rating(trid uuid) — RLS predicates.
 --   fv_check_category_weight_sum() — trigger enforcing per-course ≤100% cap.
 --   fv_retention_cleanup() — cron entry point (30d course + teacher purge + 2yr audit purge).
+--   fv_idem_check(p_key uuid, p_endpoint text) / fv_idem_store(...) — write-path
+--     idempotency helpers (migration 20260423_write_path_idempotency). Teacher_id
+--     is derived from auth.uid() inside the helper so a leaked key cannot replay
+--     across teachers.
 --
 -- Auth + bootstrap:
 --   bootstrap_teacher(p_email text, p_display_name text)

@@ -2246,3 +2246,114 @@ grant execute on function delete_student(uuid) to authenticated;
 -- relink_student + clear_data bodies: see migration fullvision_v2_write_path_student_delete_relink_clear.
 grant execute on function relink_student(uuid, uuid) to authenticated;
 grant execute on function clear_data() to authenticated;
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Phase 5.6 — Write-path idempotency guard
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Migration: 20260423_write_path_idempotency (2026-04-23)
+--
+-- Context: the offline-sync design (offline-sync.md §"Queue model") claims
+-- "every Pass B write path is an upsert keyed on a deterministic unique
+-- constraint, so retrying a partially-failed flush is safe." That claim
+-- holds for natural-key UPSERTs (upsert_score, upsert_goal, upsert_reflection,
+-- upsert_section_override, upsert_tag_score, upsert_rubric_score) but does
+-- NOT hold for INSERT-new-id RPCs: a retry after server-committed +
+-- client-missed-200 creates a duplicate row. Observations, notes,
+-- assessments, students, and custom tags are all affected.
+--
+-- This phase adds a per-teacher idempotency cache (fv_idempotency) and
+-- retrofits the at-risk INSERT-new-id RPCs with an optional
+-- `p_idempotency_key uuid default null` parameter. When the offline queue
+-- replays an entry, it passes the queue entry's UUID as the key; the
+-- retrofitted RPC checks the cache and returns the cached id instead of
+-- inserting a second row.
+--
+-- The parameter is optional: callers that omit the key (or pass null) get
+-- the prior behaviour. This keeps the migration backward-compatible with any
+-- client that hasn't been updated.
+--
+-- Helpers are SECURITY DEFINER and derive teacher_id from auth.uid(); a
+-- leaked key cannot replay across teachers.
+--
+-- Retrofitted RPCs (6): create_observation, create_assessment,
+-- duplicate_assessment, create_custom_tag, upsert_note,
+-- create_student_and_enroll.
+--
+-- Deferred to a follow-up (same pattern, not yet retrofitted):
+-- create_course, duplicate_course, import_roster_csv, import_teams_class,
+-- import_json_restore, upsert_observation_template, and the insert-branch of
+-- upsert_category/module/rubric/subject/competency_group/section/tag.
+
+-- fv_idempotency table: key is the client-generated UUID from the offline
+-- queue entry. (key, teacher_id) is primary — a leaked key from teacher A
+-- cannot be reused by teacher B.
+-- See schema.sql for the table definition.
+
+-- Helpers (bodies replicated from the migration):
+
+create or replace function fv_idem_check(p_key uuid, p_endpoint text)
+    returns jsonb
+    language plpgsql
+    security definer
+    set search_path = public
+as $$
+declare
+    _uid uuid := (select auth.uid());
+    _r   jsonb;
+begin
+    if _uid is null or p_key is null then return null; end if;
+    select result into _r
+      from fv_idempotency
+     where key = p_key and teacher_id = _uid and endpoint = p_endpoint;
+    return _r;
+end;
+$$;
+
+create or replace function fv_idem_store(p_key uuid, p_endpoint text, p_result jsonb)
+    returns void
+    language plpgsql
+    security definer
+    set search_path = public
+as $$
+declare _uid uuid := (select auth.uid());
+begin
+    if _uid is null or p_key is null then return; end if;
+    insert into fv_idempotency (key, teacher_id, endpoint, result)
+      values (p_key, _uid, p_endpoint, p_result)
+      on conflict (key, teacher_id) do nothing;
+end;
+$$;
+
+revoke all on function fv_idem_check(uuid, text) from public;
+revoke all on function fv_idem_store(uuid, text, jsonb) from public;
+grant execute on function fv_idem_check(uuid, text) to authenticated;
+grant execute on function fv_idem_store(uuid, text, jsonb) to authenticated;
+
+-- The six retrofitted RPCs in this phase replace their Phase 1.x definitions
+-- above. Their full bodies are in migrations/20260423_write_path_idempotency.sql.
+-- Each retrofit follows the same three-step pattern:
+--   (1) add `p_idempotency_key uuid default null` as the last parameter
+--   (2) after the auth check, call fv_idem_check — return cached result on hit
+--   (3) after the successful insert, call fv_idem_store with jsonb_build_object
+--
+-- Example retrofit (create_observation): the full body lives in the
+-- migration file; the GRANT matches the new 9-arg signature:
+grant execute on function create_observation(
+    uuid, text, text, text, uuid, uuid[], uuid[], uuid[], uuid
+) to authenticated;
+grant execute on function create_assessment(
+    uuid, text, uuid, text, date, date, text, numeric, numeric, text, uuid, uuid, uuid[], uuid
+) to authenticated;
+grant execute on function duplicate_assessment(uuid, uuid) to authenticated;
+grant execute on function create_custom_tag(uuid, text, uuid) to authenticated;
+grant execute on function upsert_note(uuid, text, uuid) to authenticated;
+grant execute on function create_student_and_enroll(
+    uuid, text, text, text, text, text, text, date, text[], uuid, uuid
+) to authenticated;
+
+-- Client-side contract: shared/offline-queue.js passes entry.id as
+-- p_idempotency_key for every RPC in the IDEMPOTENT_ENDPOINTS allowlist.
+-- Direct-online calls in shared/supabase.js + shared/data.js generate a
+-- key per call site and reuse it if the call falls back to the queue.
+-- Retries of the same entry.id (within 24h) return the cached result.

@@ -37,7 +37,10 @@ Stored in `localStorage` under key `fv-sync-queue-v1`:
 ```
 
 - **FIFO order.** The queue drains in insertion order.
-- **Idempotent replay.** Every Pass B write path is an upsert keyed on a deterministic unique constraint, so retrying a partially-failed flush is safe.
+- **Idempotent replay.**
+  - **Natural-key UPSERTs** (`upsert_score`, `upsert_goal`, `upsert_reflection`, `upsert_section_override`, `upsert_tag_score`, `upsert_rubric_score`, etc.) are intrinsically retry-safe: a replay overwrites the same row.
+  - **INSERT-new-row RPCs** (`create_observation`, `create_assessment`, `duplicate_assessment`, `create_custom_tag`, `upsert_note`, `create_student_and_enroll`) are NOT intrinsically safe: a retry after a server-committed-but-client-missed-200 would insert a second row. These RPCs were retrofitted by migration `20260423_write_path_idempotency` with an optional `p_idempotency_key uuid default null` parameter. When the queue flushes or `callOrEnqueue` runs, it passes the entry's UUID as the key; the RPC consults `fv_idempotency` and returns the cached row id on replay instead of inserting. The allowlist lives in `shared/offline-queue.js`'s `IDEMPOTENT_ENDPOINTS`. The idempotency cache has a 24-hour TTL (pruned by the `fv_idempotency_cleanup` cron job every 15 min).
+  - **Still not retrofitted** (same pattern applies, follow-up migration): `create_course`, `duplicate_course`, `import_roster_csv`, `import_teams_class`, `import_json_restore`, `upsert_observation_template`, and the null-id insert branch of `upsert_category` / `upsert_module` / `upsert_rubric` / `upsert_subject` / `upsert_competency_group` / `upsert_section` / `upsert_tag`.
 - **Retry policy.** 3 attempts per entry with exponential backoff (1s, 5s, 30s). After 3 failures, entry is moved to a "dead letter" store and the UI surfaces it to the user for manual resolution.
 - **Eviction.** Successfully synced entries are removed from the queue. Dead-letter entries remain until the user dismisses them.
 

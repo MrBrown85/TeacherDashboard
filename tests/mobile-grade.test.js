@@ -159,11 +159,13 @@ describe('MGrade.renderSwiper', () => {
     expect(html).toContain('Liam Chen');
   });
 
-  it('shows score buttons 0-4 for proficiency mode', () => {
+  it('shows score buttons 1-4 for proficiency mode (0 is reached via toggle-off)', () => {
     mockDataLayer({});
     const html = MGrade.renderSwiper(CID, 'a1');
-    // Each tag should have buttons 0,1,2,3,4
-    expect(html).toContain('data-score="0"');
+    // Levels 1-4 are rendered as buttons; level 0 (No Evidence) is not a
+    // distinct button — teachers reach it by tapping the active level to
+    // toggle it off.
+    expect(html).not.toContain('data-score="0"');
     expect(html).toContain('data-score="1"');
     expect(html).toContain('data-score="2"');
     expect(html).toContain('data-score="3"');
@@ -343,6 +345,85 @@ describe('MGrade.setScore', () => {
     expect(tagScores[0].score).toBe(4);
   });
 
+  it('does NOT show a toast on routine save (button-fill + haptic is enough)', () => {
+    const toastCalls = [];
+    const origToast = window.MComponents.showToast;
+    window.MComponents.showToast = (msg, opts) => toastCalls.push({ msg, opts });
+    mockDataLayer({
+      getScores: () => ({}),
+      saveScores: () => {},
+      getAssessments: () => [{ id: 'a1', type: 'summative', date: '2025-03-20' }],
+    });
+    MGrade.setScore(CID, 'stu1', 'a1', 't1', 3);
+    window.MComponents.showToast = origToast;
+    expect(toastCalls).toHaveLength(0);
+  });
+
+  it('shows "Score cleared" toast with undo on toggle-off', () => {
+    const toastCalls = [];
+    const origToast = window.MComponents.showToast;
+    window.MComponents.showToast = (msg, opts) => toastCalls.push({ msg, opts });
+    let store = {
+      stu1: [{ id: 'old', assessmentId: 'a1', tagId: 't1', score: 2, type: 'summative', date: '2025-03-20' }],
+    };
+    mockDataLayer({
+      getScores: () => store,
+      saveScores: () => {},
+      getAssessments: () => [{ id: 'a1', type: 'summative', date: '2025-03-20' }],
+    });
+    MGrade.setScore(CID, 'stu1', 'a1', 't1', 2);
+    window.MComponents.showToast = origToast;
+    expect(toastCalls).toHaveLength(1);
+    expect(toastCalls[0].msg).toBe('Score cleared');
+    expect(typeof toastCalls[0].opts.onUndo).toBe('function');
+  });
+
+  it('tapping the already-active level clears the score (toggles off to 0)', () => {
+    let store = {
+      stu1: [{ id: 'old1', assessmentId: 'a1', tagId: 't1', score: 2, type: 'summative', date: '2025-03-20' }],
+    };
+    mockDataLayer({
+      getScores: () => store,
+      saveScores: () => {},
+      getAssessments: () => [{ id: 'a1', type: 'summative', date: '2025-03-20' }],
+    });
+    // Tap "2" again when current score is already 2 → cleared to 0.
+    MGrade.setScore(CID, 'stu1', 'a1', 't1', 2);
+    const tagScores = store.stu1.filter(s => s.assessmentId === 'a1' && s.tagId === 't1');
+    expect(tagScores).toHaveLength(1);
+    expect(tagScores[0].score).toBe(0);
+  });
+
+  it('tapping a different level when one is active replaces, does NOT clear', () => {
+    let store = {
+      stu1: [{ id: 'old1', assessmentId: 'a1', tagId: 't1', score: 2, type: 'summative', date: '2025-03-20' }],
+    };
+    mockDataLayer({
+      getScores: () => store,
+      saveScores: () => {},
+      getAssessments: () => [{ id: 'a1', type: 'summative', date: '2025-03-20' }],
+    });
+    MGrade.setScore(CID, 'stu1', 'a1', 't1', 3);
+    const tagScores = store.stu1.filter(s => s.assessmentId === 'a1' && s.tagId === 't1');
+    expect(tagScores).toHaveLength(1);
+    expect(tagScores[0].score).toBe(3);
+  });
+
+  it('tapping a cleared score (0) with a real level sets the level, does NOT toggle', () => {
+    let store = {
+      stu1: [{ id: 'old1', assessmentId: 'a1', tagId: 't1', score: 0, type: 'summative', date: '2025-03-20' }],
+    };
+    mockDataLayer({
+      getScores: () => store,
+      saveScores: () => {},
+      getAssessments: () => [{ id: 'a1', type: 'summative', date: '2025-03-20' }],
+    });
+    MGrade.setScore(CID, 'stu1', 'a1', 't1', 3);
+    const tagScores = store.stu1.filter(s => s.assessmentId === 'a1' && s.tagId === 't1');
+    expect(tagScores).toHaveLength(1);
+    expect(tagScores[0].score).toBe(3);
+  });
+
   it('preserves scores for other tags when scoring one tag', () => {
     let store = {
       stu1: [{ id: 'keep1', assessmentId: 'a1', tagId: 't2', score: 3, type: 'summative', date: '2025-03-20' }],
@@ -440,6 +521,66 @@ describe('MGrade.setStatus', () => {
     MGrade.setStatus(CID, 'stu1', 'a1', 'NS');
     expect(setTo).toBeNull(); // toggled off
   });
+
+  it('NS auto-zeros every tag score on the assessment (matches desktop behaviour)', () => {
+    let store = {
+      stu1: [
+        { id: 's1', assessmentId: 'a1', tagId: 't1', score: 3, type: 'summative', date: '2025-03-20' },
+        { id: 's2', assessmentId: 'a1', tagId: 't2', score: 4, type: 'summative', date: '2025-03-20' },
+        // Score on a different assessment — must NOT be touched.
+        { id: 's3', assessmentId: 'a2', tagId: 't1', score: 2, type: 'summative', date: '2025-03-20' },
+      ],
+    };
+    mockDataLayer({
+      getScores: () => store,
+      saveScores: () => {},
+      getAssignmentStatus: () => null,
+      setAssignmentStatus: () => {},
+      getAssessments: () => [
+        { id: 'a1', type: 'summative', date: '2025-03-20', tagIds: ['t1', 't2'] },
+        { id: 'a2', type: 'summative', date: '2025-03-20', tagIds: ['t1'] },
+      ],
+    });
+    MGrade.setStatus(CID, 'stu1', 'a1', 'NS');
+
+    const a1t1 = store.stu1.find(s => s.assessmentId === 'a1' && s.tagId === 't1');
+    const a1t2 = store.stu1.find(s => s.assessmentId === 'a1' && s.tagId === 't2');
+    const a2t1 = store.stu1.find(s => s.assessmentId === 'a2' && s.tagId === 't1');
+    expect(a1t1.score).toBe(0);
+    expect(a1t2.score).toBe(0);
+    expect(a2t1.score).toBe(2); // untouched — different assessment
+  });
+
+  it('EXC does NOT auto-zero (only NS has that semantic)', () => {
+    let store = {
+      stu1: [{ id: 's1', assessmentId: 'a1', tagId: 't1', score: 3, type: 'summative', date: '2025-03-20' }],
+    };
+    mockDataLayer({
+      getScores: () => store,
+      saveScores: () => {},
+      getAssignmentStatus: () => null,
+      setAssignmentStatus: () => {},
+      getAssessments: () => [{ id: 'a1', type: 'summative', date: '2025-03-20', tagIds: ['t1'] }],
+    });
+    MGrade.setStatus(CID, 'stu1', 'a1', 'EXC');
+    expect(store.stu1[0].score).toBe(3); // preserved
+  });
+
+  it('clearing NS does NOT restore scores (destructive by design)', () => {
+    // Student had a 3, teacher hit NS (which zeroed), now clears NS — score stays 0.
+    let store = {
+      stu1: [{ id: 's1', assessmentId: 'a1', tagId: 't1', score: 0, type: 'summative', date: '2025-03-20' }],
+    };
+    mockDataLayer({
+      getScores: () => store,
+      saveScores: () => {},
+      getAssignmentStatus: () => 'NS',
+      setAssignmentStatus: () => {},
+      getAssessments: () => [{ id: 'a1', type: 'summative', date: '2025-03-20', tagIds: ['t1'] }],
+    });
+    MGrade.setStatus(CID, 'stu1', 'a1', 'NS'); // toggle off
+    expect(store.stu1[0].score).toBe(0); // still 0
+  });
 });
 
 /* ── filterAssessments ──────────────────────────────────────── */
@@ -516,10 +657,11 @@ describe('Swiper card edge cases', () => {
       getAssessments: () => [{ id: 'a1', title: 'Test', type: 'summative', date: '2025-03-20', tagIds: ['t1'] }],
     });
     const html = MGrade.renderSwiper(CID, 'a1');
-    // Each tag should have 5 buttons (0-4) per student
+    // Each tag has 4 buttons (levels 1-4) per student. Level 0 (No Evidence)
+    // is reached by toggling the active level off.
     const scoreButtons = html.match(/data-action="m-grade-score"/g) || [];
-    // 3 students x 1 tag x 5 levels = 15 buttons
-    expect(scoreButtons.length).toBe(15);
+    // 3 students x 1 tag x 4 levels = 12 buttons
+    expect(scoreButtons.length).toBe(12);
   });
 
   it('handles assessment with multiple tags', () => {
@@ -527,9 +669,9 @@ describe('Swiper card edge cases', () => {
       getAssessments: () => [{ id: 'a1', title: 'Multi', type: 'summative', date: '2025-03-20', tagIds: ['t1', 't2'] }],
     });
     const html = MGrade.renderSwiper(CID, 'a1');
-    // 3 students x 2 tags x 5 levels = 30 buttons
+    // 3 students x 2 tags x 4 levels = 24 buttons
     const scoreButtons = html.match(/data-action="m-grade-score"/g) || [];
-    expect(scoreButtons.length).toBe(30);
+    expect(scoreButtons.length).toBe(24);
   });
 
   it('shows all three status pills per student', () => {

@@ -301,9 +301,14 @@ window.MGrade = (function () {
           '" style="width:44px;height:44px;font-size:20px">+</button>' +
           '</div></div>';
       } else {
-        // Proficiency mode
+        // Proficiency mode — levels 1-4 only. 'No Evidence' (stored as 0) is
+        // reachable by tapping the currently-active level to toggle it off;
+        // that state renders as "no button active," matching both the fresh
+        // ungraded state AND a deliberate No-Evidence choice, which the
+        // graded-count / calc / report layers already treat identically
+        // (all use `score > 0`).
         var btns = '';
-        for (var level = 0; level <= 4; level++) {
+        for (var level = 1; level <= 4; level++) {
           var active = current !== null && Math.round(current) === level ? ' m-score-active' : '';
           btns +=
             '<button class="m-score-btn' +
@@ -386,6 +391,14 @@ window.MGrade = (function () {
     _undoStack.push({ cid: cid, sid: sid, aid: aid, tid: tid, prev: JSON.parse(JSON.stringify(prevEntries)) });
     if (_undoStack.length > 20) _undoStack.shift();
 
+    // Toggle off: tapping the already-active level clears the score.
+    // Score stored as 0 ('no score' to calculators; all level buttons become
+    // inactive because none of them has data-score="0"). The existing
+    // undo entry (captured above) restores the prior score on undo.
+    var existing = prevEntries[prevEntries.length - 1];
+    var cleared = existing && existing.score === score;
+    if (cleared) score = 0;
+
     // Find assessment for metadata
     var assessment = getAssessments(cid).find(function (a) {
       return a.id === aid;
@@ -400,7 +413,8 @@ window.MGrade = (function () {
     clearProfCache();
     MC.haptic();
 
-    // Update button states
+    // Update button states. When cleared (score=0), no btn matches so all
+    // buttons become inactive — which is exactly what we want visually.
     var card = document.querySelector('.m-swiper-card[data-sid="' + sid + '"]');
     if (card) {
       var btns = card.querySelectorAll('.m-score-btn[data-tid="' + tid + '"]');
@@ -412,13 +426,19 @@ window.MGrade = (function () {
     // Update thumbnail graded state
     _updateThumbGraded(cid, aid);
 
-    // Show undo toast
-    MC.showToast('Score saved', {
-      onUndo: function () {
-        undoLastScore();
-      },
-      duration: 5000,
-    });
+    // Feedback. Routine saves are silent — the button filling with the
+    // score-level color plus haptic is enough confirmation, and toasting
+    // on every tap turns 100+ grading actions into a flashing noise bar.
+    // Only the toggle-off "cleared" path gets a toast, because that's the
+    // one case where the teacher might want an immediate undo.
+    if (cleared) {
+      MC.showToast('Score cleared', {
+        onUndo: function () {
+          undoLastScore();
+        },
+        duration: 5000,
+      });
+    }
   }
 
   function setStatus(cid, sid, aid, status) {
@@ -427,12 +447,52 @@ window.MGrade = (function () {
     setAssignmentStatus(cid, sid, aid, newStatus);
     MC.haptic();
 
+    // NS auto-zero: match desktop behaviour (page-assignments.js
+    // toggleStudentStatus). Setting NS on an assessment zeroes every tag
+    // score under it, because "not submitted" means the student scored 0
+    // on every demonstrated outcome. Clearing NS does NOT auto-restore —
+    // the teacher has to re-score.
+    var assess = null;
+    if (newStatus === 'NS') {
+      assess = getAssessments(cid).find(function (a) {
+        return a.id === aid;
+      });
+      if (assess) {
+        (assess.tagIds || []).forEach(function (tagId) {
+          upsertScore(
+            cid,
+            sid,
+            aid,
+            tagId,
+            0,
+            assess.date || (typeof courseToday === 'function' ? courseToday(cid) : ''),
+            assess.type || 'summative',
+            '',
+          );
+        });
+        clearProfCache();
+      }
+    }
+
     // Update pill states
     var card = document.querySelector('.m-swiper-card[data-sid="' + sid + '"]');
     if (card) {
       card.querySelectorAll('.m-status-pill').forEach(function (pill) {
         pill.classList.toggle('m-status-active', pill.getAttribute('data-val') === newStatus);
       });
+      // After auto-zero, deactivate every score button under this (sid, aid)
+      // so the UI reflects the zeroed state (no button matches score=0).
+      if (newStatus === 'NS') {
+        card.querySelectorAll('.m-score-btn[data-aid="' + aid + '"]').forEach(function (btn) {
+          btn.classList.remove('m-score-active');
+        });
+      }
+    }
+
+    // Update thumbnail graded state so the per-student dot reflects the new
+    // zero-scored (i.e., no longer "graded") state.
+    if (newStatus === 'NS') {
+      _updateThumbGraded(cid, aid);
     }
   }
 

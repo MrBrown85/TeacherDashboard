@@ -496,9 +496,9 @@ function renderStudentHeader(cid, sid, opts) {
     lateAssignments = [];
   assessments.forEach(a => {
     const st = statuses[sid + ':' + a.id];
-    if (st === 'notSubmitted') nsAssignments.push(a.title);
-    else if (st === 'excused') excAssignments.push(a.title);
-    else if (st === 'late') lateAssignments.push(a.title);
+    if (st === 'NS') nsAssignments.push(a.title);
+    else if (st === 'EXC') excAssignments.push(a.title);
+    else if (st === 'LATE') lateAssignments.push(a.title);
   });
 
   let html = `<div class="student-header-top">`;

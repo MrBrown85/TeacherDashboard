@@ -149,11 +149,14 @@ function getAssessmentOverallScore(cid, studentId, assessmentId) {
   }
 
   var status = getAssignmentStatus(cid, studentId, assessmentId);
-  if (status === 'excused') {
+  // Status enum matches the server CHECK constraint on set_score_status:
+  // 'NS' | 'EXC' | 'LATE'. Long-form desktop-era values are rewritten by
+  // _migrateAssignmentStatusFormat() on boot.
+  if (status === 'EXC') {
     _assessmentOverallCache[cacheKey] = null;
     return null;
   }
-  if (status === 'notSubmitted') {
+  if (status === 'NS') {
     _assessmentOverallCache[cacheKey] = 0;
     return 0;
   }
@@ -390,7 +393,7 @@ function getTagScores(cid, studentId, tagId) {
   const filtered = studentScores.filter(s => {
     if (s.tagId !== tagId) return false;
     const status = statuses[studentId + ':' + s.assessmentId];
-    if (status === 'excused') return false;
+    if (status === 'EXC') return false;
     return true;
   });
   // Convert points-mode scores to proficiency
@@ -500,7 +503,7 @@ function setSectionOverride(cid, studentId, sectionId, level, reason) {
     overrides[studentId][sectionId] = {
       level: level,
       reason: reason,
-      date: new Date().toISOString().slice(0, 10),
+      date: typeof courseToday === 'function' ? courseToday(cid) : new Date().toISOString().slice(0, 10),
       calculated: Math.round(raw * 10) / 10,
     };
   } else {

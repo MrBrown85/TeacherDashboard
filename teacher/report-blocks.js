@@ -131,7 +131,7 @@ window.ReportBlocks = (function () {
       const slabel = prof > 0 ? PROF_LABELS[sr] : 'No Evidence';
       const scolor = PROF_COLORS[sr] || PROF_COLORS[0];
       return `<div class="report-section-chip">
-      <div class="report-section-chip-name" style="color:${color}">${esc(name)}</div>
+      <div class="report-section-chip-name" style="color:${cssColor(color)}">${esc(name)}</div>
       <div class="report-section-chip-value" data-prof="${sr}" style="color:${scolor}">${slabel}</div>
     </div>`;
     };

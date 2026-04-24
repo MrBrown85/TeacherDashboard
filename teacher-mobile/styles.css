@@ -924,6 +924,17 @@ body.mobile-mode :focus:not(:focus-visible) { outline: none; }
   background: var(--border-2);
   margin: 8px auto;
   flex-shrink: 0;
+  cursor: pointer;
+  /* Expand the click target to the full width of the sheet top using a
+   * transparent border-box, so pointer hits anywhere in the top 21 px of
+   * the sheet dismiss it. The visible pill stays 36×5. */
+  padding: 8px 40vw;
+  background-clip: content-box;
+  box-sizing: content-box;
+}
+.m-sheet-handle:focus-visible {
+  outline: 2px solid var(--accent, #0a84ff);
+  outline-offset: 4px;
 }
 .m-sheet-content {
   flex: 1;

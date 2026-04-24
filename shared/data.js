@@ -394,11 +394,78 @@ function _broadcastChange(cid, field) {
    Initialization — call once per page load (or on course switch)
    ══════════════════════════════════════════════════════════════════ */
 
+/* One-time LocalStorage migration: convert assignment-status values from the
+ * legacy long form ('notSubmitted' / 'excused' / 'late' — what desktop used
+ * to write before 2026-04-23) to the short form ('NS' / 'EXC' / 'LATE' — the
+ * server's CHECK constraint and the only form `shared/calc.js` now
+ * recognizes).
+ *
+ * Background: the desktop client silently failed every `set_score_status`
+ * RPC call because the server rejects long-form strings; statuses only
+ * persisted to LocalStorage. The mobile client wrote the correct short
+ * form to both LS and server, but `calc.js` only recognized the long form
+ * — so mobile-set flags were visually present but mathematically a no-op.
+ * Standardizing everything on the short form fixes both directions; this
+ * migration rewrites teachers' historical LS data so their existing
+ * statuses start counting correctly.
+ *
+ * Idempotent: only touches values that need rewriting, backs up the raw
+ * pre-migration JSON to `gb-mig-bak-statuses-<cid>` on the first rewrite,
+ * safe to run every boot. */
+function _migrateAssignmentStatusFormat() {
+  var MAP = { notSubmitted: 'NS', excused: 'EXC', late: 'LATE' };
+  // Snapshot matching keys first — mutating localStorage while iterating
+  // by index can skip entries.
+  var keys = [];
+  for (var i = 0; i < localStorage.length; i++) {
+    var k = localStorage.key(i);
+    if (k && k.indexOf('gb-statuses-') === 0) keys.push(k);
+  }
+  keys.forEach(function (key) {
+    var raw = localStorage.getItem(key);
+    if (!raw) return;
+    var obj;
+    try {
+      obj = JSON.parse(raw);
+    } catch (e) {
+      return;
+    }
+    if (!obj || typeof obj !== 'object') return;
+    var changed = false;
+    for (var k in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, k) && MAP[obj[k]]) {
+        obj[k] = MAP[obj[k]];
+        changed = true;
+      }
+    }
+    if (changed) {
+      var cid = key.slice('gb-statuses-'.length);
+      // Back up the raw pre-migration JSON (not the migrated form) so
+      // anything goes wrong we can hand-restore. Mirrors the
+      // _backupBeforeMigration pattern used by the student-schema
+      // migrations above, but reads from LS rather than the in-memory
+      // cache (which hasn't been populated yet at this boot stage).
+      _safeLSSet('gb-mig-bak-statuses-' + cid, JSON.stringify({ data: raw, ts: Date.now() }));
+      try {
+        localStorage.setItem(key, JSON.stringify(obj));
+      } catch (e) {
+        console.warn('[status-migration] write failed for', key, e);
+      }
+    }
+  });
+}
+
 /** Load global data (courses + config). Call before initData(). */
 async function initAllCourses() {
+  // Run one-time LS format migrations before any read of cached data.
+  _migrateAssignmentStatusFormat();
+
   // Demo mode: hard-skip Supabase, force local-only, ensure seed data exists.
-  // Set by the "Try Demo Mode" button on the login page.
-  var _demoMode = localStorage.getItem('gb-demo-mode') === '1';
+  // Set by the "Try Demo Mode" button on the login page. Gated on the
+  // companion token set by login-auth.js so a lone gb-demo-mode='1' written
+  // in DevTools after sign-out cannot reactivate demo mode (see
+  // isDemoMode() in shared/supabase.js).
+  var _demoMode = typeof isDemoMode === 'function' && isDemoMode();
   if (_demoMode) {
     _useSupabase = false;
     _teacherId = 'demo-user';
@@ -670,6 +737,48 @@ function _dateOnly(value) {
   } catch (e) {
     return '';
   }
+}
+
+/* Returns today's date in YYYY-MM-DD format, computed in the course's
+ * timezone (not the browser's). This matters for reports: a Vancouver
+ * teacher grading at 11 pm PST would see UTC midnight fall on the next
+ * calendar day if we used `new Date().toISOString().slice(0, 10)`, so the
+ * score would appear on reports under tomorrow's date.
+ *
+ * Courses store their timezone in course.timezone (column added with
+ * T-UI-03 default 'America/Vancouver'). Callers pass the course id; we
+ * look up the timezone, fall back to the course default, fall back again
+ * to UTC. Intl.DateTimeFormat is used because it handles DST correctly. */
+function courseToday(cid) {
+  var tz = 'America/Vancouver';
+  try {
+    var c = (typeof COURSES !== 'undefined' && cid && COURSES[cid]) || null;
+    if (c && typeof c.timezone === 'string' && c.timezone) tz = c.timezone;
+  } catch (e) {
+    // COURSES not yet initialized — use the default.
+  }
+  try {
+    // 'en-CA' produces YYYY-MM-DD directly when using numeric/2-digit parts.
+    var parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date());
+    var y = '',
+      m = '',
+      d = '';
+    for (var i = 0; i < parts.length; i++) {
+      var p = parts[i];
+      if (p.type === 'year') y = p.value;
+      else if (p.type === 'month') m = p.value;
+      else if (p.type === 'day') d = p.value;
+    }
+    if (y && m && d) return y + '-' + m + '-' + d;
+  } catch (e) {
+    // Fall through to UTC fallback.
+  }
+  return new Date().toISOString().slice(0, 10);
 }
 
 function _plainObject(value) {
@@ -2047,7 +2156,7 @@ function upsertScore(cid, sid, aid, tid, scoreVal, date, type, note) {
       assessmentId: aid,
       tagId: tid,
       score: scoreVal,
-      date: date || new Date().toISOString().slice(0, 10),
+      date: date || courseToday(cid),
       type: type || 'summative',
       note: note || '',
       created: new Date().toISOString(),
@@ -2226,6 +2335,27 @@ function esc(s) {
 }
 function escJs(s) {
   return (s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"');
+}
+
+/* Returns a safe CSS color value for inline-style interpolation, or a
+ * neutral fallback if the input doesn't match one of the accepted shapes.
+ *
+ * This is defence-in-depth: color values reach the client via user-editable
+ * fields (subject/section/module/course), and the server validates them
+ * against a hex-format CHECK constraint. But if a bypass ever lands a bad
+ * value in the cache (stale LocalStorage, a future non-picker UI, etc.),
+ * wrapping interpolations with cssColor() prevents the bad value from
+ * breaking out of the style context into DOM injection.
+ *
+ * Accepted: #rgb / #rgba / #rrggbb / #rrggbbaa hex, rgb()/rgba()/hsl()/hsla()
+ * with numeric components only, and var(--token) custom-property refs.
+ * Anything with ;, {, }, /*, newlines, url(, javascript:, etc. falls back
+ * to var(--text-3). */
+var _CSS_COLOR_RE =
+  /^(?:#[0-9a-fA-F]{3,8}|rgb\(\s*\d{1,3}(?:\s*,\s*\d{1,3}){2}\s*\)|rgba\(\s*\d{1,3}(?:\s*,\s*\d{1,3}){2}\s*,\s*(?:0|1|0?\.\d+)\s*\)|hsl\(\s*\d{1,3}(?:\s*,\s*\d{1,3}%?){2}\s*\)|hsla\(\s*\d{1,3}(?:\s*,\s*\d{1,3}%?){2}\s*,\s*(?:0|1|0?\.\d+)\s*\)|var\(--[a-zA-Z0-9_-]+\))$/;
+function cssColor(c) {
+  if (typeof c !== 'string' || c.length > 64) return 'var(--text-3)';
+  return _CSS_COLOR_RE.test(c) ? c : 'var(--text-3)';
 }
 function initials(st) {
   if (!st) return '??';
@@ -3965,7 +4095,7 @@ function setPointsScore(cid, sid, aid, rawScore) {
         assessmentId: aid,
         tagId: tid,
         score: rawScore,
-        date: assess.date || new Date().toISOString().slice(0, 10),
+        date: assess.date || courseToday(cid),
         type: assess.type || 'summative',
         note: '',
         created: new Date().toISOString(),

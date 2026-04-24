@@ -72,12 +72,31 @@ describe('getTagScores', () => {
           { score: 3, tagId: 't1', assessmentId: 'a1', date: '2025-01-01', type: 'summative' },
         ],
       }),
-      getAssignmentStatuses: () => ({ 'stu1:a1': 'excused' }),
+      getAssignmentStatuses: () => ({ 'stu1:a1': 'EXC' }),
       getAssessments: () => [{ id: 'a1', type: 'summative' }],
     });
 
     const result = getTagScores('test', 'stu1', 't1');
     expect(result).toHaveLength(0);
+  });
+
+  it('legacy long-form "excused" is NOT recognized (regression guard)', () => {
+    // Post-migration, only the short form 'EXC' is honoured. If any code
+    // path ever writes 'excused' again, calc.js treats it as unknown and
+    // the score counts normally. This guards against the pre-2026-04-23
+    // state where desktop silently persisted long-form strings that calc
+    // could see but the server rejected.
+    mockDataLayer({
+      getScores: () => ({
+        stu1: [{ score: 3, tagId: 't1', assessmentId: 'a1', date: '2025-01-01', type: 'summative' }],
+      }),
+      getAssignmentStatuses: () => ({ 'stu1:a1': 'excused' }),
+      getAssessments: () => [{ id: 'a1', type: 'summative' }],
+    });
+
+    const result = getTagScores('test', 'stu1', 't1');
+    expect(result).toHaveLength(1); // NOT filtered
+    expect(result[0].score).toBe(3);
   });
 
   it('converts points-mode scores to proficiency', () => {
@@ -575,5 +594,62 @@ describe('getGroupProficiency (edge cases)', () => {
 
     // sec1 has 2 tags: t1=4, t2=2 → section avg=3 → group avg=3
     expect(getGroupProficiency('test', 'stu1', 'g1')).toBe(3);
+  });
+});
+
+/* ── getAssessmentOverallScore — status enum contract ───────── */
+describe('getAssessmentOverallScore — assignment status', () => {
+  function baseMocks() {
+    return {
+      getScores: () => ({
+        stu1: [{ score: 3, tagId: 't1', assessmentId: 'a1', date: '2025-01-01', type: 'summative' }],
+      }),
+      getAssessments: () => [{ id: 'a1', type: 'summative', tagIds: ['t1'] }],
+      getSectionForTag: () => ({ id: 'sec1', tags: [{ id: 't1' }] }),
+    };
+  }
+
+  it('status="EXC" excludes the assessment (returns null)', () => {
+    mockDataLayer({
+      ...baseMocks(),
+      getAssignmentStatuses: () => ({ 'stu1:a1': 'EXC' }),
+    });
+    expect(getAssessmentOverallScore('test', 'stu1', 'a1')).toBeNull();
+  });
+
+  it('status="NS" zeros the assessment (returns 0)', () => {
+    mockDataLayer({
+      ...baseMocks(),
+      getAssignmentStatuses: () => ({ 'stu1:a1': 'NS' }),
+    });
+    expect(getAssessmentOverallScore('test', 'stu1', 'a1')).toBe(0);
+  });
+
+  it('status="LATE" has no calc effect — score passes through', () => {
+    mockDataLayer({
+      ...baseMocks(),
+      getAssignmentStatuses: () => ({ 'stu1:a1': 'LATE' }),
+    });
+    // Exact value depends on calcMethod, but must NOT be null and NOT be 0
+    // (the score of 3 should be reflected).
+    const result = getAssessmentOverallScore('test', 'stu1', 'a1');
+    expect(result).not.toBeNull();
+    expect(result).not.toBe(0);
+  });
+
+  it('legacy "excused" / "notSubmitted" values are ignored (regression guard)', () => {
+    // Pre-migration desktop wrote long-form strings; post-migration these
+    // should never appear in LocalStorage, but guard against re-introduction.
+    mockDataLayer({
+      ...baseMocks(),
+      getAssignmentStatuses: () => ({ 'stu1:a1': 'excused' }),
+    });
+    expect(getAssessmentOverallScore('test', 'stu1', 'a1')).not.toBeNull();
+
+    mockDataLayer({
+      ...baseMocks(),
+      getAssignmentStatuses: () => ({ 'stu1:a1': 'notSubmitted' }),
+    });
+    expect(getAssessmentOverallScore('test', 'stu1', 'a1')).not.toBe(0);
   });
 });

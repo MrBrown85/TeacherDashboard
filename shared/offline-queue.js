@@ -30,6 +30,34 @@
   var BACKOFF_MS = [1000, 5000, 30000];
   var AUTO_FLUSH_MS = 60000; // periodic retry while online
 
+  /* Endpoints that accept `p_idempotency_key` on the server side
+   * (migration 20260423_write_path_idempotency). For each of these, the
+   * queue passes `entry.id` as the key so that a retry after a network
+   * blip — where the server committed but the client missed the 200 —
+   * returns the cached row id instead of inserting a duplicate.
+   *
+   * IMPORTANT: adding an endpoint here without the matching server-side
+   * retrofit (an optional `p_idempotency_key uuid default null` parameter
+   * on the RPC) causes every call to that endpoint to fail with
+   * "function … does not exist" because PostgREST resolves by argument
+   * names. Keep this list in lockstep with the migration. */
+  var IDEMPOTENT_ENDPOINTS = {
+    create_observation: true,
+    create_assessment: true,
+    duplicate_assessment: true,
+    create_custom_tag: true,
+    upsert_note: true,
+    create_student_and_enroll: true,
+  };
+
+  function _withIdemKey(endpoint, payload, key) {
+    if (!IDEMPOTENT_ENDPOINTS[endpoint] || !key) return payload || {};
+    var p = {};
+    if (payload) for (var k in payload) if (Object.prototype.hasOwnProperty.call(payload, k)) p[k] = payload[k];
+    p.p_idempotency_key = key;
+    return p;
+  }
+
   var _flushing = false;
   var _autoTimer = null;
   var _listeners = [];
@@ -127,9 +155,14 @@
   }
 
   /* Enqueue a write. endpoint = RPC name, payload = RPC params object.
+     If opts.id is provided it is used as the entry id (and therefore the
+     idempotency key); otherwise a fresh UUID is generated. Passing an
+     explicit id is how callOrEnqueue threads the key it used for the
+     failed online attempt into the queued retry so both the direct call
+     and the retry share a single key.
      Returns { ok, id, reason? }.  Caller should update its optimistic
      cache AFTER receiving ok:true. */
-  function enqueue(endpoint, payload) {
+  function enqueue(endpoint, payload, opts) {
     if (!endpoint || typeof endpoint !== 'string') {
       return { ok: false, reason: 'invalid_endpoint' };
     }
@@ -138,7 +171,7 @@
       return { ok: false, reason: 'queue_full' };
     }
     var entry = {
-      id: _uuid4(),
+      id: (opts && opts.id) || _uuid4(),
       created_at: new Date().toISOString(),
       endpoint: endpoint,
       payload: payload || {},
@@ -167,7 +200,11 @@
     var sb = typeof getSupabase === 'function' ? getSupabase() : null;
     if (!sb) return { ok: false, error: 'no_supabase' };
     try {
-      var res = await sb.rpc(entry.endpoint, entry.payload || {});
+      // Inject p_idempotency_key for retrofitted endpoints so a retry after
+      // a blip (server committed, client missed the 200) replays to the
+      // cached result instead of creating a duplicate row.
+      var payload = _withIdemKey(entry.endpoint, entry.payload, entry.id);
+      var res = await sb.rpc(entry.endpoint, payload);
       if (res && res.error) return { ok: false, error: res.error.message || String(res.error) };
       return { ok: true, data: res && res.data };
     } catch (e) {
@@ -278,11 +315,18 @@
   }
 
   /* One-shot convenience: call the RPC directly if online, else enqueue.
-     Resolves to { ok, data?, enqueued, reason? }. */
+     Resolves to { ok, data?, enqueued, reason? }.
+
+     For endpoints that support idempotency, we generate a key up front and
+     pass it to both the direct call and any fallback enqueue. That way, if
+     the direct call's network leg fails after the server committed, the
+     queued retry sends the same key and the server returns the cached row
+     id instead of inserting a second row. */
   function callOrEnqueue(endpoint, payload) {
+    var idemKey = IDEMPOTENT_ENDPOINTS[endpoint] ? _uuid4() : null;
     if (navigator.onLine && typeof getSupabase === 'function' && getSupabase()) {
       return getSupabase()
-        .rpc(endpoint, payload || {})
+        .rpc(endpoint, _withIdemKey(endpoint, payload, idemKey))
         .then(function (res) {
           if (res && res.error) {
             // Treat non-2xx network failures as "enqueue and retry" — but
@@ -291,7 +335,7 @@
             // or 'network' enqueues; everything else is a real error.
             var msg = (res.error.message || '') + '';
             if (/network|fetch|failed to connect|ECONNREFUSED/i.test(msg)) {
-              var q = enqueue(endpoint, payload);
+              var q = enqueue(endpoint, payload, idemKey ? { id: idemKey } : null);
               return { ok: false, enqueued: q.ok, reason: 'network', error: msg };
             }
             return { ok: false, enqueued: false, error: msg };
@@ -299,12 +343,12 @@
           return { ok: true, enqueued: false, data: res && res.data };
         })
         .catch(function (e) {
-          var q = enqueue(endpoint, payload);
+          var q = enqueue(endpoint, payload, idemKey ? { id: idemKey } : null);
           return { ok: false, enqueued: q.ok, reason: 'exception', error: (e && e.message) || String(e) };
         });
     }
     // Offline or Supabase unavailable
-    var q = enqueue(endpoint, payload);
+    var q = enqueue(endpoint, payload, idemKey ? { id: idemKey } : null);
     return Promise.resolve({ ok: false, enqueued: q.ok, reason: q.ok ? 'offline' : q.reason });
   }
 

@@ -107,17 +107,17 @@ describe('setPointsScore', () => {
 describe('assignment status', () => {
   it('set + get roundtrips a status value', () => {
     saveAssignmentStatuses(CID, {});
-    setAssignmentStatus(CID, 'stu1', 'a1', 'excused');
-    expect(getAssignmentStatus(CID, 'stu1', 'a1')).toBe('excused');
+    setAssignmentStatus(CID, 'stu1', 'a1', 'EXC');
+    expect(getAssignmentStatus(CID, 'stu1', 'a1')).toBe('EXC');
   });
 
   it('getAssignmentStatus returns stored composite-key value', () => {
-    saveAssignmentStatuses(CID, { 'stu1:a1': 'excused' });
-    expect(getAssignmentStatus(CID, 'stu1', 'a1')).toBe('excused');
+    saveAssignmentStatuses(CID, { 'stu1:a1': 'EXC' });
+    expect(getAssignmentStatus(CID, 'stu1', 'a1')).toBe('EXC');
   });
 
   it('setAssignmentStatus(null) clears the status', () => {
-    saveAssignmentStatuses(CID, { 'stu1:a1': 'excused' });
+    saveAssignmentStatuses(CID, { 'stu1:a1': 'EXC' });
     setAssignmentStatus(CID, 'stu1', 'a1', null);
     expect(getAssignmentStatus(CID, 'stu1', 'a1')).toBeNull();
   });

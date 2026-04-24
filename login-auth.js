@@ -31,6 +31,32 @@ function portalRedirect(user) {
   }
 }
 
+/* Local HTML-entity escaper. login-auth.js does not load shared/data.js
+ * (which defines the canonical esc()), so we duplicate the one-line helper
+ * here rather than widen the login page's dependency set. */
+/* Generate the companion token stored alongside gb-demo-mode. The token
+ * itself is not secret — it lives in localStorage where any DevTools-capable
+ * user can read it. What it proves is that demo mode was entered through a
+ * legitimate code path (this file), not by flipping a single flag in
+ * DevTools from the signed-out state. signOut() in shared/supabase.js
+ * wipes every gb-* key, so both flags die together on sign-out. */
+function _demoToken() {
+  try {
+    return crypto.randomUUID();
+  } catch (e) {
+    return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+  }
+}
+
+function escHtml(s) {
+  return (s == null ? '' : String(s))
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function formatDeletionDeadline(deletedAt) {
   var ts = Date.parse(deletedAt || '');
   if (!isFinite(ts)) return '30 days from now';
@@ -50,7 +76,7 @@ function showRestoreAccountPrompt(deletionDate) {
     overlay.setAttribute('aria-labelledby', 'restore-account-title');
     overlay.innerHTML = `<div class="confirm-card">
       <div class="confirm-title" id="restore-account-title">Restore Account</div>
-      <div class="confirm-message">Your account is scheduled for deletion on ${deletionDate}. Restore it now?</div>
+      <div class="confirm-message">Your account is scheduled for deletion on ${escHtml(deletionDate)}. Restore it now?</div>
       <div class="confirm-actions">
         <button class="confirm-cancel" id="restore-continue-btn">Continue deletion</button>
         <button class="confirm-ok primary" id="restore-confirm-btn">Restore</button>
@@ -118,6 +144,7 @@ async function maybePromptRestoreAccount(user) {
         localStorage.removeItem(k);
       });
     localStorage.setItem('gb-demo-mode', '1');
+    localStorage.setItem('gb-demo-mode-token', _demoToken());
     var preferMobile = window.innerWidth <= 768 && localStorage.getItem('td-mobile-pref') !== 'desktop';
     window.location.href = preferMobile ? '/teacher-mobile/' : '/teacher/app.html';
     return;
@@ -265,7 +292,10 @@ function enterDemoMode() {
     });
   // Set the demo flag the rest of the app reads to skip auth + sync.
   // Cleared on sign-out (which also wipes all gb-* keys per FOIPPA).
+  // The companion token proves demo mode was entered through this code path,
+  // not by flipping a single flag in DevTools on a shared computer.
   localStorage.setItem('gb-demo-mode', '1');
+  localStorage.setItem('gb-demo-mode-token', _demoToken());
   // Mobile pref: respect any existing td-mobile-pref override; otherwise let
   // viewport choose desktop vs mobile entry.
   var preferMobile = window.innerWidth <= 768 && localStorage.getItem('td-mobile-pref') !== 'desktop';

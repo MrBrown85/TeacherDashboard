@@ -214,10 +214,24 @@
    * Redirects to login.html if the user is not logged in.
    * @returns {void}
    */
+  /* Demo mode requires BOTH the gb-demo-mode flag AND a companion token set
+   * by login-auth.js when the user enters through a legitimate path (Try
+   * Demo button or ?demo=1 URL). A DevTools-capable user on a shared
+   * computer who sets only gb-demo-mode='1' after sign-out does NOT get
+   * demo access — they are redirected to the login page. signOut() wipes
+   * every gb-* key, so both flags die together on sign-out. The token is
+   * not a secret; it's an intent signal that raises the bar from "one
+   * flag" to "must have gone through the flow that generates the token." */
+  window.isDemoMode = function () {
+    if (localStorage.getItem('gb-demo-mode') !== '1') return false;
+    var token = localStorage.getItem('gb-demo-mode-token');
+    return !!token && token.length >= 16;
+  };
+
   window.requireAuth = async function () {
     // Demo mode: bypass auth, stub the user, run local-only with seeded data.
     // Set by the "Try Demo Mode" button on the login page.
-    if (localStorage.getItem('gb-demo-mode') === '1') {
+    if (window.isDemoMode()) {
       window.getCurrentUser = async () => ({
         id: 'demo-user',
         email: 'demo@fullvision.local',
@@ -225,6 +239,14 @@
       });
       window.isLoggedIn = async () => true;
       return;
+    }
+    // Defence-in-depth: a stale gb-demo-mode=1 without the companion token
+    // (previously legitimate demo, then manually-fiddled state, or a partial
+    // localStorage copy-paste between browsers) must not be treated as active
+    // demo. Clear the orphan so downstream read paths in shared/data.js that
+    // still check the single flag directly don't see a false positive.
+    if (localStorage.getItem('gb-demo-mode') === '1') {
+      localStorage.removeItem('gb-demo-mode');
     }
     // Dev mode: bypass auth on localhost when credentials are missing
     if (_isDevMode) {

@@ -36,6 +36,60 @@ describe('escJs', () => {
   });
 });
 
+/* ── cssColor (CSS color allowlist) ───────────────────────── */
+describe('cssColor', () => {
+  it('accepts hex colors (3/4/6/8 digits)', () => {
+    expect(cssColor('#abc')).toBe('#abc');
+    expect(cssColor('#AABBCC')).toBe('#AABBCC');
+    expect(cssColor('#ff00ff88')).toBe('#ff00ff88');
+  });
+
+  it('accepts rgb/rgba/hsl/hsla functional forms', () => {
+    expect(cssColor('rgb(0, 128, 255)')).toBe('rgb(0, 128, 255)');
+    expect(cssColor('rgba(0, 128, 255, 0.5)')).toBe('rgba(0, 128, 255, 0.5)');
+    expect(cssColor('hsl(120, 50%, 50%)')).toBe('hsl(120, 50%, 50%)');
+    expect(cssColor('hsla(120, 50%, 50%, 0.5)')).toBe('hsla(120, 50%, 50%, 0.5)');
+  });
+
+  it('accepts var(--token) custom-property refs', () => {
+    expect(cssColor('var(--score-1)')).toBe('var(--score-1)');
+    expect(cssColor('var(--text-3)')).toBe('var(--text-3)');
+  });
+
+  it('rejects style-context-breaking input with a safe fallback', () => {
+    expect(cssColor('red;background:url(javascript:alert(1))')).toBe('var(--text-3)');
+    expect(cssColor('red"}.evil{x:y')).toBe('var(--text-3)');
+    expect(cssColor('red;}')).toBe('var(--text-3)');
+    expect(cssColor('expression(alert(1))')).toBe('var(--text-3)');
+    expect(cssColor('url(data:text/html,<script>)')).toBe('var(--text-3)');
+    expect(cssColor('red /* comment */')).toBe('var(--text-3)');
+    expect(cssColor('red\n; ')).toBe('var(--text-3)');
+  });
+
+  it('rejects raw CSS color names (limits surface)', () => {
+    // We allowlist shapes, not names — "red" could collide with unknown CSS
+    // or be concatenated into a broken-style attack upstream. The UI always
+    // has a concrete hex or var() anyway.
+    expect(cssColor('red')).toBe('var(--text-3)');
+    expect(cssColor('transparent')).toBe('var(--text-3)');
+  });
+
+  it('rejects non-strings, empty, and oversized input', () => {
+    expect(cssColor(null)).toBe('var(--text-3)');
+    expect(cssColor(undefined)).toBe('var(--text-3)');
+    expect(cssColor(42)).toBe('var(--text-3)');
+    expect(cssColor({})).toBe('var(--text-3)');
+    expect(cssColor('')).toBe('var(--text-3)');
+    expect(cssColor('#' + 'a'.repeat(100))).toBe('var(--text-3)');
+  });
+
+  it('rejects malformed function calls', () => {
+    expect(cssColor('rgb(0, 128)')).toBe('var(--text-3)');
+    expect(cssColor('rgb(0 128 255)')).toBe('var(--text-3)'); // no commas
+    expect(cssColor('var(--foo; color:red)')).toBe('var(--text-3)');
+  });
+});
+
 /* ── initials ─────────────────────────────────────────────── */
 describe('initials', () => {
   it('extracts initials from student object', () => {
