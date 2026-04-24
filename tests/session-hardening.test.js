@@ -110,10 +110,7 @@ describe('requireAuth — server-side session validation', () => {
     });
     // Attacker seeds a locally-valid-looking token with a far-future expiry.
     const farFuture = Math.floor(Date.now() / 1000) + 3600 * 24 * 365;
-    localStorage.setItem(
-      'sb-example-auth-token',
-      JSON.stringify({ access_token: 'forged', expires_at: farFuture }),
-    );
+    localStorage.setItem('sb-example-auth-token', JSON.stringify({ access_token: 'forged', expires_at: farFuture }));
     // The production code returns a never-resolving Promise after setting
     // location.href (real browser then reloads). Don't await — just trigger
     // and flush microtasks so the getUser() call and redirect assignment run.
