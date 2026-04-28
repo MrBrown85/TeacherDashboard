@@ -5,7 +5,9 @@ mkdir -p dist
 
 # Root-level public files
 cp index.html login.html login.css login-auth.js dist/
-cp favicon.svg manifest.json sw.js robots.txt dist/
+cp manifest.json sw.js dist/
+[ -f favicon.svg ] && cp favicon.svg dist/ || true
+[ -f robots.txt ] && cp robots.txt dist/ || true
 cp curriculum_data.js curriculum_by_course.json dist/
 cp roster-template.csv _headers dist/
 
