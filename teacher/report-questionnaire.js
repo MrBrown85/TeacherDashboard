@@ -7,7 +7,7 @@ window.ReportQuestionnaire = (function () {
   var _renderReports = null;
   var _tqIncludeAssignFeedback = true;
   var _tqObsFilter = 'all';
-  var _SHOW_AUTO_NARRATIVE = false;
+  var _SHOW_AUTO_NARRATIVE = true;
 
   function configure(opts) {
     _activeCourse = opts.activeCourse;
