@@ -5,7 +5,7 @@ decisions, and deploy steps live here — no sibling docs (XSS, pilot, ops) to
 keep in sync. Implementation history still belongs in
 `docs/backend-design/HANDOFF.md`; everything else is here.
 
-Last pilot audit: 2026-04-23.
+Last pilot audit: 2026-04-23. Last production deploy: 2026-04-28.
 
 Tag glossary (inline on each ticket title):
 
@@ -15,10 +15,11 @@ Tag glossary (inline on each ticket title):
 
 ## User-blocked / operational
 
-### P1.0 · Netlify quota fix `[user-blocked]`
+### P1.0 · Netlify quota fix ✅ done 2026-04-28
 
-- `fullvision.ca` is documented as returning `503 usage_exceeded`.
-- Resolve in Netlify billing/quota settings before trusting production verification.
+- Billing resolved by user. Production deployment had been stalled at commit `c558b87b` (April 20) — production context was locked + the build script unconditionally referenced `favicon.svg` and `robots.txt` which were deleted in `de9ca23` (cleanup commit), so every queued build failed with exit code 2.
+- [scripts/build.sh](scripts/build.sh) updated to `[ -f favicon.svg ] && cp …` / `[ -f robots.txt ] && cp …` — pattern matches the existing `student/` and `parent/` optional-directory copies.
+- Triggered fresh build via `netlify api createSiteBuild`, unlocked deploy, restored deploy `69f117bf2f81884e1244ea2f` to production. Live commit advanced from `c558b87b` (April 20) to `b172f5c3` (April 28) — PRs 81–92 are now deployed.
 
 ### P1.1 · Rotate leaked publishable Supabase key `[user-blocked]`
 
@@ -111,11 +112,16 @@ Pilot-audit findings from 2026-04-23. Ordered: blockers first, then HIGH, then M
 - Fix B landed: `_ECHO_GUARD_MS` in [shared/data.js](shared/data.js) reduced `35000` → `8000`. The old 35s window could swallow a second legitimate write that landed inside it; 8s still covers the p99 RPC round-trip (~3s) with headroom.
 - Tests: [tests/session-hardening.test.js](tests/session-hardening.test.js) — 5 cases covering getUser-hit, forged-expires_at rejection, getUser-throws fallback, per-page-load caching, and the 8000ms source-pin. Full suite 804 passed + 1 skipped.
 
-### P5.6 · Idempotency retrofit ✅ done 2026-04-23
+### P5.6 · Idempotency retrofit ✅ done 2026-04-28
 
 - Phase 1 done 2026-04-23: [migrations/20260423_write_path_idempotency.sql](migrations/20260423_write_path_idempotency.sql) retrofits `create_observation`, `create_assessment`, `duplicate_assessment`, `create_custom_tag`, `upsert_note`, `create_student_and_enroll`. Applied to `gradebook-prod` as `fullvision_v2_write_path_idempotency`; cron `fv_idempotency_cleanup` scheduled (`*/15 * * * *`, 24h retention).
 - Phase 2 done 2026-04-23: [migrations/20260423_write_path_idempotency_phase2.sql](migrations/20260423_write_path_idempotency_phase2.sql) retrofits the remaining 13 RPCs — `create_course`, `duplicate_course`, `import_roster_csv`, `import_teams_class`, `import_json_restore`, `upsert_observation_template`, and the null-id insert branch of `upsert_category`, `upsert_module`, `upsert_rubric`, `upsert_subject`, `upsert_competency_group`, `upsert_section`, `upsert_tag`. Applied to `gradebook-prod` as three migrations (`fullvision_v2_write_path_idempotency_phase2`, `_imports`, `_import_json_restore`, `_upserts`). All 19 idempotent RPCs verified via `pg_get_function_identity_arguments` to expose the `p_idempotency_key` overload. 0 security advisor lints post-deploy.
 - `IDEMPOTENT_ENDPOINTS` allowlist in [shared/offline-queue.js](shared/offline-queue.js) now covers all 19 endpoints. Client-side queue retries pass `entry.id` as the idempotency key so a blip-after-commit replay returns the cached row id instead of duplicating.
+- Phase 3 done 2026-04-28: [migrations/20260428_drop_legacy_non_idempotent_overloads.sql](migrations/20260428_drop_legacy_non_idempotent_overloads.sql) drops the 19 legacy (non-idempotent) overloads left behind by phases 1 + 2. Phases 1 + 2 _added_ the new overloads but never _dropped_ the originals, leaving every retrofitted RPC with twin overloads sharing all named params. PostgREST resolves RPCs by named-argument match, so client calls that omitted `p_idempotency_key` were ambiguous and rejected with PGRST203 ("could not choose the best candidate function"). Symptom: every create/upsert from the client failed silently for 5 days (April 23 → April 28) — `console.warn` only, no toast, no UI feedback. User-visible: classes, students, assessments, observations, custom tags, roster imports, learning-map upserts (subjects/sections/tags/categories/modules/competency groups/rubrics), and observation templates appeared to save (localStorage write succeeded) but never persisted server-side. The fix drops the legacy signatures so PostgREST resolves cleanly to the remaining (idempotent) overload; existing client code that omits the key still works because `p_idempotency_key uuid DEFAULT NULL`. Migration includes a `DO $$` verification block asserting exactly 1 overload per RPC name post-drop. Applied to `gradebook-prod`; production restored at 2026-04-28T20:36:16Z.
+
+#### P5.6 follow-up `[agent-ready]` — LOW
+
+- Route the 17 active client call-sites through the offline queue's `_withIdemKey` helper so retries reuse a stable idempotency key. Currently `createCourse`, `createStudentAndEnroll`, `importRosterCsv`, `createAssessment`, `duplicateAssessment`, `createCustomTag`, `upsertObservationTemplate` (direct `sb.rpc`) and `createObservation`, `upsertNote`, `importJsonRestore`, plus all `window.v2.upsert*` helpers (`subject/section/tag/category/module/rubric/competency_group`) bypass the queue and don't pass an idempotency key at all. With the legacy overloads gone the calls succeed (key defaults to NULL → fresh insert), so this is purely a retry-correctness cleanup, not a data-loss bug. Audit in [shared/data.js](shared/data.js) call-sites; the queue's `callOrEnqueue` already mints `entry.id` as the stable key.
 
 ### P5.7 · XSS hardening follow-up `[agent-ready]` — HIGH
 

@@ -70,13 +70,13 @@ You are continuing an ongoing rebuild. **Read this whole file before touching an
 
 ---
 
-## Working mode (updated 2026-04-21)
+## Working mode (updated 2026-04-28)
 
 `main` is the source of truth and has been pushed to `origin`. The old `rebuild-v2` / PR-75 / PR-76 / PR-79 branch choreography is historical only.
 
 - Default to local commits first; **push only when the user explicitly asks**.
 - Avoid reviving or targeting historical branches/PRs that were superseded by `main`.
-- Netlify still auto-deploys on push, and production is currently quota-blocked (`usage_exceeded`), so do not push speculatively just to "keep things synced."
+- Netlify auto-deploys on push. Production quota was resolved 2026-04-28; live commit is now current with `main`. Production was previously stalled at `c558b87b` (April 20) for ~8 days due to combined quota lock + a build-script bug referencing files deleted in `de9ca23`.
 - Supabase migrations on `gradebook-prod` are still allowed when a task requires them and the Safety gates permit it.
 
 ## Safety gates (NEVER proceed without explicit user approval)
@@ -223,5 +223,9 @@ Keep only the recent tail here for startup context.
 - `2026-04-23 | session-25 | P5.7-deploy | applied color-format validation migration to gradebook-prod (fullvision_v2_color_format_validation): CHECK constraints on course/subject/competency_group/section/module color columns enforce #rrggbb or #rrggbbaa. Pre-scan returned 0 malformed rows so VALIDATED from day one. sw.js CACHE_NAME bumped fullvision-v36 → v37. 0 security advisor lints post-deploy.`
 - `2026-04-23 | session-25 | P5.5 | session hardening landed: shared/supabase.js requireAuth now round-trips sb.auth.getUser() server-side and caches the result via _authCheckPromise for the page load; the old localStorage expires_at fast-path is removed so a DevTools-edited expiry no longer grants access. shared/data.js _ECHO_GUARD_MS 35000 → 8000 so a second legitimate write inside the old 35s window no longer gets masked by stale cached state. Added tests/session-hardening.test.js (5 cases). 804 passed + 1 skipped.`
 - `2026-04-23 | session-25 | P5.6-phase2 | idempotency phase 2 deployed: migrations/20260423_write_path_idempotency_phase2.sql retrofits the remaining 13 RPCs — create_course, duplicate_course, import_roster_csv, import_teams_class, import_json_restore, upsert_observation_template, and the null-id insert branch of upsert_category/module/rubric/subject/competency_group/section/tag. Each now accepts optional p_idempotency_key as the last param and gates insert via fv_idem_check/store. All 19 idempotent RPCs verified to expose the overload on gradebook-prod. shared/offline-queue.js IDEMPOTENT_ENDPOINTS allowlist extended to all 19 endpoints. 0 advisor lints. 804 passed + 1 skipped.`
+
+- `2026-04-28 | session-26 | P1.0 | Netlify quota resolved by user; production deploy had been stalled at commit c558b87b (April 20). Two blockers: production context was locked, and scripts/build.sh referenced favicon.svg + robots.txt which were deleted in de9ca23 (cleanup commit). Updated scripts/build.sh to copy those files only if present (matches existing student/parent optional-dir pattern). Triggered fresh build via netlify api createSiteBuild, unlocked, restored deploy 69f117bf2f81884e1244ea2f to production. Live commit advanced from c558b87b → b172f5c3. PRs 81–92 now deployed.`
+- `2026-04-28 | session-26 | P5.6-phase3 | dropped 19 legacy non-idempotent RPC overloads via migrations/20260428_drop_legacy_non_idempotent_overloads.sql. Phases 1 + 2 added the new p_idempotency_key overloads but never dropped the originals, so PostgREST rejected every client call with PGRST203 ("could not choose the best candidate function") for 5 days (April 23 → April 28). Symptom: classes/students/assessments appeared to save (localStorage write) but never persisted server-side; console.warn only, no UI feedback. fv_idempotency table was completely empty in prod, total course count was 2 (both auto-seeded Welcome Classes). Migration drops legacy signatures for create_course, duplicate_course, create_student_and_enroll, import_roster_csv, import_teams_class, import_json_restore, create_assessment, duplicate_assessment, create_observation, create_custom_tag, upsert_note, upsert_observation_template, upsert_category, upsert_module, upsert_rubric, upsert_subject, upsert_competency_group, upsert_section, upsert_tag — includes a DO $$ verification block asserting exactly 1 overload per name post-drop. Applied to gradebook-prod; production restored 2026-04-28T20:36:16Z. Existing client code still works because remaining overload has p_idempotency_key uuid DEFAULT NULL.`
+- `2026-04-28 | session-26 | docs | corrected codex.md P5.6 status — phase 1+2 marked ✅ 2026-04-23 was misleading (regression was live for 5 days). Now reflects phase 3 drop migration. Added P5.6 follow-up for routing the 17 client call-sites through OfflineQueue._withIdemKey for stable retry keys (correctness cleanup, not data-loss).`
 
 _(next session, keep appending.)_
