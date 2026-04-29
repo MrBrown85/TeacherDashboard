@@ -186,7 +186,7 @@ window.DashClassManager = (function () {
       '<div style="display:flex;gap:12px;align-items:flex-end;margin-bottom:8px">' +
       '<div style="flex:0 0 120px"><label class="cm-label">Tag Code</label>' +
       '<input class="cm-input" value="' +
-      esc(tag.id) +
+      esc(tag.code || tag.shortName || '') +
       '" placeholder="e.g. RD1" maxlength="10" style="padding:5px 8px;font-size:0.82rem;font-weight:600;font-family:monospace;text-transform:uppercase" data-stop-prop="true" data-action-blur="cmStdCode" data-secid="' +
       sec.id +
       '"></div>' +
@@ -3259,99 +3259,40 @@ window.DashClassManager = (function () {
     }
   }
 
+  // Updates the user-facing tag.code (e.g. "RD1", "ENG10A") for a standard.
+  // Pre-V2 this used to rename the section/tag local IDs, fanning out updates
+  // to assessment.tagIds and score.tagId references; post-V2 those IDs are
+  // server-owned UUIDs that the database authoritatively holds, and the
+  // user-visible code is its own column. This implementation just updates
+  // tag.code locally and pushes that single column change via upsert_tag.
   function cmUpdateStdCode(secId, val) {
     if (!cmSelectedCourse) return;
-    var cid = cmSelectedCourse;
-    var newId = val
+    var newCode = val
       .trim()
       .toUpperCase()
       .replace(/[^A-Z0-9._\-]/g, '')
       .slice(0, 10);
-    if (!newId || newId === secId) return;
-    var map = ensureCustomLearningMap(cid);
-    // Check uniqueness within learning map
-    var exists = map.sections.some(function (s) {
-      return s.id === newId;
-    });
-    if (exists) {
-      alert('Tag code "' + newId + '" already exists. Please choose a different code.');
-      renderClassManager();
-      return;
-    }
-    // Update section and tag IDs
+    if (!newCode) return;
+    var map = ensureCustomLearningMap(cmSelectedCourse);
     var sec = map.sections.find(function (s) {
       return s.id === secId;
     });
-    if (!sec) return;
-    // T-WIRE-02: capture canonical status BEFORE renaming the local ID
-    var wasCanonical = _isCanonicalId(secId);
-    var oldId = secId;
-    sec.id = newId;
-    if (sec.tags[0]) sec.tags[0].id = newId;
-    // Update _sectionToTagMap if present
-    if (map._sectionToTagMap) {
-      Object.keys(map._sectionToTagMap).forEach(function (k) {
-        if (map._sectionToTagMap[k] === secId) map._sectionToTagMap[k] = newId;
-      });
-    }
+    if (!sec || !sec.tags || !sec.tags[0]) return;
+    var tag = sec.tags[0];
+    if (newCode === tag.code) return;
+    tag.code = newCode;
     saveLearningMap(cmSelectedCourse, map);
-    // Update assessment tagIds references
-    var assessments = getAssessments(cmSelectedCourse);
-    var assessChanged = false;
-    assessments.forEach(function (a) {
-      var idx = (a.tagIds || []).indexOf(secId);
-      if (idx !== -1) {
-        a.tagIds[idx] = newId;
-        assessChanged = true;
-      }
-    });
-    if (assessChanged) saveAssessments(cmSelectedCourse, assessments);
-    // Update score tagId references
-    var allScores = getScores(cmSelectedCourse);
-    var scoresChanged = false;
-    Object.keys(allScores).forEach(function (sid) {
-      (allScores[sid] || []).forEach(function (sc) {
-        if (sc.tagId === secId) {
-          sc.tagId = newId;
-          scoresChanged = true;
-        }
+    if (window.v2 && window.v2.upsertTag && _isCanonicalId(tag.id) && _isCanonicalId(sec.id)) {
+      window.v2.upsertTag({
+        id: tag.id,
+        sectionId: sec.id,
+        label: tag.label || tag.name || newCode,
+        code: newCode,
+        iCanText: tag.text || '',
+        displayOrder: tag.displayOrder != null ? tag.displayOrder : 0,
       });
-    });
-    if (scoresChanged) saveScores(cmSelectedCourse, allScores);
-    renderClassManager();
-    // T-WIRE-02: delete old canonical record and re-insert under new code.
-    // Known limitation: if re-insert fails after delete, the DB loses the record
-    // while local state is intact. Acceptable for V1 (code rename is rare).
-    if (wasCanonical) {
-      var renamedSec = map.sections.find(function (s) {
-        return s.id === newId;
-      });
-      window.v2.deleteSection(oldId);
-      window.v2.deleteTag(oldId);
-      if (renamedSec) {
-        window.v2
-          .upsertSection({
-            id: newId,
-            subjectId: renamedSec.subject,
-            name: renamedSec.name,
-            displayOrder: map.sections.indexOf(renamedSec),
-          })
-          .then(function (secRes) {
-            var canonicalSectionId = secRes && secRes.data ? secRes.data : null;
-            var finalSectionId = canonicalSectionId || newId;
-            var tag = renamedSec.tags[0];
-            if (tag)
-              window.v2.upsertTag({
-                id: newId,
-                sectionId: finalSectionId,
-                label: tag.label || newId,
-                code: newId,
-                iCanText: tag.text || '',
-                displayOrder: 0,
-              });
-          });
-      }
     }
+    renderClassManager();
   }
 
   // Legacy aliases
