@@ -2,6 +2,15 @@
   command = "bash scripts/build.sh"
   publish = "dist"
 
+# Sentry build plugin: skip set-commits since we don't have a Sentry → GitHub
+# repo integration, and the build runs on a shallow clone that lacks the parent
+# commits set-commits would walk. The release tag and source-map upload still
+# run (no maps to upload yet — vanilla JS, no bundler).
+[[plugins]]
+  package = "@sentry/netlify-build-plugin"
+  [plugins.inputs]
+    setCommits = "skip"
+
 [[headers]]
   for = "/**/*.js"
   [headers.values]
