@@ -9,7 +9,7 @@
 [[plugins]]
   package = "@sentry/netlify-build-plugin"
   [plugins.inputs]
-    setCommits = "skip"
+    skipSetCommits = true
 
 [[headers]]
   for = "/**/*.js"
