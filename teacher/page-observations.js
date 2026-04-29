@@ -27,8 +27,6 @@ window.PageObservations = (function () {
   var _students = [];
   var _studentsById = {};
 
-  var VIEW_MODES = ['list', 'sticky', 'waveform'];
-
   /* ── Focus card state ───────────────────────────────────── */
   var _focusObId = null;
   var _focusSid = null;
@@ -40,7 +38,6 @@ window.PageObservations = (function () {
   var _focusFocusables = null;
   var _focusLastActiveEl = null;
   var _motion = null;
-  var _viewMode = 'list';
 
   var SEARCH_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
@@ -202,22 +199,6 @@ window.PageObservations = (function () {
       '</span><input class="obs-search-input" type="text" placeholder="Search\u2026" id="obs-search-input" value="' +
       esc(searchQuery) +
       '" aria-label="Search observations"></div>' +
-      '<div class="obs-view-toggle" role="tablist" aria-label="View mode">' +
-      VIEW_MODES.map(function (m) {
-        var label = m === 'list' ? 'List' : m === 'sticky' ? 'Sticky' : 'Voice';
-        return (
-          '<button type="button" data-action="setView" data-view="' +
-          m +
-          '" class="' +
-          (_viewMode === m ? 'active' : '') +
-          '" role="tab" aria-selected="' +
-          (_viewMode === m) +
-          '">' +
-          label +
-          '</button>'
-        );
-      }).join('') +
-      '</div>' +
       '<span class="obs-toolbar-count" id="obs-count">' +
       filtered.length +
       (filtered.length !== allObs.length ? ' of ' + allObs.length : '') +
@@ -278,7 +259,7 @@ window.PageObservations = (function () {
       '</div>';
 
     // Feed
-    h += '<div class="obs-feed view-' + _viewMode + '" id="obs-feed">' + renderFeedHtml(filtered) + '</div>';
+    h += '<div class="obs-feed view-sticky" id="obs-feed">' + renderFeedHtml(filtered) + '</div>';
 
     document.getElementById('main').innerHTML = h;
     wireSearch();
@@ -1001,22 +982,6 @@ window.PageObservations = (function () {
      FOCUS CARD — click-to-expand inline editor
      ══════════════════════════════════════════════════════════ */
 
-  function setView(v) {
-    if (VIEW_MODES.indexOf(v) === -1) return;
-    if (_viewMode === v) return;
-    _viewMode = v;
-    try {
-      localStorage.setItem('obs-view-mode', v);
-    } catch (e) {}
-    var feedEl = document.getElementById('obs-feed');
-    if (feedEl) feedEl.className = 'obs-feed view-' + _viewMode;
-    document.querySelectorAll('.obs-view-toggle button').forEach(function (b) {
-      var isActive = b.dataset.view === _viewMode;
-      b.classList.toggle('active', isActive);
-      b.setAttribute('aria-selected', isActive);
-    });
-  }
-
   async function _ensureMotion() {
     if (_motion) return _motion;
     try {
@@ -1513,9 +1478,6 @@ window.PageObservations = (function () {
       toggleFocusTagPopover: function () {
         toggleFocusTagPopover();
       },
-      setView: function () {
-        setView(el.dataset.view);
-      },
     };
     if (handlers[action]) {
       if (el.tagName !== 'SELECT') e.preventDefault();
@@ -1561,10 +1523,6 @@ window.PageObservations = (function () {
     filterSentiment = null;
     _openPopover = null;
     _filterStripOpen = false;
-    try {
-      var stored = localStorage.getItem('obs-view-mode');
-      if (VIEW_MODES.indexOf(stored) !== -1) _viewMode = stored;
-    } catch (e) {}
 
     // Show sidebar
     document.getElementById('sidebar-mount').style.display = '';
