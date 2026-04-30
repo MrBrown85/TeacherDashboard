@@ -229,7 +229,17 @@ test.describe('Full-class smoke — persistence across sign-out', () => {
     await page.evaluate(o => window.createObservationRich(o), { ...obs, courseId });
 
     // ── 14. Wait for queue drain, then recycle session. ──
-    await page.waitForTimeout(2000);
+    // signOut's built-in waitForPendingSyncs has a 5s ceiling, but this
+    // smoke test fires ~35+ pending RPCs (curriculum + students +
+    // assessments + scores + notes + goals + reflections + term ratings +
+    // observation). Active-poll the public sync status until the queue is
+    // empty so the observation (fired last) doesn't get dropped on the
+    // 5s timeout.
+    await page.waitForFunction(
+      () => typeof window.getSyncStatus === 'function' && window.getSyncStatus().pending === 0,
+      null,
+      { timeout: 30_000 },
+    );
 
     await recycleSession(page);
 
