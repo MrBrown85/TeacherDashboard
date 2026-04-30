@@ -215,6 +215,26 @@ function waitForPendingSyncs(timeoutMs = 5000) {
   });
 }
 
+function _trackPendingSync(promise) {
+  if (!promise || typeof promise.finally !== 'function') return promise;
+  _pendingSyncs += 1;
+  _syncStatus = 'syncing';
+  _updateSyncIndicator();
+  return promise.finally(function () {
+    _pendingSyncs = Math.max(0, _pendingSyncs - 1);
+    if (_pendingSyncs === 0) {
+      _syncStatus = 'idle';
+      _lastSyncedAt = new Date().toISOString();
+    }
+    _updateSyncIndicator();
+  });
+}
+
+function _trackWriteSync(name, promise) {
+  if (/^(get|list)_/i.test(name || '')) return promise;
+  return _trackPendingSync(promise);
+}
+
 function _updateSyncIndicator() {
   const dot = document.getElementById('sync-indicator-dot');
   if (!dot) return;
@@ -908,12 +928,13 @@ function _normalizeStudentProfileSummary(row) {
       personId: personId,
       firstName: student.first_name || student.firstName || '',
       lastName: student.last_name || student.lastName || '',
-      preferred: student.preferred || student.preferred_first_name || student.preferredFirstName || '',
+      preferred:
+        student.preferred_name || student.preferred || student.preferred_first_name || student.preferredFirstName || '',
       pronouns: student.pronouns || '',
       studentNumber: student.student_number || student.studentNumber || '',
       email: student.email || '',
       dateOfBirth: student.date_of_birth || student.dateOfBirth || '',
-      designations: student.designations || [],
+      designations: student.designations || enrollment.designations || [],
       sortName:
         student.sort_name ||
         ((student.last_name || student.lastName || '') + ' ' + (student.first_name || student.firstName || '')).trim(),
@@ -934,6 +955,7 @@ function _normalizeStudentProfileSummary(row) {
     goals: row.goals || {},
     reflections: row.reflections || {},
     sectionOverrides: row.section_overrides || row.sectionOverrides || {},
+    notes: row.notes || [],
     isFlagged: !!(row.is_flagged ?? row.isFlagged ?? enrollment.is_flagged ?? enrollment.isFlagged),
     recentObservations: _normalizeProfileObservations(row.recent_observations || row.recentObservations),
   };
@@ -945,6 +967,7 @@ function _applyStudentProfileSummaries(cid, rows) {
   var goals = {};
   var reflections = {};
   var overrides = {};
+  var notes = {};
 
   (rows || []).forEach(function (row) {
     var summary = _normalizeStudentProfileSummary(row);
@@ -957,13 +980,44 @@ function _applyStudentProfileSummaries(cid, rows) {
     if (summary.sectionOverrides && Object.keys(summary.sectionOverrides).length > 0) {
       overrides[summary.id] = summary.sectionOverrides;
     }
+    if (Array.isArray(summary.notes) && summary.notes.length > 0) {
+      notes[summary.id] = summary.notes
+        .map(function (note) {
+          return note.body || note.text || '';
+        })
+        .filter(Boolean)
+        .join('\n\n');
+    }
   });
 
+  var students = (_cache.students[cid] || []).map(function (student) {
+    var summary = summaries[student.id];
+    if (!summary || !summary.student) return student;
+    return Object.assign({}, student, {
+      personId: summary.student.personId || student.personId || null,
+      firstName: summary.student.firstName || student.firstName || '',
+      lastName: summary.student.lastName || student.lastName || '',
+      preferred: summary.student.preferred || student.preferred || '',
+      pronouns: summary.student.pronouns || student.pronouns || '',
+      studentNumber: summary.student.studentNumber || student.studentNumber || '',
+      email: summary.student.email || student.email || '',
+      dateOfBirth: summary.student.dateOfBirth || student.dateOfBirth || '',
+      designations: summary.student.designations || student.designations || [],
+      sortName: summary.student.sortName || student.sortName || '',
+      rosterPosition:
+        summary.enrollment && summary.enrollment.rosterPosition != null
+          ? summary.enrollment.rosterPosition
+          : student.rosterPosition,
+      isFlagged: summary.isFlagged,
+    });
+  });
+  if (students.length > 0) _persistLoadedField(cid, 'students', students);
   _persistLoadedField(cid, 'studentProfileSummaries', summaries);
   _persistLoadedField(cid, 'flags', flags);
   _persistLoadedField(cid, 'goals', goals);
   _persistLoadedField(cid, 'reflections', reflections);
   _persistLoadedField(cid, 'overrides', overrides);
+  if (Object.keys(notes).length > 0) _persistLoadedField(cid, 'notes', notes);
   return summaries;
 }
 
@@ -975,6 +1029,99 @@ function getStudentProfileSummaries(cid) {
     console.warn('Student profile summaries parse fallback:', e);
     return {};
   }
+}
+
+function _isMissingRpcError(error) {
+  var msg = '';
+  if (error && error.code) msg += error.code + ' ';
+  if (error && error.message) msg += error.message + ' ';
+  if (error && error.details) msg += error.details + ' ';
+  return /PGRST202|function .*not found|could not find the function|schema cache/i.test(msg);
+}
+
+function _goalRowsToSummaryMap(rows) {
+  var out = {};
+  (rows || []).forEach(function (row) {
+    var sectionId = row.section_id || row.sectionId;
+    if (sectionId) out[sectionId] = row.body || row.text || '';
+  });
+  return out;
+}
+
+function _reflectionRowsToSummaryMap(rows) {
+  var out = {};
+  (rows || []).forEach(function (row) {
+    var sectionId = row.section_id || row.sectionId;
+    if (!sectionId) return;
+    out[sectionId] = {
+      confidence: row.confidence || 0,
+      text: row.body || row.text || '',
+      date: row.updated_at || row.date || '',
+    };
+  });
+  return out;
+}
+
+function _overrideMapFromCompetencyTree(tree) {
+  var out = {};
+  ((tree && tree.subjects) || []).forEach(function (subject) {
+    (subject.sections || []).forEach(function (section) {
+      var override = section.override;
+      if (!override || !section.id) return;
+      out[section.id] = {
+        level: override.level || 0,
+        reason: override.reason || '',
+        date: override.updated_at || override.date || '',
+        calculated: section.proficiency || 0,
+      };
+    });
+  });
+  return out;
+}
+
+function _studentProfileToSummaryRow(profile) {
+  profile = _rpcObject(profile) || profile || {};
+  var enrollment = profile.enrollment || {};
+  return {
+    student: profile.student || {},
+    enrollment: enrollment,
+    overall_proficiency: profile.overall_proficiency,
+    letter: profile.letter,
+    counts: profile.counts || {},
+    goals: _goalRowsToSummaryMap(profile.goals),
+    reflections: _reflectionRowsToSummaryMap(profile.reflections),
+    section_overrides: _overrideMapFromCompetencyTree(profile.competency_tree),
+    notes: profile.notes || [],
+    is_flagged: !!(enrollment.is_flagged || enrollment.isFlagged),
+    recent_observations: profile.recent_observations || [],
+  };
+}
+
+async function _loadStudentProfileSummariesIndividually(cid) {
+  var students = _cache.students[cid] || [];
+  var rows = [];
+  var batchSize = 6;
+  for (var i = 0; i < students.length; i += batchSize) {
+    var batch = students.slice(i, i + batchSize);
+    var results = await Promise.all(
+      batch.map(function (student) {
+        if (!student || !_isUuid(student.id) || !window.v2 || typeof window.v2.getStudentProfile !== 'function') {
+          return Promise.resolve(null);
+        }
+        return window.v2.getStudentProfile(student.id).catch(function (e) {
+          return { error: e };
+        });
+      }),
+    );
+    results.forEach(function (res) {
+      if (!res || res.error) {
+        if (res && res.error && !_isMissingRpcError(res.error)) console.warn('get_student_profile failed:', res.error);
+        return;
+      }
+      rows.push(_studentProfileToSummaryRow(res.data !== undefined ? res.data : res));
+    });
+  }
+  return _applyStudentProfileSummaries(cid, rows);
 }
 
 async function loadStudentProfileSummaries(cid) {
@@ -990,6 +1137,9 @@ async function loadStudentProfileSummaries(cid) {
     var rows = _rpcRows(res && res.data !== undefined ? res.data : res);
     return _applyStudentProfileSummaries(cid, rows);
   } catch (e) {
+    if (_isMissingRpcError(e)) {
+      return _loadStudentProfileSummariesIndividually(cid);
+    }
     console.warn('list_course_student_profiles failed for ' + cid + '; keeping existing summaries:', e);
     if (_cache.studentProfileSummaries[cid] === undefined) _persistLoadedField(cid, 'studentProfileSummaries', {});
     return _cache.studentProfileSummaries[cid] || {};
@@ -1008,16 +1158,17 @@ function _canonicalRosterRowsToStudents(rows) {
         personId: r.student_id || r.studentId || r.person_id || r.personId || null,
         firstName: r.first_name || r.firstName || '',
         lastName: r.last_name || r.lastName || '',
-        preferred: r.preferred || r.preferred_first_name || r.preferredFirstName || '',
+        preferred: r.preferred_name || r.preferred || r.preferred_first_name || r.preferredFirstName || '',
         pronouns: r.pronouns || '',
         studentNumber: r.student_number || r.local_student_number || r.studentNumber || '',
         email: r.email || '',
         dateOfBirth: r.date_of_birth || r.dateOfBirth || '',
         designations: r.designations || r.designation_codes || [],
-        enrolledDate: _dateOnly(r.enrolled_on || r.enrolled_date || r.enrolledDate),
+        enrolledDate: _dateOnly(r.enrolled_at || r.enrolled_on || r.enrolled_date || r.enrolledDate),
         attendance: r.attendance || [],
         sortName: r.sort_name || '',
         rosterPosition: Number(r.roster_position || r.rosterPosition || 0),
+        isFlagged: !!(r.is_flagged ?? r.isFlagged),
       };
     })
     .sort(function (a, b) {
@@ -1218,6 +1369,323 @@ function _canonicalOutcomesToLearningMap(cid, rows) {
   };
 }
 
+function _canonicalLearningMapToCache(cid, payload) {
+  payload = _rpcObject(payload) || payload || {};
+  var course = COURSES[cid] || {};
+  var groups = (payload.competency_groups || payload.competencyGroups || []).map(function (g, idx) {
+    return {
+      id: g.id,
+      name: g.name || '',
+      color: g.color || '#6366f1',
+      sortOrder: Number(g.display_order ?? g.displayOrder ?? idx),
+      displayOrder: Number(g.display_order ?? g.displayOrder ?? idx),
+    };
+  });
+  var subjects = [];
+  var sections = [];
+
+  (payload.subjects || []).forEach(function (subject, subjectIdx) {
+    if (!subject || !subject.id) return;
+    var subjectColor = subject.color || SUBJECT_COLOURS[course.subjectCode] || '#6366f1';
+    subjects.push({
+      id: subject.id,
+      name: subject.name || course.name || 'Learning Outcomes',
+      color: subjectColor,
+      sortOrder: Number(subject.display_order ?? subject.displayOrder ?? subjectIdx),
+      displayOrder: Number(subject.display_order ?? subject.displayOrder ?? subjectIdx),
+    });
+
+    (subject.sections || []).forEach(function (section, sectionIdx) {
+      if (!section || !section.id) return;
+      var sectionName = section.name || 'Standard';
+      var shortName = section.short_name || section.shortName || sectionName.replace(/\s*\(.*?\)\s*/g, '').trim();
+      if (shortName.length > 20) shortName = shortName.slice(0, 18) + '\u2026';
+      var sectionColor = section.color || subjectColor;
+      var tags = (section.tags || []).map(function (tag, tagIdx) {
+        var label = tag.label || tag.code || sectionName;
+        return {
+          id: tag.id,
+          code: tag.code || '',
+          label: label,
+          text: tag.i_can_text || tag.iCanText || tag.text || '',
+          i_can_statements: tag.i_can_statements || tag.iCanStatements || [],
+          color: tag.color || sectionColor,
+          subject: subject.id,
+          name: sectionName,
+          shortName: shortName,
+          displayOrder: Number(tag.display_order ?? tag.displayOrder ?? tagIdx),
+          sortOrder: Number(tag.display_order ?? tag.displayOrder ?? tagIdx),
+          classAvg: tag.class_avg ?? tag.classAvg ?? null,
+          coverageCount: Number(tag.coverage_count ?? tag.coverageCount ?? 0),
+        };
+      });
+      sections.push({
+        id: section.id,
+        subject: subject.id,
+        name: sectionName,
+        shortName: shortName,
+        color: sectionColor,
+        groupId: section.competency_group_id || section.competencyGroupId || null,
+        competencyGroupId: section.competency_group_id || section.competencyGroupId || null,
+        tags: tags,
+        sortOrder: Number(section.display_order ?? section.displayOrder ?? sectionIdx),
+        displayOrder: Number(section.display_order ?? section.displayOrder ?? sectionIdx),
+        outcome: tags[0] || null,
+      });
+    });
+  });
+
+  subjects.sort(function (a, b) {
+    return Number(a.sortOrder || 0) - Number(b.sortOrder || 0);
+  });
+  sections.sort(function (a, b) {
+    return Number(a.sortOrder || 0) - Number(b.sortOrder || 0);
+  });
+
+  return {
+    subjects: subjects,
+    competencyGroups: groups,
+    sections: sections,
+    outcomes: sections
+      .map(function (section) {
+        return section.outcome;
+      })
+      .filter(Boolean),
+    _customized: true,
+    _version: 1,
+    _flatVersion: 2,
+  };
+}
+
+function _assessmentFromDetail(existing, detail) {
+  existing = existing || {};
+  var a = (detail && detail.assessment) || {};
+  var linkedTags =
+    detail && Array.isArray(detail.linked_tags)
+      ? detail.linked_tags
+      : detail && Array.isArray(detail.linkedTags)
+        ? detail.linkedTags
+        : [];
+  var tagIds = linkedTags
+    .map(function (tag) {
+      return tag && tag.id;
+    })
+    .filter(Boolean);
+  var next = Object.assign({}, existing);
+  if (a.id) next.id = a.id;
+  if (a.title !== undefined) next.title = a.title || '';
+  if (a.description !== undefined) next.description = a.description || '';
+  if (a.category_id !== undefined) {
+    next.categoryId = a.category_id || null;
+    next.category_id = a.category_id || null;
+  }
+  if (a.score_mode !== undefined) {
+    next.scoreMode = a.score_mode || 'proficiency';
+    next.score_mode = a.score_mode || 'proficiency';
+  }
+  if (a.max_points !== undefined) {
+    next.maxPoints = a.max_points != null ? Number(a.max_points) : null;
+    next.max_points = next.maxPoints;
+  }
+  if (a.weight !== undefined) next.weight = a.weight != null ? Number(a.weight) : 1;
+  if (a.date_assigned !== undefined) {
+    next.date = _dateOnly(a.date_assigned);
+    next.assigned_at = _dateOnly(a.date_assigned);
+  }
+  if (a.due_date !== undefined) {
+    next.dueDate = _dateOnly(a.due_date);
+    next.due_date = _dateOnly(a.due_date);
+  }
+  if (a.rubric_id !== undefined) next.rubricId = a.rubric_id || '';
+  if (a.module_id !== undefined) next.moduleId = a.module_id || '';
+  if (a.evidence_type !== undefined) next.evidenceType = a.evidence_type || '';
+  if (a.collab_mode !== undefined)
+    next.collaboration = a.collab_mode === 'none' ? 'individual' : a.collab_mode || 'individual';
+  if (a.collab_config !== undefined && a.collab_config) {
+    if (a.collab_config.pairs) next.pairs = a.collab_config.pairs;
+    if (a.collab_config.groups) next.groups = a.collab_config.groups;
+    if (a.collab_config.excludedStudents) next.excludedStudents = a.collab_config.excludedStudents;
+  }
+  if (tagIds.length || !Array.isArray(next.tagIds)) {
+    next.tagIds = tagIds;
+    next.tag_ids = tagIds;
+  }
+  next.has_rubric = !!(a.rubric_id || detail.rubric);
+  return next;
+}
+
+function _pushHydratedScore(scores, sid, entry) {
+  if (!sid || !entry || !entry.assessmentId) return;
+  if (!scores[sid]) scores[sid] = [];
+  var keyTag = entry.tagId || '';
+  var existing = scores[sid].find(function (candidate) {
+    return candidate.assessmentId === entry.assessmentId && (candidate.tagId || '') === keyTag;
+  });
+  if (existing) Object.assign(existing, entry);
+  else scores[sid].push(entry);
+}
+
+function _scoreEntryFromCanonical(cid, assessment, tagId, value, comment) {
+  return {
+    id: [assessment.id, tagId || 'overall', Date.now().toString(36)].join(':'),
+    assessmentId: assessment.id,
+    tagId: tagId || '',
+    score: value == null || value === '' ? 0 : Number(value),
+    date: assessment.date || assessment.assigned_at || courseToday(cid),
+    type: assessment.type || 'summative',
+    note: comment || '',
+    created: new Date().toISOString(),
+  };
+}
+
+async function _hydrateAssessmentDetails(cid) {
+  if (!window.v2 || typeof window.v2.getAssessmentDetail !== 'function') return;
+  var assessments = getAssessments(cid).slice();
+  if (assessments.length === 0) {
+    _persistLoadedField(cid, 'scores', {});
+    _persistLoadedField(cid, 'statuses', {});
+    return;
+  }
+
+  var byId = {};
+  assessments.forEach(function (assessment) {
+    if (assessment && assessment.id) byId[assessment.id] = assessment;
+  });
+  var scores = structuredClone(getScores(cid) || {});
+  var statuses = structuredClone(getAssignmentStatuses(cid) || {});
+  var batchSize = 4;
+
+  for (var i = 0; i < assessments.length; i += batchSize) {
+    var batch = assessments.slice(i, i + batchSize);
+    var results = await Promise.all(
+      batch.map(function (assessment) {
+        if (!assessment || !_isUuid(assessment.id)) return Promise.resolve(null);
+        return window.v2.getAssessmentDetail(assessment.id).catch(function (e) {
+          return { error: e };
+        });
+      }),
+    );
+
+    results.forEach(function (res, idx) {
+      if (!res || res.error) {
+        if (res && res.error) console.warn('get_assessment_detail failed:', res.error);
+        return;
+      }
+      var detail = _rpcObject(res.data !== undefined ? res.data : res);
+      if (!detail || !detail.assessment || !detail.assessment.id) return;
+      var merged = _assessmentFromDetail(batch[idx], detail);
+      byId[merged.id] = merged;
+
+      (detail.cells || []).forEach(function (cell) {
+        var sid = cell.enrollment_id || cell.enrollmentId;
+        if (!sid) return;
+        var comment = (cell.score && cell.score.comment) || '';
+        var status = cell.score && cell.score.status;
+        if (status) statuses[sid + ':' + merged.id] = status;
+
+        var tagScores = cell.tag_scores || cell.tagScores || [];
+        (tagScores || []).forEach(function (tagScore) {
+          var tagId = tagScore && (tagScore.tag_id || tagScore.tagId);
+          if (!tagId) return;
+          _pushHydratedScore(scores, sid, _scoreEntryFromCanonical(cid, merged, tagId, tagScore.value, comment));
+        });
+        var rubricScores = cell.rubric_scores || cell.rubricScores || [];
+        (rubricScores || []).forEach(function (rubricScore) {
+          var criterionId = rubricScore && (rubricScore.criterion_id || rubricScore.criterionId);
+          if (!criterionId) return;
+          _pushHydratedScore(
+            scores,
+            sid,
+            _scoreEntryFromCanonical(cid, merged, criterionId, rubricScore.value, comment),
+          );
+        });
+        if (cell.score && cell.score.value != null && (tagScores.length === 0 || merged.scoreMode === 'points')) {
+          var fallbackTag = (merged.tagIds && merged.tagIds[0]) || '';
+          _pushHydratedScore(
+            scores,
+            sid,
+            _scoreEntryFromCanonical(cid, merged, fallbackTag, cell.score.value, comment),
+          );
+        }
+      });
+    });
+  }
+
+  _persistLoadedField(
+    cid,
+    'assessments',
+    assessments.map(function (assessment) {
+      return byId[assessment.id] || assessment;
+    }),
+  );
+  _persistLoadedField(cid, 'scores', scores);
+  _persistLoadedField(cid, 'statuses', statuses);
+}
+
+async function _hydrateLearningMap(cid) {
+  if (!window.v2 || typeof window.v2.getLearningMap !== 'function') return;
+  try {
+    var res = await window.v2.getLearningMap(cid);
+    if (res && res.error) throw res.error;
+    var map = _canonicalLearningMapToCache(cid, res && res.data !== undefined ? res.data : res);
+    if ((map.subjects && map.subjects.length) || (map.sections && map.sections.length)) {
+      _persistLoadedField(cid, 'learningMaps', map);
+    }
+  } catch (e) {
+    console.warn('get_learning_map failed for ' + cid + '; keeping existing learning map:', e);
+  }
+}
+
+function _observationsPayloadToBlob(payload) {
+  payload = _rpcObject(payload) || payload || {};
+  var blob = {};
+  (payload.observations || []).forEach(function (ob) {
+    var enrollmentIds = ob.enrollment_ids || ob.enrollmentIds || [];
+    enrollmentIds.forEach(function (sid) {
+      if (!sid) return;
+      if (!blob[sid]) blob[sid] = [];
+      var entry = {
+        id: ob.id,
+        text: ob.body || ob.text || '',
+        dims: [],
+        sentiment: ob.sentiment || null,
+        context: ob.context_type || ob.context || null,
+        created: ob.created_at || ob.created || new Date().toISOString(),
+        date: _dateOnly(ob.observed_at || ob.created_at || ob.created),
+      };
+      if (ob.assessment_id) entry.assignmentContext = { assessmentId: ob.assessment_id };
+      blob[sid].push(entry);
+    });
+  });
+  return blob;
+}
+
+async function _hydrateObservations(cid) {
+  if (!window.v2 || typeof window.v2.getObservations !== 'function') return;
+  try {
+    var res = await window.v2.getObservations(cid, { filters: {}, page: 1, pageSize: 1000 });
+    if (res && res.error) throw res.error;
+    _persistLoadedField(
+      cid,
+      'observations',
+      _observationsPayloadToBlob(res && res.data !== undefined ? res.data : res),
+    );
+  } catch (e) {
+    console.warn('get_observations failed for ' + cid + '; keeping existing observations:', e);
+  }
+}
+
+async function _hydrateCanonicalDetails(cid) {
+  await Promise.all([_hydrateLearningMap(cid), _hydrateObservations(cid)]);
+  await _hydrateAssessmentDetails(cid);
+  try {
+    var canonicalRubrics = await _loadCanonicalRubrics(cid);
+    _persistLoadedField(cid, 'rubrics', canonicalRubrics || []);
+  } catch (e) {
+    console.warn('Rubric read failed for ' + cid + '; keeping existing rubrics:', e);
+  }
+}
+
 function _canonicalStudentGoalsToMap(data) {
   var rows = _rpcRows(data);
   var out = {};
@@ -1369,6 +1837,57 @@ function _canonicalFlagsToBlob(rows, enrollmentByStudentId) {
   return blob;
 }
 
+function _gradebookCellsToScoreCache(cid, assessments, cells) {
+  var byAssessment = {};
+  (assessments || []).forEach(function (assessment) {
+    if (assessment && assessment.id) byAssessment[assessment.id] = assessment;
+  });
+  var scores = {};
+  var statuses = {};
+  Object.keys(cells || {}).forEach(function (sid) {
+    var studentCells = cells[sid] || {};
+    Object.keys(studentCells).forEach(function (aid) {
+      var cell = studentCells[aid] || {};
+      var assessment = byAssessment[aid] || { id: aid, tagIds: [] };
+      var comment = (cell.score && cell.score.comment) || '';
+      if (cell.score && cell.score.status) statuses[sid + ':' + aid] = cell.score.status;
+      (cell.tag_scores || cell.tagScores || []).forEach(function (tagScore) {
+        var tagId = tagScore && (tagScore.tag_id || tagScore.tagId);
+        if (!tagId) return;
+        _pushHydratedScore(scores, sid, _scoreEntryFromCanonical(cid, assessment, tagId, tagScore.value, comment));
+      });
+      (cell.rubric_scores || cell.rubricScores || []).forEach(function (rubricScore) {
+        var criterionId = rubricScore && (rubricScore.criterion_id || rubricScore.criterionId);
+        if (!criterionId) return;
+        _pushHydratedScore(
+          scores,
+          sid,
+          _scoreEntryFromCanonical(cid, assessment, criterionId, rubricScore.value, comment),
+        );
+      });
+      var hasAssessmentEntry =
+        scores[sid] &&
+        scores[sid].some(function (entry) {
+          return entry.assessmentId === aid;
+        });
+      if (cell.score && cell.score.value != null && !hasAssessmentEntry) {
+        _pushHydratedScore(
+          scores,
+          sid,
+          _scoreEntryFromCanonical(
+            cid,
+            assessment,
+            (assessment.tagIds && assessment.tagIds[0]) || '',
+            cell.score.value,
+            comment,
+          ),
+        );
+      }
+    });
+  });
+  return { scores: scores, statuses: statuses };
+}
+
 /* Convert v2 get_gradebook(cid) payload → per-course cache blobs.
    Payload shape (read-paths.sql §2.1):
      { course, students:[{enrollment_id, student_id, first_name, last_name,
@@ -1392,33 +1911,19 @@ function _v2GradebookToCache(cid, payload) {
     .sort(function (a, b) {
       return a.displayOrder - b.displayOrder;
     });
-  var students = (payload.students || []).map(function (s) {
-    return migrateStudent({
-      id: s.enrollment_id,
-      personId: s.student_id,
-      firstName: s.first_name || '',
-      lastName: s.last_name || '',
-      preferred: '',
-      pronouns: '',
-      studentNumber: '',
-      email: '',
-      dateOfBirth: '',
-      designations: [],
-      attendance: [],
-      sortName: ((s.last_name || '') + ' ' + (s.first_name || '')).trim(),
-      rosterPosition: Number(s.roster_position || 0),
-      isFlagged: !!s.is_flagged,
-    });
+  var students = _canonicalRosterRowsToStudents(payload.students || []).map(function (student) {
+    return migrateStudent(Object.assign({}, student, { isFlagged: !!student.isFlagged }));
   });
 
   var assessments = (payload.assessments || []).map(function (a) {
     var categoryId = a.category_id || null;
     var maxPts = a.max_points != null ? Number(a.max_points) : null;
     var sMode = a.score_mode || 'proficiency';
-    var tIds = a.tag_ids || [];
-    return {
+    var tIds = a.tag_ids || a.tagIds || [];
+    var assessment = {
       id: a.id,
       title: a.title || '',
+      description: a.description || '',
       date: _dateOnly(a.date_assigned),
       type: a.assessment_kind || (categoryId ? 'summative' : 'formative'),
       categoryId: categoryId,
@@ -1429,28 +1934,35 @@ function _v2GradebookToCache(cid, payload) {
       score_mode: sMode,
       maxPoints: maxPts,
       max_points: maxPts,
+      weight: a.weight != null ? Number(a.weight) : 1,
+      evidenceType: a.evidence_type || '',
+      rubricId: a.rubric_id || '',
+      moduleId: a.module_id || '',
       has_rubric: !!a.has_rubric,
       due_date: _dateOnly(a.due_date),
       assigned_at: _dateOnly(a.date_assigned),
       display_order: Number(a.display_order || 0),
     };
+    var collabMode = a.collab_mode || a.collabMode;
+    var collabConfig = a.collab_config || a.collabConfig || {};
+    if (collabMode) assessment.collaboration = collabMode === 'none' ? 'individual' : collabMode;
+    if (collabConfig.pairs) assessment.pairs = collabConfig.pairs;
+    if (collabConfig.groups) assessment.groups = collabConfig.groups;
+    if (collabConfig.excludedStudents) assessment.excludedStudents = collabConfig.excludedStudents;
+    return assessment;
   });
 
   _persistLoadedField(cid, 'categories', categories);
   _persistLoadedField(cid, 'students', students);
   _persistLoadedField(cid, 'assessments', assessments);
   _cache.v2Gradebook[cid] = payload;
+  var cellCache = _gradebookCellsToScoreCache(cid, assessments, payload.cells || {});
+  _persistLoadedField(cid, 'scores', cellCache.scores);
+  _persistLoadedField(cid, 'statuses', cellCache.statuses);
 
-  // The remaining cache fields stay empty until their port lands:
-  //   scores       — Phase 4.3 (tag-level TagScore + RubricScore reads)
-  //   observations — Phase 4.4 (get_observations read)
-  //   learningMaps — Phase 4.5 (get_learning_map read)
-  //   termRatings  — Phase 4.7
-  //   reportConfig — Phase 3.x / 4.8 report preview
-  //   goals, reflections, overrides, flags — Phase 4.6 (get_student_profile)
-  // Per-cell overall values are preserved on _cache.v2Gradebook[cid].cells
-  // for whichever rendering pass picks them up first.
-  _persistLoadedField(cid, 'scores', {});
+  // These fields hydrate through follow-up canonical reads in _doInitData().
+  // Keep safe defaults here so a failed secondary read still leaves a valid
+  // cache object for callers.
   _persistLoadedField(cid, 'observations', {});
   _persistLoadedField(cid, 'courseConfigs', {});
   _persistLoadedField(cid, 'reportConfig', null);
@@ -1459,7 +1971,6 @@ function _v2GradebookToCache(cid, payload) {
     'learningMaps',
     (typeof LEARNING_MAP !== 'undefined' && LEARNING_MAP[cid]) || { subjects: [], sections: [] },
   );
-  _persistLoadedField(cid, 'statuses', {});
   _persistLoadedField(cid, 'termRatings', {});
   _persistLoadedField(cid, 'flags', {});
   _persistLoadedField(cid, 'goals', {});
@@ -1492,6 +2003,7 @@ async function _doInitData(cid) {
       var gbRes = await sb.rpc('get_gradebook', { p_course_id: cid });
       if (gbRes.error) throw gbRes.error;
       _v2GradebookToCache(cid, gbRes.data || {});
+      await _hydrateCanonicalDetails(cid);
       await loadStudentProfileSummaries(cid);
       return;
     } catch (e) {
@@ -2202,22 +2714,28 @@ function _persistScoreToCanonical(cid, sid, aid, tid, scoreVal, note) {
     var params = useRubric
       ? { p_enrollment_id: sid, p_assessment_id: aid, p_criterion_id: tid, p_value: intVal }
       : { p_enrollment_id: sid, p_assessment_id: aid, p_tag_id: tid, p_value: intVal };
-    sb.rpc(rpc, params).then(function (res) {
-      if (res.error) console.warn(rpc + ' failed:', res.error);
-    });
+    _trackPendingSync(
+      sb.rpc(rpc, params).then(function (res) {
+        if (res.error) console.warn(rpc + ' failed:', res.error);
+      }),
+    );
   }
 
   // Comment-only updates: route to save_score_comment (no value change). The
   // legacy per-tag comment is collapsed onto the parent score row in v2 —
   // comments live on Score, not on TagScore/RubricScore.
   if (note != null && note !== '') {
-    sb.rpc('save_score_comment', {
-      p_enrollment_id: sid,
-      p_assessment_id: aid,
-      p_comment: note,
-    }).then(function (res) {
-      if (res.error) console.warn('save_score_comment failed:', res.error);
-    });
+    _trackPendingSync(
+      sb
+        .rpc('save_score_comment', {
+          p_enrollment_id: sid,
+          p_assessment_id: aid,
+          p_comment: note,
+        })
+        .then(function (res) {
+          if (res.error) console.warn('save_score_comment failed:', res.error);
+        }),
+    );
   }
 }
 
@@ -2229,16 +2747,18 @@ window.upsertCellScore = function (cid, enrollmentId, assessmentId, value) {
   var sb = getSupabase();
   if (!sb) return Promise.resolve();
   var v = value === '' || value == null ? null : Number(value);
-  return sb
-    .rpc('upsert_score', {
-      p_enrollment_id: enrollmentId,
-      p_assessment_id: assessmentId,
-      p_value: v,
-    })
-    .then(function (res) {
-      if (res.error) console.warn('upsert_score failed:', res.error);
-      return res;
-    });
+  return _trackPendingSync(
+    sb
+      .rpc('upsert_score', {
+        p_enrollment_id: enrollmentId,
+        p_assessment_id: assessmentId,
+        p_value: v,
+      })
+      .then(function (res) {
+        if (res.error) console.warn('upsert_score failed:', res.error);
+        return res;
+      }),
+  );
 };
 
 /* Fill every criterion of a rubric assessment with one level value (§9.6).
@@ -2248,16 +2768,18 @@ window.fillRubric = function (enrollmentId, assessmentId, value) {
   var sb = getSupabase();
   if (!sb) return Promise.resolve();
   var v = value == null ? null : Number(value);
-  return sb
-    .rpc('fill_rubric', {
-      p_enrollment_id: enrollmentId,
-      p_assessment_id: assessmentId,
-      p_value: v,
-    })
-    .then(function (res) {
-      if (res.error) console.warn('fill_rubric failed:', res.error);
-      return res;
-    });
+  return _trackPendingSync(
+    sb
+      .rpc('fill_rubric', {
+        p_enrollment_id: enrollmentId,
+        p_assessment_id: assessmentId,
+        p_value: v,
+      })
+      .then(function (res) {
+        if (res.error) console.warn('fill_rubric failed:', res.error);
+        return res;
+      }),
+  );
 };
 
 /* Clear a single cell — removes Score, RubricScore, and TagScore rows for
@@ -2267,15 +2789,17 @@ window.clearScore = function (enrollmentId, assessmentId) {
   if (!_isUuid(enrollmentId) || !_isUuid(assessmentId)) return Promise.resolve();
   var sb = getSupabase();
   if (!sb) return Promise.resolve();
-  return sb
-    .rpc('clear_score', {
-      p_enrollment_id: enrollmentId,
-      p_assessment_id: assessmentId,
-    })
-    .then(function (res) {
-      if (res.error) console.warn('clear_score failed:', res.error);
-      return res;
-    });
+  return _trackPendingSync(
+    sb
+      .rpc('clear_score', {
+        p_enrollment_id: enrollmentId,
+        p_assessment_id: assessmentId,
+      })
+      .then(function (res) {
+        if (res.error) console.warn('clear_score failed:', res.error);
+        return res;
+      }),
+  );
 };
 
 /* Clear every score this student has in the course — the "remove all of this
@@ -2284,15 +2808,17 @@ window.clearRowScores = function (enrollmentId, courseId) {
   if (!_isUuid(enrollmentId) || !_isUuid(courseId)) return Promise.resolve();
   var sb = getSupabase();
   if (!sb) return Promise.resolve();
-  return sb
-    .rpc('clear_row_scores', {
-      p_enrollment_id: enrollmentId,
-      p_course_id: courseId,
-    })
-    .then(function (res) {
-      if (res.error) console.warn('clear_row_scores failed:', res.error);
-      return res;
-    });
+  return _trackPendingSync(
+    sb
+      .rpc('clear_row_scores', {
+        p_enrollment_id: enrollmentId,
+        p_course_id: courseId,
+      })
+      .then(function (res) {
+        if (res.error) console.warn('clear_row_scores failed:', res.error);
+        return res;
+      }),
+  );
 };
 
 /* Clear every student's score on a single assessment — the "reset this column"
@@ -2301,10 +2827,12 @@ window.clearColumnScores = function (assessmentId) {
   if (!_isUuid(assessmentId)) return Promise.resolve();
   var sb = getSupabase();
   if (!sb) return Promise.resolve();
-  return sb.rpc('clear_column_scores', { p_assessment_id: assessmentId }).then(function (res) {
-    if (res.error) console.warn('clear_column_scores failed:', res.error);
-    return res;
-  });
+  return _trackPendingSync(
+    sb.rpc('clear_column_scores', { p_assessment_id: assessmentId }).then(function (res) {
+      if (res.error) console.warn('clear_column_scores failed:', res.error);
+      return res;
+    }),
+  );
 };
 
 /* Status pills (NS / EXC / LATE / null). Uses set_score_status RPC per §9.3. */
@@ -2312,16 +2840,18 @@ window.setCellStatus = function (enrollmentId, assessmentId, status) {
   if (!_isUuid(enrollmentId) || !_isUuid(assessmentId)) return Promise.resolve();
   var sb = getSupabase();
   if (!sb) return Promise.resolve();
-  return sb
-    .rpc('set_score_status', {
-      p_enrollment_id: enrollmentId,
-      p_assessment_id: assessmentId,
-      p_status: status || null,
-    })
-    .then(function (res) {
-      if (res.error) console.warn('set_score_status failed:', res.error);
-      return res;
-    });
+  return _trackPendingSync(
+    sb
+      .rpc('set_score_status', {
+        p_enrollment_id: enrollmentId,
+        p_assessment_id: assessmentId,
+        p_status: status || null,
+      })
+      .then(function (res) {
+        if (res.error) console.warn('set_score_status failed:', res.error);
+        return res;
+      }),
+  );
 };
 
 /* ══════════════════════════════════════════════════════════════════
@@ -2650,28 +3180,31 @@ function createCourse(data) {
       // → uuid.  Policy fields (grading_system / calc_method / decay_weight)
       // live on the course row directly — save_course_policy was merged
       // into the course table per ERD "Merged CoursePolicy into Course".
-      sb.rpc('create_course', {
-        p_name: course.name,
-        p_grade_level: course.gradeLevel || null,
-        p_description: course.description || null,
-        p_grading_system: course.gradingSystem || 'proficiency',
-        p_calc_method: course.calcMethod || 'average',
-        p_decay_weight: course.decayWeight != null ? Number(course.decayWeight) : null,
-        p_timezone: course.timezone,
-      }).then(function (res) {
-        if (res.error) {
-          console.warn('create_course RPC failed:', res.error);
-          return;
-        }
-        const canonicalId = res.data;
-        if (!canonicalId || canonicalId === localId) return;
-        // Re-key under the canonical UUID so subsequent saves hit update_course.
-        const migrated = Object.assign({}, course, { id: canonicalId });
-        delete COURSES[localId];
-        COURSES[canonicalId] = migrated;
-        _cache.courses = COURSES;
-        _safeLSSet('gb-courses', JSON.stringify(COURSES));
-      });
+      var createPromise = sb
+        .rpc('create_course', {
+          p_name: course.name,
+          p_grade_level: course.gradeLevel || null,
+          p_description: course.description || null,
+          p_grading_system: course.gradingSystem || 'proficiency',
+          p_calc_method: course.calcMethod || 'average',
+          p_decay_weight: course.decayWeight != null ? Number(course.decayWeight) : null,
+          p_timezone: course.timezone,
+        })
+        .then(function (res) {
+          if (res.error) {
+            console.warn('create_course RPC failed:', res.error);
+            return;
+          }
+          const canonicalId = res.data;
+          if (!canonicalId || canonicalId === localId) return;
+          // Re-key under the canonical UUID so subsequent saves hit update_course.
+          const migrated = Object.assign({}, course, { id: canonicalId });
+          delete COURSES[localId];
+          COURSES[canonicalId] = migrated;
+          _cache.courses = COURSES;
+          _safeLSSet('gb-courses', JSON.stringify(COURSES));
+        });
+      _trackPendingSync(createPromise);
     }
   }
   return course;
@@ -2699,15 +3232,19 @@ function updateCourse(id, updates) {
       if (updates.timezone !== undefined) patch.timezone = updates.timezone;
       if (updates.lateWorkPolicy !== undefined) patch.late_work_policy = updates.lateWorkPolicy;
       if (Object.keys(patch).length > 0 && _isUuid(id)) {
-        sb.rpc('update_course', { p_course_id: id, p_patch: patch }).then(function (res) {
-          if (res.error) console.warn('update_course RPC failed:', res.error);
-        });
+        _trackPendingSync(
+          sb.rpc('update_course', { p_course_id: id, p_patch: patch }).then(function (res) {
+            if (res.error) console.warn('update_course RPC failed:', res.error);
+          }),
+        );
       }
       // archive toggle goes through archive_course (dedicated RPC).
       if (updates.archived !== undefined && _isUuid(id)) {
-        sb.rpc('archive_course', { p_course_id: id, p_archived: !!updates.archived }).then(function (res) {
-          if (res.error) console.warn('archive_course RPC failed:', res.error);
-        });
+        _trackPendingSync(
+          sb.rpc('archive_course', { p_course_id: id, p_archived: !!updates.archived }).then(function (res) {
+            if (res.error) console.warn('archive_course RPC failed:', res.error);
+          }),
+        );
       }
     }
   }
@@ -3033,13 +3570,17 @@ function setAssignmentStatus(cid, sid, aid, status) {
     // directly onto the Score row. `sid` here is the enrollment_id.
     var sb = getSupabase();
     if (sb) {
-      sb.rpc('set_score_status', {
-        p_enrollment_id: sid,
-        p_assessment_id: aid,
-        p_status: status || null,
-      }).then(function (res) {
-        if (res.error) console.warn('set_score_status RPC failed:', res.error);
-      });
+      _trackPendingSync(
+        sb
+          .rpc('set_score_status', {
+            p_enrollment_id: sid,
+            p_assessment_id: aid,
+            p_status: status || null,
+          })
+          .then(function (res) {
+            if (res.error) console.warn('set_score_status RPC failed:', res.error);
+          }),
+      );
     }
   }
 }
@@ -3087,7 +3628,7 @@ function _rubricCriteriaPayload(rubric) {
 }
 async function _loadCanonicalRubrics(cid) {
   var sb = getSupabase();
-  if (!sb || !_isUuid(cid)) return [];
+  if (!sb || !_isUuid(cid) || typeof sb.from !== 'function') return [];
 
   var rubricsQuery = sb.from('rubric').select('id,name,created_at');
   if (typeof rubricsQuery.eq === 'function') rubricsQuery = rubricsQuery.eq('course_id', cid);
@@ -3277,8 +3818,8 @@ function _persistRubricsToCanonical(cid, prev, arr) {
       }
       return { rubrics: arr || [], idMap: {} };
     });
-  _rubricSaveQueue[cid] = next;
-  return next;
+  _rubricSaveQueue[cid] = _trackPendingSync(next);
+  return _rubricSaveQueue[cid];
 }
 function saveRubrics(cid, arr) {
   var nextArr = Array.isArray(arr) ? arr : [];
@@ -3472,9 +4013,11 @@ function saveConfig(obj) {
       const uiPrefs = Object.assign({}, obj || {});
       delete uiPrefs.activeCourse;
       const patch = Object.assign({ active_course_offering_id: activeCourse || null }, uiPrefs);
-      sb.rpc('save_teacher_preferences', { p_patch: patch }).then(function (res) {
-        if (res.error) console.warn('save_teacher_preferences RPC failed:', res.error);
-      });
+      _trackPendingSync(
+        sb.rpc('save_teacher_preferences', { p_patch: patch }).then(function (res) {
+          if (res.error) console.warn('save_teacher_preferences RPC failed:', res.error);
+        }),
+      );
     }
   }
 }
@@ -3501,9 +4044,11 @@ function saveCourseConfig(cid, obj) {
       if (obj.timezone != null) patch.timezone = obj.timezone;
       if (obj.lateWorkPolicy != null) patch.late_work_policy = obj.lateWorkPolicy;
       if (Object.keys(patch).length > 0) {
-        sb.rpc('update_course', { p_course_id: cid, p_patch: patch }).then(function (res) {
-          if (res.error) console.warn('update_course (saveCourseConfig) failed:', res.error);
-        });
+        _trackPendingSync(
+          sb.rpc('update_course', { p_course_id: cid, p_patch: patch }).then(function (res) {
+            if (res.error) console.warn('update_course (saveCourseConfig) failed:', res.error);
+          }),
+        );
       }
     }
   }
@@ -3583,7 +4128,8 @@ function _persistStudentsToCanonical(cid, prev, arr) {
       console.warn('Student sync to canonical RPCs failed for one or more rows:', err);
     });
   });
-  _studentSaveQueue[cid] = next;
+  _studentSaveQueue[cid] = _trackPendingSync(next);
+  return _studentSaveQueue[cid];
 }
 
 function _studentEnrollmentChanged(a, b) {
@@ -3823,7 +4369,8 @@ function _persistAssessmentsToCanonical(cid, prev, arr) {
       console.warn('Assessment sync to canonical RPCs failed for one or more rows:', err);
     });
   });
-  _assessmentSaveQueue[cid] = next;
+  _assessmentSaveQueue[cid] = _trackPendingSync(next);
+  return _assessmentSaveQueue[cid];
 }
 
 function _assessmentChanged(a, b) {
@@ -4294,41 +4841,43 @@ function _persistObservationCreate(cid, sid, entry) {
   // entry.dims is an array of dimension codes (text labels) — not UUIDs in the
   // legacy store. Passing [] here; tag linkage lands in Phase 4.5 once the
   // learning map port carries real tag ids through to observation capture.
-  _callRpcWithAuthGuard(
-    'create_observation',
-    {
-      p_course_id: cid,
-      p_body: entry.text || '',
-      p_sentiment: entry.sentiment || null,
-      p_context_type: entry.context || null,
-      p_assessment_id: ctxAsmt,
-      p_enrollment_ids: [sid],
-      p_tag_ids: [],
-      p_custom_tag_ids: [],
-    },
-    {
-      retryKey: 'create_observation:' + entry.id,
-      onSuccess: function (res) {
-        var newId = res.data;
-        var arr = (_cache.observations[cid] || {})[sid];
-        if (Array.isArray(arr)) {
-          var cached = arr.find(function (o) {
-            return o.id === entry.id;
-          });
-          if (cached && newId) {
-            cached.id = newId;
-            _safeLSSet('gb-quick-obs-' + cid, JSON.stringify(_cache.observations[cid]));
-          }
-        }
+  _trackPendingSync(
+    _callRpcWithAuthGuard(
+      'create_observation',
+      {
+        p_course_id: cid,
+        p_body: entry.text || '',
+        p_sentiment: entry.sentiment || null,
+        p_context_type: entry.context || null,
+        p_assessment_id: ctxAsmt,
+        p_enrollment_ids: [sid],
+        p_tag_ids: [],
+        p_custom_tag_ids: [],
       },
-    },
-  ).then(function (res) {
-    if (res.error) {
-      if (res.error.handledSessionExpired) return;
-      console.warn('create_observation failed:', res.error);
-      return;
-    }
-  });
+      {
+        retryKey: 'create_observation:' + entry.id,
+        onSuccess: function (res) {
+          var newId = res.data;
+          var arr = (_cache.observations[cid] || {})[sid];
+          if (Array.isArray(arr)) {
+            var cached = arr.find(function (o) {
+              return o.id === entry.id;
+            });
+            if (cached && newId) {
+              cached.id = newId;
+              _safeLSSet('gb-quick-obs-' + cid, JSON.stringify(_cache.observations[cid]));
+            }
+          }
+        },
+      },
+    ).then(function (res) {
+      if (res.error) {
+        if (res.error.handledSessionExpired) return;
+        console.warn('create_observation failed:', res.error);
+        return;
+      }
+    }),
+  );
 }
 
 /* v2 update_observation(p_id, p_patch jsonb, p_enrollment_ids, p_tag_ids,
@@ -4345,21 +4894,23 @@ function _persistObservationUpdate(cid, ob) {
   if (ob.assignmentContext && _isUuid(ob.assignmentContext.assessmentId)) {
     patch.assessment_id = ob.assignmentContext.assessmentId;
   }
-  _callRpcWithAuthGuard(
-    'update_observation',
-    {
-      p_id: ob.id,
-      p_patch: patch,
-      p_enrollment_ids: null,
-      p_tag_ids: null,
-      p_custom_tag_ids: null,
-    },
-    {
-      retryKey: 'update_observation:' + ob.id,
-    },
-  ).then(function (res) {
-    if (res.error && !res.error.handledSessionExpired) console.warn('update_observation failed:', res.error);
-  });
+  _trackPendingSync(
+    _callRpcWithAuthGuard(
+      'update_observation',
+      {
+        p_id: ob.id,
+        p_patch: patch,
+        p_enrollment_ids: null,
+        p_tag_ids: null,
+        p_custom_tag_ids: null,
+      },
+      {
+        retryKey: 'update_observation:' + ob.id,
+      },
+    ).then(function (res) {
+      if (res.error && !res.error.handledSessionExpired) console.warn('update_observation failed:', res.error);
+    }),
+  );
 }
 
 /* v2 delete_observation(p_id). FK cascade handles observation_student /
@@ -4368,9 +4919,11 @@ function _persistObservationDelete(cid, obId) {
   if (!_isUuid(obId)) return;
   var sb = getSupabase();
   if (!sb) return;
-  sb.rpc('delete_observation', { p_id: obId }).then(function (res) {
-    if (res.error) console.warn('delete_observation failed:', res.error);
-  });
+  _trackPendingSync(
+    sb.rpc('delete_observation', { p_id: obId }).then(function (res) {
+      if (res.error) console.warn('delete_observation failed:', res.error);
+    }),
+  );
 }
 
 /* ── Public v2 observation helpers (Phase 4.4) ─────────────────── */
@@ -4380,47 +4933,52 @@ function _persistObservationDelete(cid, obId) {
 window.createObservationRich = function (params) {
   params = params || {};
   if (!_isUuid(params.courseId)) return Promise.resolve();
-  return _callRpcWithAuthGuard(
-    'create_observation',
-    {
-      p_course_id: params.courseId,
-      p_body: params.body || '',
-      p_sentiment: params.sentiment || null,
-      p_context_type: params.contextType || null,
-      p_assessment_id: _isUuid(params.assessmentId) ? params.assessmentId : null,
-      p_enrollment_ids: (params.enrollmentIds || []).filter(_isUuid),
-      p_tag_ids: (params.tagIds || []).filter(_isUuid),
-      p_custom_tag_ids: (params.customTagIds || []).filter(_isUuid),
-    },
-    {
-      retryKey:
-        'create_observation:' + ((params.localId || params.body || '') + ':' + (params.enrollmentIds || []).join(',')),
-    },
-  ).then(function (res) {
-    if (res.error && !res.error.handledSessionExpired) console.warn('create_observation failed:', res.error);
-    return res;
-  });
+  return _trackPendingSync(
+    _callRpcWithAuthGuard(
+      'create_observation',
+      {
+        p_course_id: params.courseId,
+        p_body: params.body || '',
+        p_sentiment: params.sentiment || null,
+        p_context_type: params.contextType || null,
+        p_assessment_id: _isUuid(params.assessmentId) ? params.assessmentId : null,
+        p_enrollment_ids: (params.enrollmentIds || []).filter(_isUuid),
+        p_tag_ids: (params.tagIds || []).filter(_isUuid),
+        p_custom_tag_ids: (params.customTagIds || []).filter(_isUuid),
+      },
+      {
+        retryKey:
+          'create_observation:' +
+          ((params.localId || params.body || '') + ':' + (params.enrollmentIds || []).join(',')),
+      },
+    ).then(function (res) {
+      if (res.error && !res.error.handledSessionExpired) console.warn('create_observation failed:', res.error);
+      return res;
+    }),
+  );
 };
 
 window.updateObservationRich = function (obId, patch, joins) {
   if (!_isUuid(obId)) return Promise.resolve();
   joins = joins || {};
-  return _callRpcWithAuthGuard(
-    'update_observation',
-    {
-      p_id: obId,
-      p_patch: patch || {},
-      p_enrollment_ids: joins.enrollmentIds ? joins.enrollmentIds.filter(_isUuid) : null,
-      p_tag_ids: joins.tagIds ? joins.tagIds.filter(_isUuid) : null,
-      p_custom_tag_ids: joins.customTagIds ? joins.customTagIds.filter(_isUuid) : null,
-    },
-    {
-      retryKey: 'update_observation:' + obId,
-    },
-  ).then(function (res) {
-    if (res.error && !res.error.handledSessionExpired) console.warn('update_observation failed:', res.error);
-    return res;
-  });
+  return _trackPendingSync(
+    _callRpcWithAuthGuard(
+      'update_observation',
+      {
+        p_id: obId,
+        p_patch: patch || {},
+        p_enrollment_ids: joins.enrollmentIds ? joins.enrollmentIds.filter(_isUuid) : null,
+        p_tag_ids: joins.tagIds ? joins.tagIds.filter(_isUuid) : null,
+        p_custom_tag_ids: joins.customTagIds ? joins.customTagIds.filter(_isUuid) : null,
+      },
+      {
+        retryKey: 'update_observation:' + obId,
+      },
+    ).then(function (res) {
+      if (res.error && !res.error.handledSessionExpired) console.warn('update_observation failed:', res.error);
+      return res;
+    }),
+  );
 };
 
 /* Observation templates — seeds (is_seed=true) are immutable; these helpers
@@ -4551,10 +5109,15 @@ async function _callRpcWithAuthGuard(name, params, options) {
 function _rpcOrNoop(name, params, options) {
   var sb = getSupabase();
   if (!sb) return Promise.resolve({ data: null, error: null });
-  return _callRpcWithAuthGuard(name, params, options).then(function (res) {
-    if (res.error && !res.error.handledSessionExpired) console.warn(name + ' failed:', res.error);
-    return res;
-  });
+  return _trackWriteSync(
+    name,
+    _callRpcWithAuthGuard(name, params, options).then(function (res) {
+      if (res.error && !res.error.handledSessionExpired && !_isMissingRpcError(res.error)) {
+        console.warn(name + ' failed:', res.error);
+      }
+      return res;
+    }),
+  );
 }
 
 /* Subject: upsert (p_id null for new), delete, reorder. */
@@ -4949,20 +5512,22 @@ window.v2.saveTermRating = function (enrollmentId, term, payload) {
   if (Array.isArray(payload.mentionObservationIds)) {
     wire.mention_observations = payload.mentionObservationIds.filter(_isUuid);
   }
-  return _callRpcWithAuthGuard(
-    'save_term_rating',
-    {
-      p_enrollment_id: enrollmentId,
-      p_term: Number(term),
-      p_payload: wire,
-    },
-    {
-      retryKey: 'save_term_rating:' + enrollmentId + ':' + Number(term),
-    },
-  ).then(function (res) {
-    if (res.error && !res.error.handledSessionExpired) console.warn('save_term_rating failed:', res.error);
-    return res;
-  });
+  return _trackPendingSync(
+    _callRpcWithAuthGuard(
+      'save_term_rating',
+      {
+        p_enrollment_id: enrollmentId,
+        p_term: Number(term),
+        p_payload: wire,
+      },
+      {
+        retryKey: 'save_term_rating:' + enrollmentId + ':' + Number(term),
+      },
+    ).then(function (res) {
+      if (res.error && !res.error.handledSessionExpired) console.warn('save_term_rating failed:', res.error);
+      return res;
+    }),
+  );
 };
 
 /* Custom tag — per §12, create-only path (no edit/delete inventoried). */
@@ -5126,13 +5691,17 @@ function saveReportConfig(cid, config) {
       var preset = (config && config._preset) || null;
       var blocks = Object.assign({}, config || {});
       delete blocks._preset;
-      sb.rpc('save_report_config', {
-        p_course_id: cid,
-        p_blocks_config: blocks,
-        p_preset: preset,
-      }).then(function (res) {
-        if (res.error) console.warn('save_report_config RPC failed:', res.error);
-      });
+      _trackPendingSync(
+        sb
+          .rpc('save_report_config', {
+            p_course_id: cid,
+            p_blocks_config: blocks,
+            p_preset: preset,
+          })
+          .then(function (res) {
+            if (res.error) console.warn('save_report_config RPC failed:', res.error);
+          }),
+      );
     }
   }
 }
