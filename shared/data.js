@@ -1543,7 +1543,7 @@ function _assessmentFromDetail(existing, detail) {
   if (a.module_id !== undefined) next.moduleId = a.module_id || '';
   if (a.evidence_type !== undefined) next.evidenceType = a.evidence_type || '';
   if (a.collab_mode !== undefined)
-    next.collaboration = a.collab_mode === 'none' ? 'individual' : a.collab_mode || 'individual';
+    next.collaboration = _localCollabModeFromCanonical(a.collab_mode || 'individual');
   if (a.collab_config !== undefined && a.collab_config) {
     if (a.collab_config.pairs) next.pairs = a.collab_config.pairs;
     if (a.collab_config.groups) next.groups = a.collab_config.groups;
@@ -1579,6 +1579,53 @@ function _scoreEntryFromCanonical(cid, assessment, tagId, value, comment) {
     note: comment || '',
     created: new Date().toISOString(),
   };
+}
+
+function _assessmentById(cid, aid) {
+  var gb = _cache.v2Gradebook && _cache.v2Gradebook[cid];
+  var fromGradebook =
+    gb &&
+    (gb.assessments || []).find(function (assessment) {
+      return assessment && assessment.id === aid;
+    });
+  if (fromGradebook) return fromGradebook;
+  return (
+    (getAssessments(cid) || []).find(function (assessment) {
+      return assessment && assessment.id === aid;
+    }) || null
+  );
+}
+
+function _rubricForAssessment(cid, assessment) {
+  if (!assessment) return null;
+  var rubricId = assessment.rubricId || assessment.rubric_id;
+  if (!rubricId) return null;
+  return getRubricById(cid, rubricId) || null;
+}
+
+function _rubricCriterionById(cid, assessment, criterionId) {
+  var rubric = _rubricForAssessment(cid, assessment);
+  if (!rubric || !criterionId) return null;
+  return (
+    (rubric.criteria || []).find(function (criterion) {
+      return criterion && criterion.id === criterionId;
+    }) || null
+  );
+}
+
+function _rubricCriterionForTag(cid, assessment, tagId) {
+  var rubric = _rubricForAssessment(cid, assessment);
+  if (!rubric || !tagId) return null;
+  var matches = (rubric.criteria || []).filter(function (criterion) {
+    return criterion && (criterion.tagIds || []).indexOf(tagId) >= 0;
+  });
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function _rubricCriterionTagIds(cid, assessment, criterionId) {
+  var criterion = _rubricCriterionById(cid, assessment, criterionId);
+  if (criterion && criterion.tagIds && criterion.tagIds.length) return criterion.tagIds;
+  return [criterionId];
 }
 
 async function _hydrateAssessmentDetails(cid) {
@@ -1636,11 +1683,9 @@ async function _hydrateAssessmentDetails(cid) {
         (rubricScores || []).forEach(function (rubricScore) {
           var criterionId = rubricScore && (rubricScore.criterion_id || rubricScore.criterionId);
           if (!criterionId) return;
-          _pushHydratedScore(
-            scores,
-            sid,
-            _scoreEntryFromCanonical(cid, merged, criterionId, rubricScore.value, comment),
-          );
+          _rubricCriterionTagIds(cid, merged, criterionId).forEach(function (tagId) {
+            _pushHydratedScore(scores, sid, _scoreEntryFromCanonical(cid, merged, tagId, rubricScore.value, comment));
+          });
         });
         if (cell.score && cell.score.value != null && (tagScores.length === 0 || merged.scoreMode === 'points')) {
           var fallbackTag = (merged.tagIds && merged.tagIds[0]) || '';
@@ -1720,13 +1765,13 @@ async function _hydrateObservations(cid) {
 
 async function _hydrateCanonicalDetails(cid) {
   await Promise.all([_hydrateLearningMap(cid), _hydrateObservations(cid)]);
-  await _hydrateAssessmentDetails(cid);
   try {
     var canonicalRubrics = await _loadCanonicalRubrics(cid);
     _persistLoadedField(cid, 'rubrics', canonicalRubrics || []);
   } catch (e) {
     console.warn('Rubric read failed for ' + cid + '; keeping existing rubrics:', e);
   }
+  await _hydrateAssessmentDetails(cid);
 }
 
 function _canonicalStudentGoalsToMap(data) {
@@ -1902,11 +1947,9 @@ function _gradebookCellsToScoreCache(cid, assessments, cells) {
       (cell.rubric_scores || cell.rubricScores || []).forEach(function (rubricScore) {
         var criterionId = rubricScore && (rubricScore.criterion_id || rubricScore.criterionId);
         if (!criterionId) return;
-        _pushHydratedScore(
-          scores,
-          sid,
-          _scoreEntryFromCanonical(cid, assessment, criterionId, rubricScore.value, comment),
-        );
+        _rubricCriterionTagIds(cid, assessment, criterionId).forEach(function (tagId) {
+          _pushHydratedScore(scores, sid, _scoreEntryFromCanonical(cid, assessment, tagId, rubricScore.value, comment));
+        });
       });
       var hasAssessmentEntry =
         scores[sid] &&
@@ -1988,7 +2031,7 @@ function _v2GradebookToCache(cid, payload) {
     };
     var collabMode = a.collab_mode || a.collabMode;
     var collabConfig = a.collab_config || a.collabConfig || {};
-    if (collabMode) assessment.collaboration = collabMode === 'none' ? 'individual' : collabMode;
+    if (collabMode) assessment.collaboration = _localCollabModeFromCanonical(collabMode);
     if (collabConfig.pairs) assessment.pairs = collabConfig.pairs;
     if (collabConfig.groups) assessment.groups = collabConfig.groups;
     if (collabConfig.excludedStudents) assessment.excludedStudents = collabConfig.excludedStudents;
@@ -2751,15 +2794,10 @@ function upsertScore(cid, sid, aid, tid, scoreVal, date, type, note) {
   _broadcastChange(cid, 'scores');
 }
 
-/* v2 per-cell / per-tag / per-criterion score write.
-   Dispatches to the right RPC:
-     • overall cell (no tid)            → upsert_score
-     • tag-scoped, non-rubric assessment → upsert_tag_score
-     • tag-scoped, rubric assessment     → upsert_rubric_score (tid treated as criterion_id)
-   Requires canonical UUIDs. If tid is present but the assessment's has_rubric
-   flag is unknown (v2Gradebook payload missing), we default to tag_score — it
-   will raise on the server for rubric assessments and land in console.warn.
-   The localStorage write still happens in upsertScore so the score isn't lost. */
+/* v2 per-cell / per-tag / per-criterion score write. Rubric grading UI writes
+   linked competency tag ids, while rubric_score requires criterion ids. Keep
+   tag writes authoritative for UI hydration and mirror to rubric_score only
+   when the tag has exactly one criterion owner. */
 function _persistScoreToCanonical(cid, sid, aid, tid, scoreVal, note) {
   if (!_isUuid(sid) || !_isUuid(aid)) return;
   var sb = getSupabase();
@@ -2767,23 +2805,41 @@ function _persistScoreToCanonical(cid, sid, aid, tid, scoreVal, note) {
   var intVal = scoreVal === '' || scoreVal == null ? null : Number(scoreVal);
 
   if (_isUuid(tid) && intVal != null) {
-    // Tag- or criterion-scoped write.
-    var gb = _cache.v2Gradebook && _cache.v2Gradebook[cid];
-    var aRow =
-      gb &&
-      (gb.assessments || []).find(function (x) {
-        return x.id === aid;
+    var assessment = _assessmentById(cid, aid);
+    var criterion = _rubricCriterionById(cid, assessment, tid);
+    var criterionForTag = criterion ? null : _rubricCriterionForTag(cid, assessment, tid);
+    var assessmentTagIds = (assessment && (assessment.tagIds || assessment.tag_ids)) || [];
+    var isAssessmentTag = assessmentTagIds.indexOf(tid) >= 0;
+    var ops = [];
+    if (criterion) {
+      ops.push({
+        rpc: 'upsert_rubric_score',
+        params: { p_enrollment_id: sid, p_assessment_id: aid, p_criterion_id: tid, p_value: intVal },
       });
-    var useRubric = !!(aRow && aRow.has_rubric);
-    var rpc = useRubric ? 'upsert_rubric_score' : 'upsert_tag_score';
-    var params = useRubric
-      ? { p_enrollment_id: sid, p_assessment_id: aid, p_criterion_id: tid, p_value: intVal }
-      : { p_enrollment_id: sid, p_assessment_id: aid, p_tag_id: tid, p_value: intVal };
-    _trackPendingSync(
-      sb.rpc(rpc, params).then(function (res) {
-        if (res.error) console.warn(rpc + ' failed:', res.error);
-      }),
-    );
+    } else if (assessment && !isAssessmentTag && !criterionForTag) {
+      ops.push({
+        rpc: 'upsert_score',
+        params: { p_enrollment_id: sid, p_assessment_id: aid, p_value: intVal },
+      });
+    } else {
+      ops.push({
+        rpc: 'upsert_tag_score',
+        params: { p_enrollment_id: sid, p_assessment_id: aid, p_tag_id: tid, p_value: intVal },
+      });
+      if (criterionForTag && _isUuid(criterionForTag.id)) {
+        ops.push({
+          rpc: 'upsert_rubric_score',
+          params: { p_enrollment_id: sid, p_assessment_id: aid, p_criterion_id: criterionForTag.id, p_value: intVal },
+        });
+      }
+    }
+    ops.forEach(function (op) {
+      _trackPendingSync(
+        sb.rpc(op.rpc, op.params).then(function (res) {
+          if (res.error) console.warn(op.rpc + ' failed:', res.error);
+        }),
+      );
+    });
   }
 
   // Comment-only updates: route to save_score_comment (no value change). The
@@ -5015,6 +5071,9 @@ function _assessmentChanged(a, b) {
     (a.categoryId || a.category_id || '') !== (b.categoryId || b.category_id || '') ||
     (a.scoreMode || '') !== (b.scoreMode || '') ||
     (a.collaboration || '') !== (b.collaboration || '') ||
+    JSON.stringify(a.pairs || []) !== JSON.stringify(b.pairs || []) ||
+    JSON.stringify(a.groups || []) !== JSON.stringify(b.groups || []) ||
+    JSON.stringify(a.excludedStudents || []) !== JSON.stringify(b.excludedStudents || []) ||
     (a.maxPoints || 0) !== (b.maxPoints || 0) ||
     (a.weight || 1) !== (b.weight || 1) ||
     (a.evidenceType || '') !== (b.evidenceType || '') ||
@@ -5045,6 +5104,40 @@ function _assessmentPayload(a) {
     dateAssigned: a.dateAssigned || '',
     tagIds: tagIds,
   };
+}
+
+function _localCollabModeFromCanonical(mode) {
+  if (mode === 'pairs') return 'pair';
+  if (mode === 'groups') return 'group';
+  if (mode === 'none') return 'individual';
+  return mode || 'individual';
+}
+
+function _canonicalCollabModeFromAssessment(a) {
+  var mode = a && (a.collaboration || a.collabMode);
+  if (mode === 'pair' || mode === 'pairs') return 'pairs';
+  if (mode === 'group' || mode === 'groups') return 'groups';
+  return 'none';
+}
+
+function _collabConfigFromAssessment(a) {
+  var config = {};
+  if (a && Array.isArray(a.pairs) && a.pairs.length) config.pairs = a.pairs;
+  if (a && Array.isArray(a.groups) && a.groups.length) config.groups = a.groups;
+  if (a && Array.isArray(a.excludedStudents) && a.excludedStudents.length) {
+    config.excludedStudents = a.excludedStudents;
+  }
+  return Object.keys(config).length ? config : null;
+}
+
+function _persistAssessmentCollab(sb, assessmentId, a) {
+  if (!sb || !_isUuid(assessmentId)) return Promise.resolve();
+  var mode = _canonicalCollabModeFromAssessment(a);
+  var config = mode === 'none' ? null : _collabConfigFromAssessment(a);
+  return sb.rpc('save_collab', { p_id: assessmentId, p_mode: mode, p_config: config }).then(function (res) {
+    if (res.error) console.warn('save_collab failed:', res.error, assessmentId);
+    return res;
+  });
 }
 
 /* v2 create_assessment — explicit positional params.  tagIds passed as uuid[].
@@ -5080,6 +5173,7 @@ function _canonicalCreateAssessment(sb, cid, a) {
     if (_cache.assessments[cid]) {
       _safeLSSet('gb-assessments-' + cid, JSON.stringify(_cache.assessments[cid]));
     }
+    return _persistAssessmentCollab(sb, newId, a);
   });
 }
 
@@ -5101,9 +5195,15 @@ function _canonicalUpdateAssessment(sb, cid, assessmentId, a) {
     rubric_id: _isUuid(a.rubricId) ? a.rubricId : null,
     module_id: _isUuid(a.moduleId) ? a.moduleId : null,
   };
-  return sb.rpc('update_assessment', { p_id: assessmentId, p_patch: patch, p_tag_ids: tagIds }).then(function (res) {
-    if (res.error) console.warn('update_assessment failed:', res.error, assessmentId);
-  });
+  return sb
+    .rpc('update_assessment', { p_id: assessmentId, p_patch: patch, p_tag_ids: tagIds })
+    .then(function (res) {
+      if (res.error) {
+        console.warn('update_assessment failed:', res.error, assessmentId);
+        return res;
+      }
+      return _persistAssessmentCollab(sb, assessmentId, a);
+    });
 }
 
 /* v2 delete_assessment(p_id).  FK cascade handles scores/rubric_scores/
@@ -5145,11 +5245,12 @@ window.saveCollab = function (assessmentId, mode, config) {
   var sb = getSupabase();
   if (!sb) return Promise.resolve();
   if (!_isUuid(assessmentId)) return Promise.resolve();
+  var canonicalMode = _canonicalCollabModeFromAssessment({ collaboration: mode });
   return sb
     .rpc('save_collab', {
       p_id: assessmentId,
-      p_mode: mode || 'none',
-      p_config: mode === 'none' ? null : config || null,
+      p_mode: canonicalMode,
+      p_config: canonicalMode === 'none' ? null : config || null,
     })
     .then(function (res) {
       if (res.error) console.warn('save_collab failed:', res.error);
