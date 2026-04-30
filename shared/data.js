@@ -2289,6 +2289,28 @@ function _saveCourseField(field, cid, value) {
   _broadcastChange(cid, field);
 }
 
+function _loadPersistedCourseFieldSnapshot(field, cid, fallbackValue) {
+  var dataKey = _DATA_KEYS[field];
+  if (dataKey) {
+    try {
+      var raw = localStorage.getItem('gb-' + dataKey + '-' + cid);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      /* fall through to clone fallback */
+    }
+  }
+  try {
+    return structuredClone(fallbackValue);
+  } catch (e) {
+    if (Array.isArray(fallbackValue)) {
+      return fallbackValue.map(function (item) {
+        return item && typeof item === 'object' ? Object.assign({}, item) : item;
+      });
+    }
+    return Object.assign({}, fallbackValue || {});
+  }
+}
+
 /* Convert scores blob { sid: [...entries] } → flat array of table rows */
 function _scoreBlobToRows(cid, scoresObj) {
   const rows = [];
@@ -3626,7 +3648,7 @@ function getModules(cid) {
   }
 }
 function saveModules(cid, arr) {
-  var prev = ((_cache.modules && _cache.modules[cid]) || []).slice();
+  var prev = _loadPersistedCourseFieldSnapshot('modules', cid, (_cache.modules && _cache.modules[cid]) || []);
   _saveCourseField('modules', cid, arr);
   if (localStorage.getItem('gb-demo-mode') === '1' || !_useSupabase || !_isUuid(cid)) return;
   if (!cid || !arr) return;
@@ -4249,17 +4271,8 @@ function getStudents(cid) {
     return [];
   }
 }
-function _loadPersistedStudentsSnapshot(cid) {
-  try {
-    return (JSON.parse(localStorage.getItem('gb-students-' + cid)) || []).map(migrateStudent);
-  } catch (e) {
-    return (_cache.students[cid] || []).map(function (s) {
-      return Object.assign({}, s);
-    });
-  }
-}
 function saveStudents(cid, arr) {
-  var prev = _loadPersistedStudentsSnapshot(cid);
+  var prev = _loadPersistedCourseFieldSnapshot('students', cid, _cache.students[cid] || []).map(migrateStudent);
   _saveCourseField('students', cid, arr);
   // Demo mode and offline both stay local-only.
   if (localStorage.getItem('gb-demo-mode') === '1' || !_useSupabase) return;
@@ -4513,7 +4526,7 @@ function getCategoryById(cid, categoryId) {
   );
 }
 function saveAssessments(cid, arr) {
-  var prev = ((_cache.assessments && _cache.assessments[cid]) || []).slice();
+  var prev = _loadPersistedCourseFieldSnapshot('assessments', cid, (_cache.assessments && _cache.assessments[cid]) || []);
   _saveCourseField('assessments', cid, arr);
   if (arr.length < prev.length) _cleanOrphanedScores(cid, arr);
   if (localStorage.getItem('gb-demo-mode') === '1' || !_useSupabase) return;
@@ -4769,7 +4782,7 @@ var _noteIds = {};
 var _noteSaveQueue = {};
 
 function saveNotes(cid, obj) {
-  var prev = (_cache.notes && _cache.notes[cid]) || {};
+  var prev = _loadPersistedCourseFieldSnapshot('notes', cid, (_cache.notes && _cache.notes[cid]) || {});
   _saveCourseField('notes', cid, obj);
   if (localStorage.getItem('gb-demo-mode') === '1' || !_useSupabase || !_isUuid(cid)) return;
   if (!obj) return;
@@ -5841,7 +5854,7 @@ function getCustomTags(cid) {
 var _customTagSaveQueue = {};
 
 function saveCustomTags(cid, arr) {
-  var prev = (_cache.customTags && _cache.customTags[cid]) || [];
+  var prev = _loadPersistedCourseFieldSnapshot('customTags', cid, (_cache.customTags && _cache.customTags[cid]) || []);
   _saveCourseField('customTags', cid, arr);
   if (localStorage.getItem('gb-demo-mode') === '1' || !_useSupabase || !_isUuid(cid)) return;
   if (!arr) return;
